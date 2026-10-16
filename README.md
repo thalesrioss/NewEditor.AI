@@ -3,7 +3,7 @@
 Agente editor de vídeo da **NewContent**, com o **Editor Brain**: o editor visual (estilo CapCut) onde o
 humano assiste o agente editar ao vivo e pede alterações em texto.
 
-Validado aqui, fora da plataforma, para depois entrar na NewContent.
+Validado aqui, fora da plataforma, para depois entrar na NewContent. Repositório: https://github.com/thalesrioss/NewEditor.AI (privado).
 
 ## Rodar
 
