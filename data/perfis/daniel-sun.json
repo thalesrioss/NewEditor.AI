@@ -1,0 +1,126 @@
+{
+  "formato": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "peca": {
+    "duracaoMin": 25,
+    "duracaoMax": 45
+  },
+  "corte": {
+    "headPad": 0.06,
+    "tailPad": 0.1,
+    "maxPause": 0.3,
+    "transicao": "seca"
+  },
+  "zoom": {
+    "min": 1.12,
+    "max": 1.46,
+    "porMinuto": 4.3
+  },
+  "lettering": {
+    "maxLinhas": 2,
+    "posicao": "abaixo-do-queixo",
+    "caixa": "livre",
+    "literal": true,
+    "porMinuto": 5,
+    "ultimoCitacao": false,
+    "sfxTetoPor3s": 2
+  },
+  "motion": {
+    "nuncaSeco": true,
+    "maxPorModelo": 2
+  },
+  "flash": {
+    "usar": true,
+    "frames": 2,
+    "onde": [
+      "entrada-zoom",
+      "volta-insert",
+      "split"
+    ],
+    "sfx": "Canon EOS T7i Power On"
+  },
+  "sfx": {
+    "picoNoEvento": true
+  },
+  "legenda": {
+    "palavrasMin": 1,
+    "palavrasMax": 3,
+    "y": 0.47,
+    "conferirNumeros": true
+  },
+  "trilha": {
+    "lufsSobVoz": -27,
+    "fadeIn": 0,
+    "fadeOut": 2.5,
+    "ducking": true
+  },
+  "cor": {
+    "lut": "FUJI_CLASSICO"
+  },
+  "broll": {
+    "maxRepeticao": 2,
+    "coberturaFraseInteira": true,
+    "voltaSemAr": 0.44999999999999996,
+    "minCoberturaS": 2
+  },
+  "notas": [
+    "Cut-in no ataque da palavra; sem pré-roll perceptível. **Nunca comer sílaba de abertura ou de fecho** (o erro que ele apontou na minha primeira versão).",
+    "2–3 clipes por peça a 1,12–1,46; os outros a 1,0. Nos clipes com zoom: **PlanarTracker em modo Stabilize** no Fusion do clipe (= \"câmera segue o rosto\").",
+    "Chunks dele são curtos (2–3 palavras, ≤ 14 chars). Com chunks maiores o bloco precisa ser **calculado** (linha abaixo da anterior pela altura medida: Sobe ≈ 677·size px, Fade 668·size, Desce 660·size; largura ≈ 300·size px/char Sobe, 317 Fade, 322 Desce, 500 Marcador + 100 de barra) — é o que `plan.py` faz.",
+    "Bloco entra na palavra e **sai no corte** (troca seca). Texto literal; ele comprime (\"organização de ideia e conteúdo\" → \"Idéia/conteúdo\").",
+    "Adjustment Clip de 2 f (invert + saturação 0) em track superior, com **Canon EOS T7i Power On** fatiado (src 15–17, 2 f) na mesma posição. Nas entradas/saídas de bloco de lettering e nas entradas de clipe com zoom. 3 por peça de 30 s.",
+    "Uma cama por peça, do início ao fim, sem fade de entrada: berlioz lo-fi (\"deep in it\") na peça prática, Brand X Neoclassical (trecho começando a 425 s — início calmo de faixa) na de princípio. Nível medido nos renders: **≈ −27 LUFS sob voz a −20** (voz ≈ −19,7/−19,0 LUFS integrado nos renders).",
+    "MEDIDO: tudo nas tabelas acima. OFÍCIO (meu, nas 6 peças): escolha dos chunks, quais clipes recebem zoom, qual faixa por peça, chunks comprimidos nas listas. HIPÓTESE: que o click no jump cut de abertura da P1 marca \"corte de ritmo\" (2 ocorrências só).",
+    "Clipes/zoom/flash/SFX/trilha: `th_build2` in-app com `recordFrame` **absoluto** — 0 erros de posição em 300+ itens.",
+    "Legenda: `CreateSubtitlesFromAudio` na timeline inteira, com o áudio das peças dele **desabilitado** para não reescrever os cues dele; depois apagar cues que tocam lettering (`th_subs3`, regra de sobreposição). SRT não entra pela API; texto de cue não se edita.",
+    "B-roll (v2, 2026-09-14 — regra do Thales, aplicação minha): três formatos, escolhidos por \"o que prende mais\": **C** insert de filme com a fala dele pausando (entra no EDL V1/A1, áudio do filme nivelado a −20 LUFS, trilha por baixo, sem legenda), **B** cobertura muda full-frame na track BROLL (3,0 s, legenda continua), **A** tela dividida (B-roll 0–840 px, fala desce 620 px, legenda no vão). Geome",
+    "**Insert C = a frase que responde, e acaba ali.** Ele cortou a segunda frase do filme quando ela é outra ideia: Ultron \"I'm sorry, I know you mean well.\" (sem \"You just didn't think it through\"), Chappie \"Scout 22 is not responsive.\" (sem \"Send an evac team\"), I Robot \"You will not move. Confirm command.\" (sem \"Command confirmed\"). Manteve quando a segunda frase fecha a mesma piada: C-3PO \"…made t",
+    "**Um item por plano, enquadrado em QUEM FALA.** Ele dividiu Owen em 3 planos e Confirm em 2 e re-enquadrou cada um: Spooner gritando \"You will not move!\" (x 0,65), depois a fileira de NS-5 recebendo \"Confirm command\" (x 0,37). Eu tinha um pan só por insert e li o plano errado (achei que Spooner estava de costas). Conferir cada corte interno do trecho (scdet) antes de fixar o pan. DERIVADO.",
+    "**Volta do insert sem ar.** Ele tirou 8–14 f (0,3–0,6 s) do início do clipe de fala que vem depois do insert (0310, 0315, 0317). Meu cut-in (ataque −3 f + recuo ao piso) deixa tom de sala que, depois de um corte de filme, vira vazio. DERIVADO.",
+    "**Flash na VOLTA do insert (6/6) e na entrada/saída da tela dividida (entrada 3/4, saída 4/4); nunca na entrada do insert** — o corte do filme já é o evento. E flash só onde a imagem muda: ele apagou meu flash num split de continuidade (0314 c0/c1, mesma imagem dos dois lados) e moveu esse split 11 f. DERIVADO.",
+    "**Cobertura B = a frase, do corte ao fim dela.** Começa no corte do clipe (junto com o flash), nunca no meio da fala numa palavra; termina no fim da frase ou no corte seguinte (0310: clipes inteiros de 5,6 e 4,8 s; 0313: clipe inteiro de 2,3 s; 0315: 3,4 s, voltando para a cara dele em \"só que mais rápido\"). Não atravessa corte (a minha de 0313 invadia 17 f o clipe seguinte). Não há mínimo de 3 s:",
+    "**Tela dividida: rosto logo abaixo da linha.** Tilt dele por clipe (−379 · −398 · −396 · −469), medido: centro do rosto em y 0,59–0,61, topo da caixa do rosto 170–240 px abaixo da linha 840. O meu −620 fixo jogava o rosto para 0,70–0,72. MEDIDO (YuNet nos 4 clipes).",
+    "**Bloco de 4 linhas virou 2 pares em sequência no mesmo lugar.** \"A feature que substitui / três meses de trabalho\" sai em 83 f, e \"por um / workflow.\" entra em 77/89 (sobreposição de 6 f). Principal: \"não é ter / o agente mais inteligente\" sai em 1943, e \"mas sim / dar contexto\" entra em 1926 (sobreposição de 17 f). Por quê: 4 linhas empilhadas descem até a cintura e a pessoa lê bloco inteiro de ",
+    "**Faixa vertical (Pan/Tilt do item, px):** Sobe com tilt entre +15 e −161 · Fade com tilt entre −107 e −275 · Desce −26 a −47 · Marcador −141 a −158. Isso dá o centro das linhas entre ~960 e ~1205 px, sobre o peito. O queixo fica em ~870 px (olhos em y ≈ 0,41). Os meus começavam em ~880 e desciam até ~1300.",
+    "**Escada diagonal:** o Sobe fica à esquerda (pan −106 a −208) e o Fade entra deslocado +88 a +208 à direita dele. No gancho o par é centralizado (pan ≈ −2 / −37).",
+    "**Distância Sobe→Fade:** Δtilt −114 a −191. A minha (Δ ≈ −149 com tamanho maior) fazia as linhas se tocarem. Ele abriu.",
+    "**Marcador sempre em 1 linha**, com size 0,055–0,083 (largura calculada ≤ ~850 px). O meu quebrava em 2 linhas a 0,11. **O texto do Marcador é comprimido por ele:** \"que não dependem de um sequenciamento\" virou \"sem sequenciamento\" (como \"Idéia/conteúdo\" na P1). Por mim, não comprimo sem perguntar; proponho a compressão no plano.",
+    "**Fade grande (big) do fecho do par:** 0,2402 caiu para 0,193–0,232 quando o texto é mais longo (\"dar contexto\", \"em pedaços\").",
+    "SFX do lettering: click no Sobe continua. **Texto #1 só no bloco do princípio** (1846, 1994, 2085). Ele tirou dos Fade do gancho (43, 89) e do CTA (2337). HIPÓTESE: no gancho a fala e o motion seguinte já carregam o som; perguntar antes de virar regra.",
+    "**M0 (o único que ele corrigiu, como exemplo):** a máscara do bloco (`BlockM.Center`) ganhou um PolyPath. O bloco sobe de y −0,023 até +0,07 (Δ 0,093 da altura) em **8 f**, com ease-out forte (handles RH 0,8/0 e LH 1,9/0,99: quase todo o movimento nos 2–3 primeiros frames, depois assenta). Isso **soma** ao pop de escala (0→1,08→1) que já existia. O restante do comp ficou igual (conferi keyframe po",
+    "Leitura: pop de escala e fade sozinhos contam como \"aparecer\". Pra ele, elemento tem que **entrar em cena**: deslocamento + ease-out + um pouco de escala.",
+    "**Transição Blur Dissolve de 6 f** entre c6 e c7, na entrada do motion em tela dividida (o corte seco pro painel era brusco). A regra \"transição chama atenção pra si\" continua valendo entre planos de fala. Aqui a exceção é a entrada de motion.",
+    "MEDIDO também: `TimelineItem.SetProperty(\"AudioVolume\", dB)` **grava** no Resolve 21.1 (a nota antiga dizia que a API não escrevia volume).",
+    "7 nós em todos os clipes de fala (inclusive o clipe do M2, em tela dividida): Primary Balance · Primary Balance · HDR · ColorSlice · Custom Curves · OFX Color Space Transform · **LUT `Luts Marcelo S'antana/FUJI_CLASSICO.cube`**. Sem grade nos motions de tela cheia (M0 sem nós; M1 com 1 nó vazio).",
+    "**Flash também no Cut Zoom Out** (c9, 1599). Ele duplicou o flash de 1258 ali.",
+    "Feedback verbal: **\"você retirou todos os B-rolls, a gente pode usar B-roll ainda\"**. Motion não substitui cobertura: os dois convivem. Motion vai nos trechos de mecanismo, B-roll nos de contexto/emoção (regra de 20–40 % de cobertura continua). NÍVEL: DERIVADO (feedback dele, sem medição).",
+    "2026-09-17: Thales aprovou a v3 da 0600 (\"está incrível\"): M1/M2 com entrada fluida (`enter()`, ease-out, antecipação, continuidade agente→Claude), SFX do M1 no mapa dele a −15 dB. As regras de §11.2 e §11.3 aplicadas por mim passam de OFÍCIO a **DERIVADO** (aprovadas por ele). Continuam abertas: Texto #1 só no princípio (HIPÓTESE) e compressão do Marcador sem pedir.",
+    "Leitura: o que faltava não era animação, era **material**. As referências dele são todas de",
+    "Direção escolhida por ele entre três: **cartão de vidro fosco pousando sobre o plano vivo**.",
+    "Packs que ele escolheu como gramática da peça: **liquid glass** e **SaaS widgets**.",
+    "**Base do stack tem que ser MediaIn1 opaco.** Com base transparente (Transform de MediaIn1"
+  ],
+  "evidencia": {
+    "peca": "MEDIDO",
+    "zoom": "MEDIDO",
+    "lettering.maxLinhas": "MEDIDO",
+    "lettering.posicao": "MEDIDO",
+    "lettering.sfxTetoPor3s": "HIPOTESE",
+    "motion.nuncaSeco": "DERIVADO",
+    "flash": "MEDIDO",
+    "legenda": "MEDIDO",
+    "trilha.lufsSobVoz": "MEDIDO",
+    "cor.lut": "MEDIDO",
+    "broll.coberturaFraseInteira": "DERIVADO",
+    "broll.voltaSemAr": "DERIVADO"
+  },
+  "id": "daniel-sun",
+  "nome": "Daniel Sun Talk Head",
+  "fonte": "/Users/thalesrioss/Documents/Cérebro do Editor/padroes/PADRAO - Daniel Sun Talk Head (lido das peças 1-2).md",
+  "atualizadoEm": "2026-10-10T20:32:17.055Z",
+  "validado": false,
+  "nota": "Teste que não ficou bom — não é referência (Thales, 2026-10-10)."
+}

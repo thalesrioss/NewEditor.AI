@@ -1,0 +1,40 @@
+appId: br.com.newcontent.editorbrain
+productName: Editor Brain
+copyright: NewContent
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+# A raiz do produto que o servidor espera (serviços, fontes, logo, interface construída).
+extraResources:
+  - from: ../../services
+    to: app-root/services
+    filter: ['**/*', '!**/__pycache__/**', '!**/node_modules/**', '!**/*.rnnn.bak']
+  - from: ../web/dist
+    to: app-root/apps/web/dist
+  - from: ../web/public/fonts
+    to: app-root/apps/web/public/fonts
+  - from: ../web/public/logo-mark.png
+    to: app-root/apps/web/public/logo-mark.png
+  - from: ../../data/perfis
+    to: app-root/data/perfis
+asar: true
+asarUnpack:
+  - node_modules/playwright-core/**
+mac:
+  category: public.app-category.video
+  target: [dmg, zip]
+  icon: build/icon.png
+  darkModeSupport: true
+  hardenedRuntime: false
+  identity: null
+win:
+  target: [nsis]
+  icon: build/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+npmRebuild: false

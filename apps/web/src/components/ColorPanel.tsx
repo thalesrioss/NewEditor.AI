@@ -1,0 +1,339 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Eye, Palette, RotateCcw, Search, Wand2, X } from 'lucide-react';
+import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
+import { api, type CineproItem } from '../lib/api.ts';
+import { useEditor } from '../lib/store.ts';
+import { Button, RangeField } from './ui.tsx';
+
+type Num = 'exposure' | 'contrast' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'temperature' | 'tint' | 'saturation' | 'vibrance';
+const LIGHT: { k: Num; label: string; min: number; max: number; step: number }[] = [
+  { k: 'exposure', label: 'Exposição', min: -3, max: 3, step: 0.05 },
+  { k: 'contrast', label: 'Contraste', min: -1, max: 1, step: 0.02 },
+  { k: 'highlights', label: 'Altas luzes', min: -1, max: 1, step: 0.02 },
+  { k: 'shadows', label: 'Sombras', min: -1, max: 1, step: 0.02 },
+  { k: 'whites', label: 'Brancos', min: -1, max: 1, step: 0.02 },
+  { k: 'blacks', label: 'Pretos', min: -1, max: 1, step: 0.02 },
+];
+const COLOR: { k: Num; label: string; min: number; max: number; step: number }[] = [
+  { k: 'temperature', label: 'Temperatura', min: -1, max: 1, step: 0.02 },
+  { k: 'tint', label: 'Matiz (verde ↔ magenta)', min: -1, max: 1, step: 0.02 },
+  { k: 'saturation', label: 'Saturação', min: 0, max: 2, step: 0.02 },
+  { k: 'vibrance', label: 'Vibração', min: -1, max: 1, step: 0.02 },
+];
+
+/**
+ * Aba Cor: LOG da câmera → Rec.709 (sempre primeiro), correções primárias e, por cima, um look do CinePRO
+ * (LUT .cube da nuvem, com força). Ao vivo no player, com o mesmo LUT do export.
+ */
+export function ColorPanel() {
+  const project = useEditor((s) => s.project);
+  const sendOp = useEditor((s) => s.sendOp);
+  const setDraft = useEditor((s) => s.setGradeDraft);
+  const setCompare = useEditor((s) => s.setCompare);
+  const videos = (project?.assets ?? []).filter((a) => a.kind === 'video');
+  const [assetId, setAssetId] = useState(() => videos.find((a) => a.role === 'fala')?.id ?? videos[0]?.id ?? '');
+  const saved = (assetId && project?.timeline.grades?.[assetId]) || NEUTRAL_GRADE;
+  const [g, setG] = useState<ColorGrade>(saved);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => setG(saved), [assetId, JSON.stringify(saved)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => setDraft(null), [setDraft]);
+  if (!project) return null;
+  if (!videos.length) return <p className="p-4 text-xs text-ink-400">Sem vídeo no projeto.</p>;
+
+  const live = (next: ColorGrade) => {
+    setG(next);
+    setDraft({ assetId, grade: next });
+  };
+  const commit = (next: ColorGrade, note = 'Ajustou a cor') => {
+    setDraft(null);
+    sendOp({ op: { type: 'set_grade', assetId, grade: next }, note });
+  };
+  const input = INPUT_TRANSFORMS.find((x) => x.id === g.input);
+
+  return (
+    <div className="scroll-thin h-full space-y-4 overflow-y-auto p-4">
+      <div className="flex items-center gap-2">
+        <Palette size={14} className="text-ink-300" />
+        <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-800 px-2 py-1 text-ui-xs text-ink-100 focus:outline-none">
+          {videos.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.role === 'fala' ? 'Fala · ' : 'B-roll · '}
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <button
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setMsg('');
+          try {
+            const r = await api.colorAuto(project.id, assetId);
+            setMsg(r.why);
+          } catch (e) {
+            setMsg((e as Error).message);
+          }
+          setBusy(false);
+        }}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg nc-gradient px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+      >
+        <Wand2 size={13} /> {busy ? 'Medindo o original…' : 'Corrigir automático para Rec.709'}
+      </button>
+      {msg && <p className="text-ui-xs leading-snug text-emerald-300/90">{msg}</p>}
+
+      <label className="block space-y-1">
+        <span className="text-ui-xs font-medium text-ink-400">Câmera / perfil de gravação</span>
+        <select value={g.input} onChange={(e) => commit({ ...g, input: e.target.value as InputTransform }, `Entrada de cor: ${e.target.selectedOptions[0]?.text}`)} className="w-full rounded-md border border-ink-700 bg-ink-800 px-2 py-1.5 text-xs text-ink-100 focus:outline-none">
+          {INPUT_TRANSFORMS.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        {input && <span className="block text-ui-xs text-ink-400">{input.camera}</span>}
+      </label>
+
+      <Group title="Luz" items={LIGHT} g={g} live={live} commit={commit} />
+      <Group title="Cor" items={COLOR} g={g} live={live} commit={commit} />
+      <Wheels g={g} live={live} commit={commit} />
+      <Hsl g={g} live={live} commit={commit} />
+      <Curves g={g} live={live} commit={commit} />
+      <Looks g={g} live={live} commit={commit} />
+      <Texture g={g} live={live} commit={commit} />
+
+      <div className="flex gap-1.5 border-t border-ink-750 pt-3">
+        <button aria-label="Segure para ver o original" onMouseDown={() => setCompare(true)} onMouseUp={() => setCompare(false)} onMouseLeave={() => setCompare(false)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-600 py-1.5 text-ui-xs text-ink-200 hover:border-nc-500" title="Segure para ver o original">
+          <Eye size={13} /> Segure: antes
+        </button>
+        <button aria-label="Zerar ajustes (mantém a entrada da câmera)" onClick={() => commit({ ...NEUTRAL_GRADE, input: g.input }, 'Zerou os ajustes de cor')} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-200 hover:border-rose-400" title="Zerar ajustes (mantém a entrada da câmera)">
+          <RotateCcw size={13} /> Zerar
+        </button>
+      </div>
+      <p className="text-ui-xs leading-snug text-ink-400">Ordem da cadeia: conversão da câmera (LOG → Rec.709), luz e cor, e só então o look. É assim que o look do cliente cai igual em qualquer bruto. O export usa exatamente o mesmo LUT.</p>
+    </div>
+  );
+}
+
+function Group({ title, items, g, live, commit }: { title: string; items: { k: Num; label: string; min: number; max: number; step: number }[]; g: ColorGrade; live: (x: ColorGrade) => void; commit: (x: ColorGrade) => void }) {
+  return (
+    <section className="space-y-2.5">
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">{title}</h4>
+      {items.map(({ k, label, min, max, step }) => {
+        const v = g[k];
+        const neutral = NEUTRAL_GRADE[k];
+        return <RangeField key={k} label={label} value={v} min={min} max={max} step={step} digits={2} resetTo={neutral} onLive={(x) => live({ ...g, [k]: x })} onCommit={(x) => commit({ ...g, [k]: x })} />;
+      })}
+    </section>
+  );
+}
+
+/** Looks do CinePRO (LUTs .cube da nuvem): busca, aplica com força, tira. */
+function Looks({ g, live, commit }: { g: ColorGrade; live: (x: ColorGrade) => void; commit: (x: ColorGrade, note?: string) => void }) {
+  const [busca, setBusca] = useState('');
+  const [itens, setItens] = useState<CineproItem[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api
+        .cineproItens({ modo: 'lut', busca: busca.trim() || undefined, limit: 60 })
+        .then((r) => (setItens(r.itens), setTotal(r.total), setErro('')))
+        .catch((e: Error) => setErro(e.message));
+    }, 180);
+    return () => clearTimeout(t);
+  }, [busca]);
+  const grupos = useMemo(() => {
+    const by = new Map<string, CineproItem[]>();
+    for (const it of itens ?? []) {
+      const k = it.pasta.split('/').slice(-2).join(' · ') || it.categoria;
+      by.set(k, [...(by.get(k) ?? []), it]);
+    }
+    return [...by.entries()];
+  }, [itens]);
+  return (
+    <section className="space-y-2.5 border-t border-ink-750 pt-3">
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Look (CinePRO Looks)</h4>
+      {g.lut ? (
+        <div className="space-y-2 rounded-[var(--radius-ui-md)] border border-nc-500/40 bg-nc-500/10 p-2">
+          <div className="flex items-center gap-2 text-ui-xs text-ink-100">
+            <span className="min-w-0 flex-1 truncate" title={g.lut.nome}>
+              {g.lut.nome}
+            </span>
+            <button aria-label="Tirar o look" onClick={() => commit({ ...g, lut: undefined }, 'Tirou o look')} className="rounded p-0.5 text-ink-400 hover:text-rose-300">
+              <X size={13} />
+            </button>
+          </div>
+          <RangeField label="Força" value={Math.round(g.lut.strength * 100)} min={0} max={100} step={5} unit="%" resetTo={100} onLive={(v) => live({ ...g, lut: { ...g.lut!, strength: v / 100 } })} onCommit={(v) => commit({ ...g, lut: { ...g.lut!, strength: v / 100 } }, `Look a ${v}%`)} />
+        </div>
+      ) : (
+        <p className="text-ui-2xs leading-snug text-ink-400">Nenhum look aplicado. O look entra depois da conversão e das primárias.</p>
+      )}
+      <label className="flex items-center gap-1.5 rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-900 px-2">
+        <Search size={12} className="text-ink-400" />
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder={`Buscar nos looks${total ? ` (${total})` : ''}`} aria-label="Buscar looks" className="w-full bg-transparent py-1 text-ui-xs text-ink-100 outline-none" />
+      </label>
+      {erro && <p className="text-ui-2xs text-rose-300">{erro}</p>}
+      <div className="scroll-thin max-h-64 space-y-2 overflow-y-auto">
+        {grupos.map(([grupo, list]) => (
+          <div key={grupo}>
+            <div className="mb-0.5 truncate text-ui-2xs font-semibold text-ink-400" title={grupo}>
+              {grupo}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {list.map((it) => (
+                <Button key={it.id} size="sm" variant={g.lut?.id === it.id ? 'primary' : 'secondary'} className="!h-6 max-w-full !px-2 !text-ui-2xs" title={`${it.categoria}/${it.pasta}/${it.nome}`} onClick={() => commit({ ...g, lut: { id: it.id, nome: it.nome, strength: g.lut?.strength ?? 1 } }, `Look: ${it.nome}`)}>
+                  <span className="truncate">{it.nome}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {itens && !itens.length && <p className="text-ui-2xs text-ink-400">Nenhum look com esse nome.</p>}
+      </div>
+    </section>
+  );
+}
+
+type LiveCommit = { g: ColorGrade; live: (x: ColorGrade) => void; commit: (x: ColorGrade, note?: string) => void };
+const RGB = ['R', 'G', 'B'] as const;
+
+/** Rodas de cor (lift / gamma / gain), como no DaVinci: R, G e B de cada uma, em −1..1. */
+function Wheels({ g, live, commit }: LiveCommit) {
+  const w = g.wheels ?? NEUTRAL_WHEELS;
+  const [which, setWhich] = useState<'lift' | 'gamma' | 'gain'>('gamma');
+  const set = (i: number, v: number, final: boolean) => {
+    const next = { ...w, [which]: w[which].map((x, k) => (k === i ? v : x)) as [number, number, number] };
+    const grade = { ...g, wheels: JSON.stringify(next) === JSON.stringify(NEUTRAL_WHEELS) ? undefined : next };
+    (final ? commit : live)(grade, `Roda ${which}`);
+  };
+  return (
+    <section className="space-y-2 border-t border-ink-750 pt-3">
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Rodas de cor</h4>
+      <div className="flex rounded-[var(--radius-ui-md)] border border-ink-700 p-0.5" role="radiogroup" aria-label="Roda">
+        {(
+          [
+            ['lift', 'Lift · sombras'],
+            ['gamma', 'Gamma · meios'],
+            ['gain', 'Gain · altas'],
+          ] as const
+        ).map(([id, label]) => (
+          <button key={id} role="radio" aria-checked={which === id} onClick={() => setWhich(id)} className={`flex-1 rounded-[var(--radius-ui-sm)] py-1 text-ui-2xs font-semibold ${which === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {RGB.map((ch, i) => (
+        <RangeField key={`${which}-${ch}`} label={ch} value={w[which][i]!} min={-1} max={1} step={0.02} digits={2} resetTo={0} onLive={(v) => set(i, v, false)} onCommit={(v) => set(i, v, true)} />
+      ))}
+      {g.wheels && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => commit({ ...g, wheels: undefined }, 'Zerou as rodas')}>
+          Zerar rodas
+        </Button>
+      )}
+    </section>
+  );
+}
+
+/** HSL por faixa de matiz: escolha a faixa e mexa em matiz, saturação e luminância. */
+function Hsl({ g, live, commit }: LiveCommit) {
+  const bands = g.hsl ?? NEUTRAL_HSL;
+  const [band, setBand] = useState(1);
+  const b = bands[band] ?? { h: 0, s: 0, l: 0 };
+  const set = (k: 'h' | 's' | 'l', v: number, final: boolean) => {
+    const next = bands.map((x, i) => (i === band ? { ...x, [k]: v } : x));
+    const grade = { ...g, hsl: next.every((x) => !x.h && !x.s && !x.l) ? undefined : next };
+    (final ? commit : live)(grade, `HSL ${HSL_BANDS[band]}`);
+  };
+  return (
+    <section className="space-y-2 border-t border-ink-750 pt-3">
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">HSL por cor</h4>
+      <div className="flex gap-1" role="radiogroup" aria-label="Faixa de cor">
+        {HSL_BANDS.map((name, i) => {
+          const on = bands[i] && (bands[i]!.h || bands[i]!.s || bands[i]!.l);
+          return (
+            <button key={name} role="radio" aria-checked={band === i} title={name} onClick={() => setBand(i)} className={`h-6 flex-1 rounded-[var(--radius-ui-sm)] border-2 ${band === i ? 'border-white' : on ? 'border-nc-400' : 'border-transparent'}`} style={{ background: `hsl(${HSL_BAND_HUES[i]} 80% 50%)` }} />
+          );
+        })}
+      </div>
+      <RangeField label={`Matiz · ${HSL_BANDS[band]}`} value={b.h} min={-1} max={1} step={0.02} digits={2} resetTo={0} onLive={(v) => set('h', v, false)} onCommit={(v) => set('h', v, true)} hint="±30° de giro" />
+      <RangeField label="Saturação" value={b.s} min={-1} max={1} step={0.02} digits={2} resetTo={0} onLive={(v) => set('s', v, false)} onCommit={(v) => set('s', v, true)} />
+      <RangeField label="Luminância" value={b.l} min={-1} max={1} step={0.02} digits={2} resetTo={0} onLive={(v) => set('l', v, false)} onCommit={(v) => set('l', v, true)} />
+    </section>
+  );
+}
+
+/** Curvas por 5 pontos (luma, R, G, B): o valor de saída em 0, ¼, ½, ¾ e 1. */
+function Curves({ g, live, commit }: LiveCommit) {
+  const cv = g.curves ?? NEUTRAL_CURVES;
+  const [ch, setCh] = useState<'luma' | 'r' | 'g' | 'b'>('luma');
+  const pts = cv[ch];
+  const set = (i: number, v: number, final: boolean) => {
+    const next = { ...cv, [ch]: pts.map((x, k) => (k === i ? v : x)) };
+    const grade = { ...g, curves: JSON.stringify(next) === JSON.stringify(NEUTRAL_CURVES) ? undefined : next };
+    (final ? commit : live)(grade, `Curva ${ch}`);
+  };
+  return (
+    <section className="space-y-2 border-t border-ink-750 pt-3">
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Curvas</h4>
+      <div className="flex rounded-[var(--radius-ui-md)] border border-ink-700 p-0.5" role="radiogroup" aria-label="Canal">
+        {(
+          [
+            ['luma', 'Luma'],
+            ['r', 'R'],
+            ['g', 'G'],
+            ['b', 'B'],
+          ] as const
+        ).map(([id, label]) => (
+          <button key={id} role="radio" aria-checked={ch === id} onClick={() => setCh(id)} className={`flex-1 rounded-[var(--radius-ui-sm)] py-1 text-ui-2xs font-semibold ${ch === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <CurvePreview pts={pts} />
+      {['Pretos (0)', 'Sombras (¼)', 'Meios (½)', 'Altas (¾)', 'Brancos (1)'].map((label, i) => (
+        <RangeField key={`${ch}-${i}`} label={label} value={pts[i]!} min={0} max={1} step={0.01} digits={2} resetTo={NEUTRAL_CURVES.luma[i]!} onLive={(v) => set(i, v, false)} onCommit={(v) => set(i, v, true)} />
+      ))}
+      {g.curves && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => commit({ ...g, curves: undefined }, 'Zerou as curvas')}>
+          Zerar curvas
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function CurvePreview({ pts }: { pts: number[] }) {
+  const d = Array.from({ length: 33 }, (_, i) => {
+    const x = i / 32;
+    // Mesma interpolação do núcleo (curveAt não é exportada para o React por simplicidade: aproximação linear por trechos para o desenho).
+    const t = x * 4, k = Math.min(3, Math.floor(t)), f = t - k;
+    const y = pts[k]! + (pts[k + 1]! - pts[k]!) * f;
+    return `${(x * 100).toFixed(1)},${((1 - y) * 100).toFixed(1)}`;
+  }).join(' ');
+  return (
+    <svg viewBox="0 0 100 100" className="h-20 w-full rounded-[var(--radius-ui-sm)] border border-ink-700 bg-ink-900" aria-hidden="true">
+      <line x1="0" y1="100" x2="100" y2="0" stroke="rgb(255 255 255 / 0.15)" strokeWidth="1" />
+      <polyline points={d} fill="none" stroke="var(--color-nc-300)" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+/** Textura: nitidez, vinheta e grão — filtros no quadro, iguais no preview e no FFmpeg. */
+function Texture({ g, live, commit }: LiveCommit) {
+  const items: { k: 'sharpen' | 'vignette' | 'grain'; label: string; hint: string }[] = [
+    { k: 'sharpen', label: 'Nitidez', hint: 'máscara de nitidez leve; evite acima de 0,5 em pele' },
+    { k: 'vignette', label: 'Vinheta', hint: 'escurece as bordas, foco no rosto' },
+    { k: 'grain', label: 'Grão', hint: 'grão vivo (muda a cada quadro), textura de filme' },
+  ];
+  return (
+    <section className="space-y-2.5 border-t border-ink-750 pt-3">
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Textura</h4>
+      {items.map(({ k, label, hint }) => (
+        <RangeField key={k} label={label} value={g[k] ?? 0} min={0} max={1} step={0.02} digits={2} resetTo={0} hint={hint} onLive={(v) => live({ ...g, [k]: v || undefined })} onCommit={(v) => commit({ ...g, [k]: v || undefined }, `${label} ${Math.round(v * 100)}%`)} />
+      ))}
+    </section>
+  );
+}

@@ -1,0 +1,13 @@
+{
+  "llm": {
+    "enabled": true,
+    "model": "mlx-community/Qwen3-8B-4bit",
+    "usos": {
+      "tomada": false,
+      "comando": true,
+      "palavraChave": false,
+      "briefing": true,
+      "broll": true
+    }
+  }
+}

@@ -1,0 +1,23 @@
+node_modules
+dist
+.env
+.env.local
+data/projects
+data/bench
+.DS_Store
+*.log
+.vite
+data/referencias
+
+# dados de runtime (ficam só nesta máquina)
+data/_lixeira
+data/benchmark
+data/cinepro-cache
+data/cinepro-index.json
+data/cinepro-manifest.json
+data/fila.json
+data/music-cache.json
+data/notifications.json
+
+# app de desktop
+apps/desktop/release

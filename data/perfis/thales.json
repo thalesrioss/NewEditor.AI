@@ -1,0 +1,116 @@
+{
+  "formato": {
+    "width": 3840,
+    "height": 2160,
+    "fps": 24
+  },
+  "peca": {
+    "duracaoMin": 60,
+    "duracaoMax": 420
+  },
+  "corte": {
+    "headPad": 0.06,
+    "tailPad": 0.1,
+    "maxPause": 0.3,
+    "transicao": "seca",
+    "clipeMedianaS": 2.54
+  },
+  "zoom": {
+    "min": 1.065,
+    "max": 1.1,
+    "porMinuto": 5
+  },
+  "lettering": {
+    "maxLinhas": 2,
+    "posicao": "legenda",
+    "caixa": "livre",
+    "literal": true,
+    "porMinuto": 2.5,
+    "ultimoCitacao": false,
+    "sfxTetoPor3s": 2
+  },
+  "motion": {
+    "nuncaSeco": true,
+    "maxPorModelo": 2,
+    "identidade": "Isto é o que faz uma peça parecer dele. Repetir aqui não deixa o conteúdo igual.\n\n1. **Uma gravação, um enquadramento.** 85% da peça num arquivo só. A variação vem do corte.\n2. **Corte seco por padrão.** Morph só onde o jump cut apareceria e não há cobertura.\n3. **Flash = Adjustment de 3 f em V4 + shutter de 5 f em A2, 1 f depois, sempre em cima de um corte.**\n4. **Zoom com teto de 1,10, pan e tilt em 0, ciclando entre três valores, nunca dois iguais seguidos.**\n5. **Movimento em ~¼ dos clipes.** O resto liso. Movimento guardado para a segunda metade.\n6. **Trilha em fases com silêncio entre elas**, e o silêncio antes do que pesa mais.\n7. **Cobertura perto de 40%**, nunca abaixo de 20%.\n8. **Filme que fala entra em V1 com áudio**, não como cobertura muda.\n9. **Lettering nunca repete a fala inteira** e ancora no frame em que a palavra é dita.\n10. **Helvetica Neue · #07090F · ciano #00B8FF · creme #EDE7DC**, inversão de contraste só nos picos.\n\n---"
+  },
+  "flash": {
+    "usar": true,
+    "frames": 3,
+    "onde": [
+      "troca-de-arquivo",
+      "salto-longo"
+    ],
+    "sfx": "Ocular Aperture (obturador, 5 f, 1 f depois do flash)"
+  },
+  "sfx": {
+    "picoNoEvento": true
+  },
+  "legenda": {
+    "palavrasMin": 1,
+    "palavrasMax": 3,
+    "y": 0.72,
+    "conferirNumeros": true
+  },
+  "trilha": {
+    "lufsSobVoz": -27,
+    "fadeIn": 0,
+    "fadeOut": 2.5,
+    "ducking": true
+  },
+  "cor": {},
+  "broll": {
+    "maxRepeticao": 2,
+    "coberturaFraseInteira": true,
+    "voltaSemAr": 0.4,
+    "minCoberturaS": 2
+  },
+  "notas": [
+    "**115 cortes** em 5m16. Mediana **61 f (2,54 s)** · média 64,3 f · p25 40 f (1,67 s) · p75 82 f (3,42 s) · mín 8 f · máx 165 f.",
+    "**102 dos 115 vêm de um arquivo só** (`C4984.mp4`, 6470 f = 85% da peça). Mais 5 de `C4985.mp4` no fecho.",
+    "**Nenhum corte é contínuo na fonte.** Em 88 emendas mensuráveis, zero têm salto 0: toda emenda tira",
+    "**Duas transições `Smooth Cut`** (24 f em 4064 e 10 f em 5534) em 115 cortes. Todo o resto é corte seco.",
+    "Os clipes de filme entram **em V1 com o áudio deles** (Star Wars ×2, Chefão ×2, Whiplash ×1),",
+    "Valores: **1,065 · 1,08 · 1,09 · 1,10**. Teto **1,10** (a doutrina do vault permite 1,14 — ele é mais conservador).",
+    "**Pan e Tilt sempre 0.** Escala pura, centrada. Nenhum reenquadramento.",
+    "**Adjustment Clip de 3 f em V4**",
+    "**`DSGNMisc_DESIGNED SEQUENCE-Designed Camera Sequence 11_Ocular_Aperture.wav`, 5 f em A2, começando 1 f depois do flash**",
+    "**17/17 caem exatamente em corte de V1** (o flash começa 1–2 f antes do corte). MEDIDO, sem exceção.",
+    "**Toda troca de arquivo numa fronteira de bloco recebe flash** — saída do Hook (54), saída do Star Wars",
+    "Os **10 restantes são saltos na mesma fonte, e saltam mais longe**: mediana de **284,5 f (11,9 s)**",
+    "**Mas 97 cortes saltam sem flash.** Não existe limiar: é seleção, não gatilho. OFÍCIO.",
+    "**39,1% da peça** tem algo por cima da fala (2963 f de 7576).",
+    "B-roll (V2): **23,8%** · Lettering/motion (V3 + os que moram em V2): **17,2%**.",
+    "**2427–2661 (9,75 s)** — imediatamente antes do bloco de prova do McKee.",
+    "**7034–7317 (11,79 s)** — o fecho antes da última volta da música.",
+    "**Onde a onda de ritmo sobe e desce.** 1,96 s no pico e 3,73 s no fecho foram desta peça. A próxima",
+    "**Quantas fases de trilha e quais emoções.** Sete aqui. Uma peça de 2 min pode ter três.",
+    "**Onde cai o silêncio.** A regra é \"antes do que pesa mais\" — qual é o que pesa mais muda.",
+    "**Quais cortes levam flash.** 15% foi o resultado, não a meta. O critério é: a emenda apareceria?",
+    "**Quais clipes levam zoom, e qual dos dois tipos.**",
+    "**Qual família de fundo de motion, e onde entra tela cheia.**",
+    "**Quais filmes, e qual frase de cada um.** Clipe de filme é citação: entra a frase que responde, e acaba ali.",
+    "**A estrutura narrativa.** 7E, AIDA, PAS, Talk Head — escolhida pelo que a bruta sustenta.",
+    "**Loudness em −16,6 LUFS integrado** (pico real −1,3 dBTP) contra a régua de −14 do vault. Ficou com ele no Fairlight.",
+    "**19 das 24 trilhas do pool são comerciais/protegidas** (D7) e as fotos do bloco McKee são de",
+    "**É uma peça.** Nada aqui é NÍVEL 3 e nada deve ir para o `DNA_EDITORIAL.md` ainda.",
+    "**Não há dado de retenção.** Nenhuma escolha deste arquivo está ligada a um resultado medido de",
+    "**Candidatos a promoção, quando houver uma segunda peça para comparar:** o par flash+shutter (§4),"
+  ],
+  "evidencia": {
+    "formato": "MEDIDO",
+    "corte.clipeMedianaS": "MEDIDO",
+    "flash": "MEDIDO",
+    "zoom": "MEDIDO",
+    "lettering.literal": "MEDIDO",
+    "motion.nuncaSeco": "PREFERENCIA",
+    "peca": "MEDIDO",
+    "broll.coberturaFraseInteira": "DERIVADO"
+  },
+  "id": "thales",
+  "nome": "Thales Rios — Talk Head (padrão validado)",
+  "fonte": "/Users/thalesrioss/Documents/Cérebro do Editor/padroes/PADRAO - Thales Talk Head YouTube (lido da SAND v1).md",
+  "atualizadoEm": "2026-10-10T20:32:17.067Z",
+  "validado": true,
+  "padraoCasa": true
+}

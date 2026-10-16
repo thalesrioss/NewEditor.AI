@@ -1,0 +1,31 @@
+{
+  "name": "@neweditor/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --env-file-if-exists=../../.env src/index.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/index.ts",
+    "bench": "tsx --env-file-if-exists=../../.env src/decupagem/bench.ts",
+    "bench:final": "tsx --env-file-if-exists=../../.env src/decupagem/bench-final.ts",
+    "bench:all": "tsx --env-file-if-exists=../../.env src/decupagem/bench-all.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/multipart": "^10.1.3",
+    "@fastify/static": "^10.1.6",
+    "@fastify/websocket": "^11.3.4",
+    "@neweditor/core": "*",
+    "fastify": "^5.12.5",
+    "playwright-core": "^1.64.0",
+    "zod": "^4.6.5"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.133.0"
+  }
+}

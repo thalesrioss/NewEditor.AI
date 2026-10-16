@@ -1,0 +1,215 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Superfícies (escuro, estilo editor) */
+  --color-ink-950: #07080b;
+  --color-ink-900: #0b0d12;
+  --color-ink-850: #0f1218;
+  --color-ink-800: #141820;
+  --color-ink-750: #1a1f29;
+  --color-ink-700: #222834;
+  --color-ink-600: #2e3542;
+  --color-ink-500: #4a5263;
+  --color-ink-400: #7d869a; /* texto secundário: ≥ 4,5:1 sobre ink-850 */
+  --color-ink-300: #9aa2b2;
+  --color-ink-200: #c7ccd6;
+  --color-ink-100: #e8eaef;
+
+  /* NewContent */
+  --color-nc-600: #0033ff;
+  --color-nc-500: #1f5cff;
+  --color-nc-400: #4f84ff;
+  --color-nc-300: #8fb0ff;
+  --color-cyan-nc: #00b4ff;
+
+  /* Tipos de corte */
+  --color-cut-retake: #ff6b6b;
+  --color-cut-false: #ff9f43;
+  --color-cut-off: #c56cf0;
+  --color-cut-filler: #feca57;
+  --color-cut-silence: #4a5263;
+  --color-cut-manual: #ff4d8d;
+
+  /* Semânticas */
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-danger: #fb7185;
+  --color-info: #00b4ff;
+  /* Quem fez: agente × humano */
+  --color-agent: #00b4ff;
+  --color-human: #fbbf24;
+
+  /* Escala de texto da interface (mínimo 10 só para rótulos; texto de leitura ≥ 11) */
+  --text-ui-2xs: 10px;
+  --text-ui-2xs--line-height: 1.35;
+  --text-ui-xs: 11px;
+  --text-ui-xs--line-height: 1.4;
+  --text-ui-sm: 12px;
+  --text-ui-sm--line-height: 1.45;
+  --text-ui-md: 13px;
+  --text-ui-md--line-height: 1.45;
+  --text-ui-lg: 15px;
+  --text-ui-lg--line-height: 1.35;
+
+  /* Raio, elevação, movimento */
+  --radius-ui-sm: 4px;
+  --radius-ui-md: 8px;
+  --radius-ui-lg: 12px;
+  --shadow-ui-1: 0 4px 12px rgb(0 0 0 / 0.35);
+  --shadow-ui-2: 0 10px 28px rgb(0 0 0 / 0.45);
+  --shadow-ui-3: 0 24px 60px rgb(0 0 0 / 0.55);
+  --ease-ui: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  /* Camadas */
+  --z-track: 10;
+  --z-cursor: 30;
+  --z-avatar: 40;
+  --z-popover: 60;
+  --z-modal: 80;
+  --z-toast: 90;
+}
+
+/* Foco visível em tudo que se opera pelo teclado. */
+:where(button, a, input, select, textarea, [role='button'], [role='tab'], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-nc-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-ui-sm);
+}
+
+/* Quem pediu menos movimento não vê avatar pulando nem confete. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-900);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.nc-gradient {
+  background-image: linear-gradient(120deg, var(--color-nc-600), var(--color-cyan-nc));
+}
+.nc-text-gradient {
+  background-image: linear-gradient(120deg, var(--color-nc-400), var(--color-cyan-nc));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.10) 0 2px, transparent 2px 6px);
+}
+
+.pixelated {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+}
+
+/* ---- Avatar ---------------------------------------------------------- */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+/* Sentado pensando: olha para um lado, depois para o outro. */
+@keyframes look-flip {
+  0%, 45% { transform: scaleX(1); }
+  50%, 95% { transform: scaleX(-1); }
+}
+@keyframes jump {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  15% { transform: translateY(2px) scaleY(0.94); }
+  45% { transform: translateY(-22px) scaleY(1.03); }
+  75% { transform: translateY(0) scaleY(1); }
+}
+@keyframes confetti {
+  0% { transform: translate(0, 0) rotate(0); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) rotate(540deg); opacity: 0; }
+}
+@keyframes dots {
+  0%, 20% { opacity: 0.2; }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wave {
+  0%, 100% { transform: rotate(-25deg); }
+  50% { transform: rotate(25deg); }
+}
+.anim-wave { animation: wave 0.5s ease-in-out infinite; }
+.anim-bob { animation: bob 1.6s ease-in-out infinite; }
+.anim-look-flip { animation: look-flip 3.6s steps(1) infinite; }
+.anim-jump { animation: jump 0.7s cubic-bezier(.3,.7,.4,1) infinite; }
+.anim-pop { animation: pop-in 180ms ease-out both; }
+
+.input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-ink-700);
+  background: var(--color-ink-800);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-100);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--color-nc-500);
+}
+
+/* ---- App de desktop (Electron) ------------------------------------------ */
+.electron .ne-titlebar {
+  -webkit-app-region: drag;
+}
+.electron .ne-titlebar :is(button, a, input, select, textarea, [role='button']) {
+  -webkit-app-region: no-drag;
+}
+.electron-mac .ne-titlebar {
+  padding-left: 84px;
+}
+
+/* ---- Camada de texto editável no player (arrastar legenda e lettering) ------ */
+.ne-text-layer.editable .ne-caption,
+.ne-text-layer.editable .ne-lt {
+  pointer-events: auto;
+  cursor: move;
+}
+.ne-text-layer.editable .ne-caption:hover,
+.ne-text-layer.editable .ne-lt:hover,
+.ne-text-layer.editable .ne-caption.dragging,
+.ne-text-layer.editable .ne-lt.dragging {
+  outline: 1px dashed rgb(255 255 255 / 0.6);
+  outline-offset: 4px;
+}
