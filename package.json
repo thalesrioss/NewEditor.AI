@@ -12,10 +12,11 @@
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev -w @neweditor/server\" \"npm:dev -w @neweditor/web\"",
     "build": "npm run build -w @neweditor/web",
     "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/web && tsc -p apps/desktop",
-    "test": "node --import tsx --test packages/core/src/*.test.ts",
+    "test": "node --import tsx --test packages/core/src/*.test.ts && npm run test:server",
     "desktop": "concurrently -n server,web,app -c blue,magenta,green \"npm:dev -w @neweditor/server\" \"npm:dev -w @neweditor/web\" \"npm:dev -w @neweditor/desktop\"",
     "desktop:start": "npm run build -w @neweditor/web && npm run start -w @neweditor/desktop",
-    "dist": "npm run dist -w @neweditor/desktop"
+    "dist": "npm run dist -w @neweditor/desktop",
+    "test:server": "node --import tsx --test apps/server/src/*.test.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",

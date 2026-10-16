@@ -75,7 +75,7 @@ export async function entregar(projectId: string, opts: EntregaOpts, onProgress?
     const pos = firstLettering ? resolveOverlay(p.timeline, firstLettering) : null;
     const t = opts.capaEm ?? (pos ? pos.start + Math.min(0.8, (pos.end - pos.start) * 0.6) : Math.max(0.5, timelineDuration(p.timeline) / 3));
     const capa = path.join(pasta, `${base}_capa.jpg`);
-    await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(t), '-i', mp4, '-frames:v', '1', '-q:v', '2', capa]).catch(() => undefined);
+    await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(t), '-i', mp4, '-frames:v', '1', '-pix_fmt', 'yuvj420p', '-q:v', '2', capa]).catch(() => undefined);
     arquivos.push(capa);
   }
   onProgress?.(0.97);

@@ -222,7 +222,7 @@ export async function cineproThumb(id: string): Promise<{ file: string; type: st
   const local = path.join(FILES_DIR, `${it.id}.${it.ext}`);
   if (fs.existsSync(local)) {
     try {
-      await run('ffmpeg', ['-y', '-v', 'error', ...(it.kind === 'video' ? ['-ss', '0.5'] : []), '-i', local, '-frames:v', '1', '-vf', 'scale=320:-2', '-q:v', '5', out]);
+      await run('ffmpeg', ['-y', '-v', 'error', ...(it.kind === 'video' ? ['-ss', '0.5'] : []), '-i', local, '-frames:v', '1', '-vf', 'scale=320:-2', '-pix_fmt', 'yuvj420p', '-q:v', '5', out]);
       return { file: out, type: 'image/jpeg' };
     } catch {
       /* tenta o Drive */

@@ -160,9 +160,19 @@ export async function makeThumbs(asset: MediaAsset, outDir: string): Promise<Non
   const count = Math.max(1, Math.ceil(asset.duration / interval));
   const cols = 20;
   const rows = Math.ceil(count / cols);
+  // JPEG pede YUV de faixa cheia (yuvj420p): o FFmpeg 7+ recusa a faixa limitada do proxy no encoder mjpeg.
   const file = 'thumbs.jpg';
   const vf = `fps=1/${interval},scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},tile=${cols}x${rows}`;
-  await atomic(path.join(outDir, file), (tmp) => run('ffmpeg', ['-y', '-v', 'error', '-skip_frame', 'nokey', '-i', asset.path, '-vf', vf, '-frames:v', '1', '-q:v', '5', tmp]));
+  const args = (soKeyframes: boolean) => ['-y', '-v', 'error', ...(soKeyframes ? ['-skip_frame', 'nokey'] : []), '-i', asset.path, '-vf', vf, '-frames:v', '1', '-pix_fmt', 'yuvj420p', '-q:v', '5'];
+  await atomic(path.join(outDir, file), async (tmp) => {
+    // Decodificar só keyframes é muito mais rápido numa bruta longa; num clipe curto (um GOP só, comum em gravação
+    // de tela e em overlays) o `fps` pode não soltar quadro nenhum e o FFmpeg sai sem escrever: aí decodifica tudo.
+    if (asset.duration > 30) {
+      await run('ffmpeg', [...args(true), tmp]);
+      if (await fs.stat(tmp).then((st) => st.size > 0, () => false)) return;
+    }
+    await run('ffmpeg', [...args(false), tmp]);
+  });
   return { file, interval, w, h, cols, count };
 }
 

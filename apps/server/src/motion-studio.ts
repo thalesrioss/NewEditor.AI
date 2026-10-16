@@ -154,7 +154,7 @@ export async function exportOrdens(projectId: string): Promise<{ dir: string; ce
     const asset = p.assets.find((a) => a.id === anchor.assetId);
     let rosto = 'não medido';
     if (asset?.proxy) {
-      await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(anchor.at), '-i', path.join(store.dir(p.id), asset.proxy), '-frames:v', '1', '-q:v', '3', path.join(cenaDir, 'contexto.jpg')]).catch(() => undefined);
+      await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(anchor.at), '-i', path.join(store.dir(p.id), asset.proxy), '-frames:v', '1', '-pix_fmt', 'yuvj420p', '-q:v', '3', path.join(cenaDir, 'contexto.jpg')]).catch(() => undefined);
       try {
         const f = await facesOf(p, asset);
         const s = f ? faceSummary(f, anchor.at, anchor.at + (m.end - m.start)) : null;
