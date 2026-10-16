@@ -23,7 +23,12 @@ extraResources:
 asar: true
 asarUnpack:
   - node_modules/playwright-core/**
+  # FFmpeg e ffprobe empacotados (usados quando a máquina não tem o do Homebrew): binários têm que ficar fora do asar.
+  - node_modules/ffmpeg-static/**
+  - node_modules/ffprobe-static/**
 mac:
+  files:
+    - '!node_modules/ffprobe-static/bin/{linux,win32}/**'
   category: public.app-category.video
   target: [dmg, zip]
   icon: build/icon.png
@@ -31,6 +36,8 @@ mac:
   hardenedRuntime: false
   identity: null
 win:
+  files:
+    - '!node_modules/ffprobe-static/bin/{linux,darwin}/**'
   target: [nsis]
   icon: build/icon.png
 nsis:

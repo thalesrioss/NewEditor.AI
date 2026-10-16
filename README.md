@@ -28,9 +28,15 @@ npm run desktop:start     # o app com o servidor embutido, sem Vite (usa a inter
 npm run dist              # instalador: DMG/zip no Mac, NSIS no Windows → apps/desktop/release/
 ```
 
-O app empacotado sobe o servidor dentro dele numa porta livre e guarda os dados em `~/Library/Application Support/Editor Brain/data`
-(Windows: `%APPDATA%/Editor Brain/data`). Para o app usar os projetos deste repositório, essa pasta pode ser um link para `data/`.
-Diário de abertura: `~/Library/Logs/Editor Brain/main.log`. FFmpeg, Whisper e Chrome ainda vêm do sistema (ADR-009).
+O app empacotado sobe o servidor num processo auxiliar (`utilityProcess`, como o VEHelper do CapCut) numa porta livre e guarda os
+dados em `~/Library/Application Support/Editor Brain/data` (Windows: `%APPDATA%/Editor Brain/data`). Para o app usar os projetos deste
+repositório, essa pasta pode ser um link para `data/`. Diário de abertura: `~/Library/Logs/Editor Brain/main.log` (diz se o servidor
+subiu no auxiliar ou, de reserva, no processo principal, e qual FFmpeg foi escolhido).
+
+FFmpeg e ffprobe vão dentro do app (`ffmpeg-static` 6.0 e `ffprobe-static`, fora do asar); se a máquina tem o do Homebrew, ele é
+preferido por ser mais novo. O servidor lê `NEWEDITOR_FFMPEG` / `NEWEDITOR_FFPROBE` e escolhe a sintaxe certa por versão. Whisper, Qwen
+(uv/Python) e Chrome ainda vêm do sistema (ADR-009, ADR-013). Instalar a build: `npm run dist:mac` e depois `ditto` (nunca `cp -R`)
+de `apps/desktop/release/mac-arm64/Editor Brain.app` para `/Applications`.
 
 ## Editor Brain
 
@@ -84,7 +90,7 @@ bruto ──► ingest ──► proxy 540p · wav 16k · envelope de energia (1
 | Caminho | O quê |
 |---|---|
 | `packages/core` | Modelo da timeline, operações (puras, testadas), tipos do WebSocket |
-| `apps/server` | Fastify + WebSocket, ingest, decupagem, agente de comandos, render |
+| `apps/server` | Fastify + WebSocket, ingest, decupagem, agente de comandos, render (`index.ts` só inicializa; rotas por área em `src/routes/`) |
 | `apps/server/src/decupagem` | `analyze` (medido) · `decide` (Claude) · `plan` · `run` (ao vivo) · `bench` |
 | `apps/web` | Editor Brain (Vite + React + Tailwind) |
 | `services/asr` | Transcrição local com mlx-whisper |
@@ -102,9 +108,14 @@ Reporta precisão/recall de tempo, concordância palavra a palavra, erro de bord
 ## Testes
 
 ```bash
-npm test          # operações da timeline
+npm test              # núcleo (operações da timeline) + servidor
+npm run test:server   # só o servidor: probe/proxy por tipo de arquivo e o caminho ingest → ops → QC → render (gera as fixtures com o FFmpeg)
 npm run typecheck
 ```
+
+Os testes do servidor rodam numa pasta de dados temporária (`NEWEDITOR_DATA`) e respeitam `NEWEDITOR_FFMPEG` / `NEWEDITOR_FFPROBE`:
+apontar para `node_modules/ffmpeg-static/ffmpeg` e `node_modules/ffprobe-static/bin/<os>/<arch>/ffprobe` confere o render com os
+binários que o app leva.
 
 ## Próximas etapas
 

@@ -6,7 +6,7 @@ import { buildCues, buildLut, clipPlayed, clipSpeed, FLASH_FRAMES, MOTION_SFX_TR
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
-import { atomic, run } from './media.ts';
+import { atomic, run, filterGraphArgs } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 
@@ -229,7 +229,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       parts.push(`[${k}:a]aformat=sample_rates=48000:channel_layouts=stereo[sfxbus]`);
       audio.push('[sfxbus]');
     }
-    parts.push(`${audio.join('')}amix=inputs=${audio.length}:duration=first:normalize=0,${LOUDNORM},aresample=48000[aout]`);
+    parts.push(`${audio.join('')}amix=inputs=${audio.length}:duration=first:normalize=0,${LOUDNORM},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`);
     const graph = path.join(work, 'final.txt');
     await fs.writeFile(graph, parts.join(';\n'));
 
@@ -241,7 +241,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     const args = ['-y', '-v', 'error', '-stats'];
     if (!hasVideo) args.push('-loop', '1');
     for (const f of inputs) (typeof f === 'string' ? args.push('-i', f) : args.push(...f.pre, '-i', f.path));
-    args.push('-/filter_complex', graph);
+    args.push(...(await filterGraphArgs(graph)));
     // Sem overlay de vídeo, a imagem já está pronta: só copia (não recodifica duas vezes).
     if (videoTouched) args.push('-map', `[${vCur}]`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(fps));
     else args.push('-map', '0:v', '-c:v', 'copy');

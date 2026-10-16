@@ -1,6 +1,6 @@
 # ADR-013: Ponderação sobre o que fizemos (avaliação da arquitetura em 16/10/2026)
 
-**Status:** Avaliação (para o Thales decidir o que vira ação)
+**Status:** Aceita — opção A executada em 16/10/2026 (ver "Execução" no fim)
 **Data:** 2026-10-16
 **Decide:** Thales
 
@@ -88,3 +88,17 @@ Dentro de A, a ordem: (1) commit hoje; (2) chaves fora da nota; (3) testes do se
 - Mais fácil, se A: cada rodada vira um commit com diff legível; o app sobrevive a uma máquina nova; eu deixo de ser o único teste.
 - Mais difícil: uma semana sem função nova visível.
 - Revisitar: quando houver dois projetos reais passando pelo pipeline inteiro (hoje há um), medir o tempo de cada etapa e a taxa de "virou regra" dos feedbacks — é o número que diz se o produto aprende.
+
+## Execução (16/10/2026, "pode seguir um por um")
+
+| # | Item | Feito | O que apareceu no caminho |
+|---|---|---|---|
+| 1 | Commit | `02b588d` (208 arquivos) e um commit por rodada depois | `.gitignore` para dados de runtime e `apps/desktop/release` |
+| 2 | Chaves fora da nota | token e chaves do Cloudflare em `~/.config/cinepro/cloudflare.env` (600); a nota do vault ficou só com o público | falta o Thales rotacionar o token |
+| 3 | Testes do servidor | `media.test.ts` (probe/proxy de vídeo, áudio, PNG com alfa) e `pipeline.test.ts` (ingest → ops → perfil Personalizado → QC → render); `npm run test:server` | acharam dois bugs reais: o encoder JPEG do FFmpeg 7+ recusa a faixa limitada (miniaturas, capa da entrega e quadro do Motion Studio, os dois últimos falhando em silêncio) e a tira de miniaturas saía vazia em clipe curto de um keyframe só |
+| 4 | Rotas por área | `apps/server/src/routes/` com 8 módulos; `index.ts` de 614 para 62 linhas; mesmas 95 rotas (diff) | — |
+| 5 | Servidor em processo auxiliar | `utilityProcess.fork(server.mjs)` com reserva no processo principal; sobe em 0,5 s; morre com o app | — |
+| 6 | FFmpeg empacotado | `ffmpeg-static` 6.0 + `ffprobe-static` fora do asar; o app prefere o do Homebrew quando existe; o servidor lê `NEWEDITOR_FFMPEG/FFPROBE` | a suíte com o 6.0 pegou duas diferenças de sintaxe (`-/filter_complex` só no 7+, e o layout de canais explícito no fim da cadeia de áudio) — corrigidas para as duas versões |
+
+Fica para a opção B (ADR-012): modo offline declarado, Cérebro como RAG local, laço de agente local, composição local de cenas.
+

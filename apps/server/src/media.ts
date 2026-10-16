@@ -35,9 +35,32 @@ export async function atomic<T>(final: string, write: (tmp: string) => Promise<T
   }
 }
 
+/**
+ * Onde estão o FFmpeg e o ffprobe: o app empacotado aponta os binários que leva consigo por NEWEDITOR_FFMPEG /
+ * NEWEDITOR_FFPROBE; no repositório (e quando o Homebrew está instalado) vale o do PATH.
+ */
+export const FFMPEG_BIN = process.env.NEWEDITOR_FFMPEG || 'ffmpeg';
+export const FFPROBE_BIN = process.env.NEWEDITOR_FFPROBE || 'ffprobe';
+const BIN: Record<string, string> = { ffmpeg: FFMPEG_BIN, ffprobe: FFPROBE_BIN };
+
+let ffmpegMajorCache: Promise<number> | null = null;
+/** Versão maior do FFmpeg em uso (7 = Homebrew atual, 6 = o empacotado no app). Medida uma vez. */
+export function ffmpegMajor(): Promise<number> {
+  ffmpegMajorCache ??= run('ffmpeg', ['-version']).then(
+    (out) => Number(/ffmpeg version (?:n)?(\d+)/.exec(out.toString())?.[1]) || 7,
+    () => 7,
+  );
+  return ffmpegMajorCache;
+}
+
+/** Os argumentos para ler um grafo de filtros de um arquivo: `-/filter_complex` (7+) ou `-filter_complex_script` (6). */
+export async function filterGraphArgs(file: string): Promise<string[]> {
+  return (await ffmpegMajor()) >= 7 ? ['-/filter_complex', file] : ['-filter_complex_script', file];
+}
+
 export function run(cmd: string, args: string[], opts: { onStderr?: (line: string) => void } = {}): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(BIN[cmd] ?? cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     children.add(p);
     p.on('exit', () => children.delete(p));
     const out: Buffer[] = [];

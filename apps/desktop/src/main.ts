@@ -48,6 +48,42 @@ function fixPath(): void {
   process.env.PATH = [...extra.filter((p) => p && !cur.includes(p)), ...cur].join(path.delimiter);
 }
 
+/** Primeiro executável com esse nome no PATH (já com o Homebrew incluído por fixPath). */
+function onPath(name: string): string | null {
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    const f = path.join(dir, name);
+    try {
+      fs.accessSync(f, fs.constants.X_OK);
+      return f;
+    } catch {
+      /* não está aqui */
+    }
+  }
+  return null;
+}
+
+/**
+ * FFmpeg e ffprobe: o do sistema (Homebrew), se existir, porque é mais novo; senão os que o app leva consigo
+ * (ffmpeg-static / ffprobe-static, desempacotados fora do asar). O servidor lê NEWEDITOR_FFMPEG / NEWEDITOR_FFPROBE.
+ */
+function resolveTools(): void {
+  const exe = process.platform === 'win32' ? '.exe' : '';
+  const unasar = (f: string) => f.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+  const bundled = (load: () => string): string | null => {
+    try {
+      const f = unasar(load());
+      return fs.existsSync(f) ? f : null;
+    } catch {
+      return null;
+    }
+  };
+  const ffmpeg = bundled(() => require('ffmpeg-static') as string);
+  const ffprobe = bundled(() => (require('ffprobe-static') as { path: string }).path);
+  process.env.NEWEDITOR_FFMPEG ??= onPath(`ffmpeg${exe}`) ?? ffmpeg ?? 'ffmpeg';
+  process.env.NEWEDITOR_FFPROBE ??= onPath(`ffprobe${exe}`) ?? ffprobe ?? 'ffprobe';
+  log('ferramentas', { ffmpeg: process.env.NEWEDITOR_FFMPEG, ffprobe: process.env.NEWEDITOR_FFPROBE, empacotados: { ffmpeg, ffprobe } });
+}
+
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
@@ -200,6 +236,7 @@ async function createWindow(url: string): Promise<void> {
 app.whenReady().then(async () => {
   log('ready');
   fixPath();
+  resolveTools();
   try {
     const url = await startServer();
     await createWindow(url);
