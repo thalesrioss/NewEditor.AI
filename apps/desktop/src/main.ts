@@ -1,11 +1,13 @@
 /**
  * Editor Brain como app de desktop (Mac e Windows), como o CapCut:
- * o servidor (Fastify) sobe dentro do processo principal e a janela abre a interface nele.
+ * o servidor (Fastify) sobe num processo auxiliar (utilityProcess, como o VEHelper do CapCut) e a janela abre
+ * a interface nele. Um render ou uma decupagem longa não disputa a thread da janela e dos menus; se o auxiliar
+ * não subir, o servidor roda dentro do processo principal (reserva), e o diário conta qual dos dois foi.
  *
  *  · desenvolvimento: NEWEDITOR_DEV_URL=http://localhost:5173 (Vite + servidor de `npm run dev`)
  *  · empacotado: servidor em resources/app-root, dados em ~/Library/Application Support/Editor Brain/data
  */
-import { app, BrowserWindow, dialog, Menu, nativeTheme, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, Menu, nativeTheme, shell, utilityProcess, type MenuItemConstructorOptions, type UtilityProcess } from 'electron';
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -74,7 +76,41 @@ function waitHealth(url: string, ms = 20000): Promise<void> {
   });
 }
 
-/** Sobe o servidor no processo principal e devolve a URL da interface. */
+/** O processo auxiliar do servidor (vivo enquanto o app estiver aberto). */
+let serverProc: UtilityProcess | null = null;
+
+/**
+ * Sobe o servidor num processo auxiliar e resolve quando ele responde ao /api/health.
+ * Rejeita se o processo morrer antes disso (aí o chamador usa a reserva no processo principal).
+ */
+function forkServer(script: string, url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const child = utilityProcess.fork(script, [], { env: { ...process.env }, stdio: 'pipe', serviceName: 'Editor Brain · servidor' });
+    serverProc = child;
+    const pipe = (prefix: string, stream: NodeJS.ReadableStream | null) => stream?.on('data', (d: Buffer) => process.stderr.write(`${prefix} ${d}`));
+    pipe('[servidor]', child.stdout);
+    pipe('[servidor!]', child.stderr);
+    child.on('spawn', () => log('servidor auxiliar', { pid: child.pid }));
+    child.on('exit', (code) => {
+      serverProc = null;
+      log('servidor auxiliar saiu', { code });
+      if (!done) (done = true), reject(new Error(`o servidor auxiliar saiu com código ${code}`));
+      else if (!quitting) dialog.showErrorBox('O servidor do Editor Brain parou', `Código ${code}. Feche e abra o app de novo.\n\nDiário: ${LOG_FILE}`);
+    });
+    waitHealth(url).then(
+      () => !done && ((done = true), resolve()),
+      (e) => !done && ((done = true), child.kill(), reject(e)),
+    );
+  });
+}
+let quitting = false;
+app.on('before-quit', () => {
+  quitting = true;
+  serverProc?.kill();
+});
+
+/** Sobe o servidor (auxiliar; reserva no processo principal) e devolve a URL da interface. */
 async function startServer(): Promise<string> {
   if (DEV_URL) return DEV_URL;
   const packaged = app.isPackaged;
@@ -88,11 +124,20 @@ async function startServer(): Promise<string> {
   log('server', { root, data: process.env.NEWEDITOR_DATA, webDist: process.env.NEWEDITOR_WEB_DIST, port });
   await fs.promises.mkdir(path.join(process.env.NEWEDITOR_DATA, 'projects'), { recursive: true });
   if (!fs.existsSync(process.env.NEWEDITOR_WEB_DIST)) throw new Error(`Interface não encontrada em ${process.env.NEWEDITOR_WEB_DIST}. Rode "npm run build -w @neweditor/web".`);
-  await import(/* @vite-ignore */ path.join(here, 'server.mjs'));
-  log('server importado');
   const url = `http://127.0.0.1:${port}`;
+  const script = path.join(here, 'server.mjs');
+  if (process.env.NEWEDITOR_SERVER_INPROC !== '1') {
+    try {
+      await forkServer(script, url);
+      log('server pronto (auxiliar)', url);
+      return url;
+    } catch (e) {
+      log('servidor auxiliar falhou; usando o processo principal', e as Error);
+    }
+  }
+  await import(/* @vite-ignore */ script);
   await waitHealth(url);
-  log('server pronto', url);
+  log('server pronto (no processo principal)', url);
   return url;
 }
 
