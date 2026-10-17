@@ -339,7 +339,7 @@ export interface QcReport {
   fase: 'edicao' | 'render';
   issues: QcIssue[];
   /** Medições do render (quando fase = render). */
-  render?: { lufs?: number; truePeak?: number; blackFrames?: number; file?: string };
+  render?: { lufs?: number; truePeak?: number; blackFrames?: number; /** duração do arquivo (ffprobe), s */ duration?: number; file?: string };
 }
 
 export interface ProjectComment {
