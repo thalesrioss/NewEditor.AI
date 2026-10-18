@@ -38,8 +38,14 @@ export function hojeLocal(d = new Date()): string {
 const isoValido = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
 const somaDias = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-// Palavra que anuncia o prazo antes do dia ("entrega sexta", "pra amanhã", "até a quinta").
-const ANTES_DO_DIA = String.raw`(?:prazo|entreg\w*|ate|para|pra|nesta|nessa|esta|essa|proxim[ao])\s*:?\s*(?:(?:a|o|na|no|dia)\s+)*`;
+// Palavra que anuncia o prazo antes do dia. Forte ("entrega sexta", "prazo: até a quinta") vale sozinha;
+// genérica ("pra", "até", "essa") só quando o dia fecha a frase ou vem com "-feira", "que vem", "de manhã"…,
+// senão "para a segunda opção" e "até a quinta cena" viram prazo.
+const MEIO = String.raw`(?:(?:ate|para|pra|a|o|na|no|dia|nesta|nessa|esta|essa)\s+)*`;
+const FORTE = String.raw`(?:prazo|entreg\w*|proxim[ao])\s*:?\s*${MEIO}`;
+const FRACO = String.raw`(?:ate|para|pra|nesta|nessa|esta|essa)\s+${MEIO}`;
+const FECHA = String.raw`(?=\s*(?:$|[.,;:!?)]|-feira|que vem|cedo|de (?:manha|tarde|noite)))`;
+const doDia = (dias: string) => String.raw`\b(?:${FORTE}(${dias})\b|${FRACO}(${dias})${FECHA})`;
 const DIAS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
 /**
@@ -49,16 +55,22 @@ const DIAS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabad
 export function prazoDoTexto(texto: string, hoje = hojeLocal()): string | undefined {
   const dm = /(?:prazo|entrega(?:r)?|at[ée])\s*(?:o dia|dia|em)?\s*:?\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/i.exec(texto);
   if (dm) {
-    const y = dm[3] ? (dm[3].length === 2 ? `20${dm[3]}` : dm[3]) : hoje.slice(0, 4);
-    const iso = `${y}-${dm[2]!.padStart(2, '0')}-${dm[1]!.padStart(2, '0')}`;
+    const md = `${dm[2]!.padStart(2, '0')}-${dm[1]!.padStart(2, '0')}`;
+    let y = dm[3] ? (dm[3].length === 2 ? `20${dm[3]}` : dm[3]) : hoje.slice(0, 4);
+    // Sem ano e já passou há mais de 60 dias: é do ano que vem ("Prazo 05/01" escrito em dezembro).
+    if (!dm[3] && `${y}-${md}` < somaDias(hoje, -60)) y = String(Number(y) + 1);
+    const iso = `${y}-${md}`;
     if (isoValido(iso)) return iso;
   }
   const low = norm(texto);
-  const rel = new RegExp(String.raw`\b${ANTES_DO_DIA}(depois de amanha|amanha|hoje)\b`).exec(low);
-  if (rel) return somaDias(hoje, rel[1] === 'hoje' ? 0 : rel[1] === 'amanha' ? 1 : 2);
-  const dia = new RegExp(String.raw`\b(?:${ANTES_DO_DIA}(${DIAS.join('|')})|(segunda|terca|quarta|quinta|sexta)-feira)\b`).exec(low);
+  const rel = new RegExp(doDia('depois de amanha|amanha|hoje')).exec(low);
+  if (rel) {
+    const r = rel[1] ?? rel[2];
+    return somaDias(hoje, r === 'hoje' ? 0 : r === 'amanha' ? 1 : 2);
+  }
+  const dia = new RegExp(String.raw`${doDia(DIAS.join('|'))}|\b(segunda|terca|quarta|quinta|sexta)-feira\b`).exec(low);
   if (dia) {
-    const alvo = DIAS.indexOf((dia[1] ?? dia[2])!);
+    const alvo = DIAS.indexOf((dia[1] ?? dia[2] ?? dia[3])!);
     const atual = new Date(`${hoje}T00:00:00Z`).getUTCDay();
     return somaDias(hoje, (alvo - atual + 7) % 7 || 7);
   }

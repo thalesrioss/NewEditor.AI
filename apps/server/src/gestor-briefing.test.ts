@@ -32,6 +32,21 @@ describe('prazoDoTexto', async () => {
     assert.equal(prazoDoTexto('gravamos na terça-feira', HOJE), '2026-10-20');
   });
   test('"segunda" sem palavra de prazo não é data', () => assert.equal(prazoDoTexto('a segunda versão ficou melhor', HOJE), undefined));
+  test('ordinal depois de "para"/"até" não é data', () => {
+    assert.equal(prazoDoTexto('quero mudar para a segunda opção', '2026-12-28'), undefined);
+    assert.equal(prazoDoTexto('até a quinta cena tá bom', '2026-12-28'), undefined);
+    assert.equal(prazoDoTexto('até hoje ninguém mostrou isso', HOJE), undefined);
+  });
+  test('dia com palavra forte ou fechando a frase continua valendo', () => {
+    assert.equal(prazoDoTexto('entrega quinta', '2026-12-28'), '2026-12-31');
+    assert.equal(prazoDoTexto('preciso pra sexta que vem', HOJE), '2026-10-23');
+    assert.equal(prazoDoTexto('entrega até a sexta e o resto depois', HOJE), '2026-10-23');
+    assert.equal(prazoDoTexto('consegue até quinta?', HOJE), '2026-10-22');
+  });
+  test('dd/mm sem ano que já passou há meses → ano que vem', () => {
+    assert.equal(prazoDoTexto('Prazo 05/01', '2026-12-28'), '2027-01-05');
+    assert.equal(prazoDoTexto('Prazo 10/10', HOJE), '2026-10-10');
+  });
 });
 
 describe('valorVazio', async () => {
