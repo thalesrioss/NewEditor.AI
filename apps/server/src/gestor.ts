@@ -45,7 +45,10 @@ const MEIO = String.raw`(?:(?:ate|para|pra|a|o|na|no|dia|nesta|nessa|esta|essa)\
 const FORTE = String.raw`(?:prazo|entreg\w*|proxim[ao])\s*:?\s*${MEIO}`;
 const FRACO = String.raw`(?:ate|para|pra|nesta|nessa|esta|essa)\s+${MEIO}`;
 const FECHA = String.raw`(?=\s*(?:$|[.,;:!?)]|-feira|que vem|cedo|de (?:manha|tarde|noite)))`;
-const doDia = (dias: string) => String.raw`\b(?:${FORTE}(${dias})\b|${FRACO}(${dias})${FECHA})`;
+// Dia da semana usado como ordinal ("segunda versão", "quinta parte", "próxima quinta cena") não é prazo.
+const NAO_ORDINAL = String.raw`(?!\s+(?:vers|opc|cena|parte|vez|etapa|tomada|take|rodada|revis|alterac|edic|temporada|episodio|camera|fase|cor|corte|metade))`;
+const doDia = (dias: string, depois = '') =>
+  String.raw`\b(?:${FORTE}(${dias})\b${depois}|${FRACO}(${dias})${depois}${FECHA})`;
 const DIAS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
 
 /**
@@ -68,7 +71,7 @@ export function prazoDoTexto(texto: string, hoje = hojeLocal()): string | undefi
     const r = rel[1] ?? rel[2];
     return somaDias(hoje, r === 'hoje' ? 0 : r === 'amanha' ? 1 : 2);
   }
-  const dia = new RegExp(String.raw`${doDia(DIAS.join('|'))}|\b(segunda|terca|quarta|quinta|sexta)-feira\b`).exec(low);
+  const dia = new RegExp(String.raw`${doDia(DIAS.join('|'), NAO_ORDINAL)}|\b(segunda|terca|quarta|quinta|sexta)-feira\b`).exec(low);
   if (dia) {
     const alvo = DIAS.indexOf((dia[1] ?? dia[2] ?? dia[3])!);
     const atual = new Date(`${hoje}T00:00:00Z`).getUTCDay();
