@@ -449,6 +449,8 @@ export interface HistoryState {
   /** Rótulo do próximo desfazer ("Decupagem automática", "Corte manual"…). */
   undoLabel?: string;
   redoLabel?: string;
+  /** Id do passo no topo do desfazer: o chat sabe se o passo de um pedido ainda é o último (BL-0055). */
+  undoId?: string;
 }
 
 export type ServerMessage =
@@ -465,6 +467,8 @@ export interface LogEntry {
   text: string;
   /** Pedido reescrito pelo LLM local que o agente não executou: o chat mostra "Aplicar" (ADR-0005). */
   suggestion?: { text: string; playhead?: number };
+  /** Passo de desfazer aberto quando a mensagem nasceu (o pedido do chat em andamento): "Desfazer este pedido" (BL-0055). */
+  step?: string;
 }
 
 export type ClientMessage =

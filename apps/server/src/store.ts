@@ -23,6 +23,8 @@ interface Socket {
 
 /** Um passo de desfazer: o estado ANTES de uma operação (ou de um lote inteiro). */
 interface Step {
+  /** Só passos de transação têm id (o chat oferece "Desfazer este pedido" enquanto ele for o topo). */
+  id?: string;
   label: string;
   timeline: Timeline;
 }
@@ -45,7 +47,7 @@ class Store {
   private projects = new Map<string, Project>();
   private sockets = new Map<string, Set<Socket>>();
   private history = new Map<string, History>();
-  private openTx = new Map<string, string>();
+  private openTx = new Map<string, { label: string; step: string }>();
   private logs = new Map<string, LogEntry[]>();
   private activity = new Map<string, AgentActivity>();
   private saveTimers = new Map<string, NodeJS.Timeout>();
@@ -170,28 +172,34 @@ class Store {
 
   historyState(id: string): HistoryState {
     const h = this.hist(id);
-    return { canUndo: h.undo.length > 0, canRedo: h.redo.length > 0, undoLabel: h.undo.at(-1)?.label, redoLabel: h.redo.at(-1)?.label };
+    return { canUndo: h.undo.length > 0, canRedo: h.redo.length > 0, undoLabel: h.undo.at(-1)?.label, redoLabel: h.redo.at(-1)?.label, undoId: h.undo.at(-1)?.id };
   }
 
-  private pushStep(id: string, label: string, timeline: Timeline): void {
+  private pushStep(id: string, label: string, timeline: Timeline, stepId?: string): void {
     const h = this.hist(id);
-    h.undo.push({ label, timeline });
+    h.undo.push({ ...(stepId && { id: stepId }), label, timeline });
     if (h.undo.length > HISTORY_LIMIT) h.undo.shift();
     h.redo = [];
   }
 
   /**
    * Agrupa todas as operações feitas dentro de `fn` num ÚNICO passo de desfazer.
-   * Transações aninhadas viram parte da transação de fora.
+   * Transações aninhadas viram parte da transação de fora. Lote que não mudou a timeline não deixa passo
+   * (nem apaga o refazer).
    */
   async transaction<T>(id: string, label: string, fn: () => Promise<T>): Promise<T> {
     if (this.openTx.has(id)) return fn();
-    this.pushStep(id, label, this.get(id).timeline);
-    this.openTx.set(id, label);
+    const h = this.hist(id);
+    const prev = { undo: [...h.undo], redo: h.redo };
+    const before = this.get(id).timeline;
+    const step = uid('step');
+    this.pushStep(id, label, before, step);
+    this.openTx.set(id, { label, step });
     try {
       return await fn();
     } finally {
       this.openTx.delete(id);
+      if (this.projects.has(id) && JSON.stringify(this.get(id).timeline) === JSON.stringify(before)) Object.assign(h, prev);
       this.schedulePersist(id);
       this.broadcastHistory(id);
     }
@@ -256,7 +264,8 @@ class Store {
   }
 
   log(id: string, by: LogEntry['by'], text: string, suggestion?: LogEntry['suggestion']): void {
-    const entry: LogEntry = { id: uid('log'), at: new Date().toISOString(), by, text, ...(suggestion && { suggestion }) };
+    const step = this.openTx.get(id)?.step;
+    const entry: LogEntry = { id: uid('log'), at: new Date().toISOString(), by, text, ...(suggestion && { suggestion }), ...(step && { step }) };
     const l = this.logs.get(id) ?? [];
     l.push(entry);
     if (l.length > 500) l.shift();

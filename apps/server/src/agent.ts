@@ -11,7 +11,7 @@
  */
 import { clipDuration, clipStarts, formatTime } from '@neweditor/core';
 import { loadTranscripts } from './actions.ts';
-import { runLocalCommand } from './commands-local.ts';
+import { pedeDesfazer, runLocalCommand } from './commands-local.ts';
 import { BRAIN } from './config.ts';
 import { askJson, llmFor, type Ask } from './llm-local.ts';
 import { store } from './store.ts';
@@ -25,6 +25,13 @@ export interface CommandDeps {
 export const SUGESTAO = 'Não sei fazer isso direto. Sugestão:';
 
 export async function runCommand(projectId: string, text: string, playhead?: number, deps: CommandDeps = {}): Promise<string> {
+  // Um pedido = um passo de desfazer, com o rótulo do pedido (BL-0055). "Desfaz" fica fora: dentro de uma
+  // transação o store recusa desfazer.
+  if (pedeDesfazer(text)) return runOne(projectId, text, playhead, deps);
+  return store.transaction(projectId, `Pedido: "${text.trim().slice(0, 40)}"`, () => runOne(projectId, text, playhead, deps));
+}
+
+async function runOne(projectId: string, text: string, playhead: number | undefined, deps: CommandDeps): Promise<string> {
   if (BRAIN === 'claude') {
     const { runClaudeCommand } = await import('./claude/commands.ts');
     return runClaudeCommand(projectId, text, playhead);

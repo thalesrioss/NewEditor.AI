@@ -27,6 +27,9 @@ const HELP = `Ainda não entendi esse pedido (estou no modo local, sem IA). Sei 
 
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+/** O pedido é "desfaz" (roda fora da transação do pedido: dentro dela o store não desfaz). */
+export const pedeDesfazer = (raw: string) => /\b(desfaz|desfazer|desfaca)\b/.test(norm(raw));
+
 /** Tempos escritos como 1:02, 1:02.5, 62s, 62,5 segundos. */
 function parseTimes(s: string): number[] {
   const out: number[] = [];
@@ -76,7 +79,7 @@ export async function runLocalCommand(projectId: string, raw: string, playhead =
   const verbCut = /\b(corta|cortar|corte|tira|tirar|remove|remover|apaga|apagar|deleta|exclui)\b/.test(s);
 
   // Desfazer.
-  if (/\b(desfaz|desfazer|desfaca)\b/.test(s)) {
+  if (pedeDesfazer(raw)) {
     const ok = store.undo(projectId);
     return finish(projectId, ok ? 'Desfiz a última alteração.' : 'Não tem nada para desfazer.');
   }
