@@ -27,8 +27,108 @@ const FORMATS: [RegExp, NonNullable<ProjectTask['formato']>, [number, number]][]
   [/\byoutube\b|\bv[íi]deo longo\b|\b16:9\b/i, 'youtube', [180, 900]],
 ];
 
+/** Minúsculas e sem acento: "Não Especificado" → "nao especificado". */
+const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Data de hoje no fuso da máquina, AAAA-MM-DD. */
+export function hojeLocal(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const isoValido = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
+const somaDias = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+// Palavra que anuncia o prazo antes do dia ("entrega sexta", "pra amanhã", "até a quinta").
+const ANTES_DO_DIA = String.raw`(?:prazo|entreg\w*|ate|para|pra|nesta|nessa|esta|essa|proxim[ao])\s*:?\s*(?:(?:a|o|na|no|dia)\s+)*`;
+const DIAS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+/**
+ * Prazo por regra (ADR-0004: data relativa nunca vem do LLM): "Prazo 20/10" (ano de hoje), "entrega sexta"
+ * (a próxima sexta depois de hoje), "pra amanhã", "entrega hoje". `hoje` em AAAA-MM-DD.
+ */
+export function prazoDoTexto(texto: string, hoje = hojeLocal()): string | undefined {
+  const dm = /(?:prazo|entrega(?:r)?|at[ée])\s*(?:o dia|dia|em)?\s*:?\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/i.exec(texto);
+  if (dm) {
+    const y = dm[3] ? (dm[3].length === 2 ? `20${dm[3]}` : dm[3]) : hoje.slice(0, 4);
+    const iso = `${y}-${dm[2]!.padStart(2, '0')}-${dm[1]!.padStart(2, '0')}`;
+    if (isoValido(iso)) return iso;
+  }
+  const low = norm(texto);
+  const rel = new RegExp(String.raw`\b${ANTES_DO_DIA}(depois de amanha|amanha|hoje)\b`).exec(low);
+  if (rel) return somaDias(hoje, rel[1] === 'hoje' ? 0 : rel[1] === 'amanha' ? 1 : 2);
+  const dia = new RegExp(String.raw`\b(?:${ANTES_DO_DIA}(${DIAS.join('|')})|(segunda|terca|quarta|quinta|sexta)-feira)\b`).exec(low);
+  if (dia) {
+    const alvo = DIAS.indexOf((dia[1] ?? dia[2])!);
+    const atual = new Date(`${hoje}T00:00:00Z`).getUTCDay();
+    return somaDias(hoje, (alvo - atual + 7) % 7 || 7);
+  }
+  return undefined;
+}
+
+/** O texto fala de data ou prazo? Sem isso, nenhum prazo do LLM é aceito. */
+const temPalavraDePrazo = (texto: string) =>
+  /\d{1,2}[/-]\d{1,2}|\b(prazo|entreg\w*|amanha|hoje|semana|segunda|terca|quarta|quinta|sexta|sabado|domingo|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.test(norm(texto));
+
+/** Respostas de "não sei" do LLM ("não especificado", "cliente não informado", "null", "n/a", "-"). */
+export function valorVazio(v: unknown): boolean {
+  if (v == null) return true;
+  if (typeof v !== 'string') return false;
+  const s = norm(v).replace(/[.!]+$/, '');
+  return !s || /^(?:[\p{L}]+ )?(?:nao especificad[oa]s?|nao informad[oa]s?|nao definid[oa]s?|null|undefined|none|n\/a|na|nenhum[a]?|desconhecid[oa]|-+)$/u.test(s);
+}
+
+// Instrução de edição: "tirar gaguejadas e repetições", "legenda amarela", "coloca zoom no gancho".
+const PEDIDO = /\b(tirar|tira|tire|cortar|corta|corte as?|remover|remova|remove|colocar|coloca|coloque|botar|bota|bote|adicionar|adiciona|adicione|trocar|troca|troque|acelerar|acelera|acelere|legendas?|zoom)\b/;
+const ehPedido = (s: string) => PEDIDO.test(norm(s));
+
+/** Pedidos de edição por regra, uma oração por item (linhas de material/link e URLs ficam de fora). */
+export function pedidosDoTexto(texto: string): string[] {
+  const out: string[] = [];
+  for (const linha of texto.split('\n')) {
+    if (/^\s*(material|links?|arquivos?)\s*:/i.test(linha)) continue;
+    const limpa = linha.replace(/https?:\/\/\S+/g, ' ').replace(/(?:~\/|\/)[^\s,;]*(?:\s[^\s,;/]+)*\.\w{2,4}\b/g, ' ');
+    for (const parte of limpa.split(/[.;!?]+(?:\s|$)|,\s*|…/)) {
+      const c = parte.trim().replace(/^(?:e|também|tambem|por favor)\s+/i, '');
+      if (c.length >= 3 && c.length <= 120 && ehPedido(c) && !/^n[ãa]o pode faltar/i.test(c) && !out.includes(c)) out.push(c);
+    }
+  }
+  return out;
+}
+
+/** O valor do LLM está no texto? (sem caixa/acento; para listas, o item inteiro). */
+const noTexto = (valor: string, texto: string) => norm(texto).includes(norm(valor));
+/** Alguma palavra (4+ letras) do valor aparece como palavra no texto? */
+const palavraNoTexto = (valor: string, texto: string) => {
+  const palavras = new Set(norm(texto).split(/[^\p{L}\d]+/u));
+  return norm(valor).split(/[^\p{L}\d]+/u).some((w) => w.length >= 4 && palavras.has(w));
+};
+
+/**
+ * ADR-0004: o que o LLM devolve só vira briefing se passar por tipo, faixa e presença no texto.
+ * Campo sem evidência fica vazio (vazio é melhor que errado).
+ */
+export function validarBriefingLlm(r: Record<string, unknown>, texto: string, hoje = hojeLocal()): Partial<ProjectTask> {
+  const out: Partial<ProjectTask> = {};
+  const str = (v: unknown) => (typeof v === 'string' && !valorVazio(v) ? v.trim() : undefined);
+  const formato = str(r.formato)?.toLowerCase();
+  if (formato && FORMATS.some(([, f]) => f === formato)) out.formato = formato as ProjectTask['formato'];
+  const d = r.duracaoAlvoS;
+  if (Array.isArray(d) && d.length === 2 && d.every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0 && n <= 7200) && d[0] <= d[1]) out.duracaoAlvoS = [d[0], d[1]];
+  const tom = str(r.tom);
+  if (tom && tom.length <= 60 && palavraNoTexto(tom, texto)) out.tom = tom;
+  if (Array.isArray(r.naoPodeFaltar)) {
+    const itens = r.naoPodeFaltar.map(str).filter((s): s is string => !!s && noTexto(s, texto) && !ehPedido(s));
+    if (itens.length) out.naoPodeFaltar = itens;
+  }
+  const cliente = str(r.cliente);
+  if (cliente && cliente.length <= 60 && noTexto(cliente, texto)) out.cliente = cliente;
+  const prazo = str(r.prazo);
+  if (prazo && isoValido(prazo) && prazo >= hoje && prazo <= somaDias(hoje, 365) && temPalavraDePrazo(texto)) out.prazo = prazo;
+  return out;
+}
+
 /** Briefing por regras de texto: funciona offline; o LLM local, quando ligado, refina. */
-export function parseTaskRules(texto: string): ProjectTask {
+export function parseTaskRules(texto: string, hoje = hojeLocal()): ProjectTask {
   const t: ProjectTask = { texto };
   const low = texto.toLowerCase();
   for (const [re, fmt, dur] of FORMATS) if (re.test(texto)) ((t.formato = fmt), (t.duracaoAlvoS = dur), (() => undefined)());
@@ -43,38 +143,47 @@ export function parseTaskRules(texto: string): ProjectTask {
   if (must.length) t.naoPodeFaltar = must;
   const links = [...texto.matchAll(/https?:\/\/[^\s<>"')]+/g)].map((m) => m[0].replace(/[.,;)]+$/, ''));
   if (links.length) t.links = [...new Set(links)];
-  const cli = /\bcliente\s*(?::|é|-)?\s*([A-ZÁÉÍÓÚ][\p{L}\s.]{1,40})/u.exec(texto);
-  if (cli) t.cliente = cli[1]!.trim().replace(/\s+(para|pra|com|e)$/i, '');
-  const prazo = /(?:prazo|entrega(?:r)?|at[ée])\s*(?:o dia|dia|em)?\s*:?\s*(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/i.exec(texto);
-  if (prazo) {
-    const y = prazo[3] ? (prazo[3].length === 2 ? `20${prazo[3]}` : prazo[3]) : String(new Date().getFullYear());
-    t.prazo = `${y}-${prazo[2]!.padStart(2, '0')}-${prazo[1]!.padStart(2, '0')}`;
-  }
+  // "Cliente: Davi Lo." / "cliente é a Maria": a palavra em qualquer caixa, o nome com maiúscula, até o fim da frase.
+  const cli = /\b(?:[Cc]liente|CLIENTE)\s*(?::|é|-)?\s*(?:(?:a|o)\s+)?([A-ZÁÉÍÓÚ][\p{L} .]{1,40})/u.exec(texto);
+  if (cli) t.cliente = cli[1]!.split(/\.(?:\s|$)/)[0]!.trim().replace(/\s+(para|pra|com|e)$/i, '');
+  const prazo = prazoDoTexto(texto, hoje);
+  if (prazo) t.prazo = prazo;
+  const pedidos = pedidosDoTexto(texto);
+  if (pedidos.length) t.pedidos = pedidos;
   if (!t.tom && /\b(leve|descontra[íi]do|engra[çc]ado)\b/i.test(low)) t.tom = 'leve';
   if (!t.tom && /\b(s[ée]rio|institucional|formal)\b/i.test(low)) t.tom = 'sério';
   return t;
 }
 
-/** Briefing: regras + LLM local (se ligado para "briefing"), que só refina os campos vazios. */
-export async function parseTask(texto: string): Promise<ProjectTask> {
-  const t = parseTaskRules(texto);
-  if (!(await llmFor('briefing'))) return t;
+/**
+ * Briefing: regras + LLM local (se ligado para "briefing"), que só preenche os campos vazios e só com o que
+ * passar em `validarBriefingLlm`. `ask` e `hoje` existem para o teste (LLM simulado, data fixa).
+ */
+export async function parseTask(texto: string, deps: { hoje?: string; ask?: () => Promise<Record<string, unknown>> } = {}): Promise<ProjectTask> {
+  const hoje = deps.hoje ?? hojeLocal();
+  const t = parseTaskRules(texto, hoje);
+  if (!deps.ask && !(await llmFor('briefing'))) return t;
   try {
-    const r = await askJson<Partial<ProjectTask>>({
-      system: 'Você é o Gestor de Projetos de uma produtora de vídeo. Extraia um briefing estruturado do texto da tarefa.',
-      user: `Tarefa:\n"""${texto}"""\n\nDevolva JSON com as chaves: formato (reels|shorts|tiktok|youtube|stories|outro), duracaoAlvoS ([min,max] em segundos ou null), tom (string curta ou null), naoPodeFaltar (lista de strings), cliente (string ou null), prazo (AAAA-MM-DD ou null).`,
-      maxTokens: 300,
-      timeoutMs: 40_000,
-    });
-    return {
+    const r = deps.ask
+      ? await deps.ask()
+      : await askJson<Record<string, unknown>>({
+          system: 'Você é o Gestor de Projetos de uma produtora de vídeo. Extraia um briefing estruturado do texto da tarefa. Campo que não está escrito no texto fica null.',
+          user: `Tarefa:\n"""${texto}"""\n\nDevolva JSON com as chaves: formato (reels|shorts|tiktok|youtube|stories|outro), duracaoAlvoS ([min,max] em segundos ou null), tom (string curta ou null), naoPodeFaltar (lista de strings), cliente (string ou null), prazo (AAAA-MM-DD ou null).`,
+          maxTokens: 300,
+          timeoutMs: 40_000,
+        });
+    const v = validarBriefingLlm(r && typeof r === 'object' ? r : {}, texto, hoje);
+    const out: ProjectTask = {
       ...t,
-      formato: t.formato ?? (r.formato as ProjectTask['formato']) ?? undefined,
-      duracaoAlvoS: t.duracaoAlvoS ?? (Array.isArray(r.duracaoAlvoS) ? (r.duracaoAlvoS as [number, number]) : undefined),
-      tom: t.tom ?? (r.tom || undefined),
-      naoPodeFaltar: t.naoPodeFaltar ?? (Array.isArray(r.naoPodeFaltar) && r.naoPodeFaltar.length ? r.naoPodeFaltar : undefined),
-      cliente: t.cliente ?? (r.cliente || undefined),
-      prazo: t.prazo ?? (r.prazo || undefined),
+      formato: t.formato ?? v.formato,
+      duracaoAlvoS: t.duracaoAlvoS ?? v.duracaoAlvoS,
+      tom: t.tom ?? v.tom,
+      naoPodeFaltar: t.naoPodeFaltar ?? v.naoPodeFaltar,
+      cliente: t.cliente ?? v.cliente,
+      prazo: t.prazo ?? v.prazo,
     };
+    for (const k of Object.keys(out) as (keyof ProjectTask)[]) if (out[k] === undefined) delete out[k];
+    return out;
   } catch {
     return t;
   }
@@ -163,6 +272,7 @@ export async function createFromTask(texto: string, opts: { nome?: string; links
   if (briefing.duracaoAlvoS) lines.push(`Duração-alvo: ${briefing.duracaoAlvoS[0]}–${briefing.duracaoAlvoS[1]} s`);
   if (briefing.tom) lines.push(`Tom: ${briefing.tom}`);
   if (briefing.naoPodeFaltar?.length) lines.push(`Não pode faltar: ${briefing.naoPodeFaltar.join('; ')}`);
+  if (briefing.pedidos?.length) lines.push(`Pedidos: ${briefing.pedidos.join('; ')}`);
   const brief = [...lines, '', texto].join('\n');
   const p = await store.create(nome, brief);
   // Formato da peça: o escolhido no diálogo, senão o da tarefa (Reels → 1080×1920, YouTube → 1920×1080). O bruto não sobrescreve.

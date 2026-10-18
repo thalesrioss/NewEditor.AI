@@ -407,6 +407,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
                   <span>Prazo: <b className="text-ink-100">{briefing.prazo ?? '—'}</b></span>
                   <span className="col-span-2">Tom: <b className="text-ink-100">{briefing.tom ?? '—'}</b></span>
                   {briefing.naoPodeFaltar?.length ? <span className="col-span-2">Não pode faltar: <b className="text-ink-100">{briefing.naoPodeFaltar.join('; ')}</b></span> : null}
+                  {briefing.pedidos?.length ? <span className="col-span-2">Pedidos: <b className="text-ink-100">{briefing.pedidos.join('; ')}</b></span> : null}
                   <span className="col-span-2">Material no Drive: <b className="text-ink-100">{briefing.links?.length ? `${briefing.links.length} link(s)` : 'nenhum link (arraste depois)'}</b></span>
                 </div>
               </div>

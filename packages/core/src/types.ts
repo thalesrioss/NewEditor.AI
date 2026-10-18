@@ -317,6 +317,8 @@ export interface ProjectTask {
   duracaoAlvoS?: [number, number];
   tom?: string;
   naoPodeFaltar?: string[];
+  /** Instruções de edição do texto ("tirar gaguejadas", "legenda amarela"), tiradas por regra. */
+  pedidos?: string[];
   links?: string[];
   cliente?: string;
   prazo?: string;
