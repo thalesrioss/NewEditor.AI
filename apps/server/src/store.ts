@@ -233,7 +233,8 @@ class Store {
     const h = this.hist(id);
     const step = (dir === 'undo' ? h.undo : h.redo).pop();
     if (!step) return false;
-    (dir === 'undo' ? h.redo : h.undo).push({ label: step.label, timeline: p.timeline });
+    // Leva o id do passo junto: depois de desfazer + refazer o pedido volta ao topo com o mesmo id (FB-0098).
+    (dir === 'undo' ? h.redo : h.undo).push({ ...step, timeline: p.timeline });
     p.timeline = step.timeline;
     p.version++;
     this.schedulePersist(id);

@@ -128,6 +128,28 @@ describe('um pedido do chat = um passo de desfazer', () => {
     assert.deepEqual(store.get(projectId).timeline, antes);
   });
 
+  test('desfazer + refazer devolve o pedido ao topo com o mesmo passo (o botão volta, FB-0098)', async () => {
+    const { store } = await import('./store.ts');
+    const { runCommand } = await import('./agent.ts');
+    await runCommand(projectId, 'tira as pausas longas', 0);
+    const passo = (await tela()).logs.filter((e) => e.by === 'agent').at(-1)!.step;
+    assert.ok(passo);
+    assert.equal(store.undo(projectId), true);
+    assert.notEqual(store.historyState(projectId).undoId, passo);
+    assert.equal(store.redo(projectId), true);
+    const h = store.historyState(projectId);
+    assert.equal(h.undoId, passo);
+    assert.equal(h.undoLabel, 'Pedido: "tira as pausas longas"');
+  });
+
+  test('rótulo longo corta no fim de palavra, com "…" e aspas fechadas (FB-0099)', async () => {
+    const { rotuloDoPedido } = await import('./agent.ts');
+    assert.equal(rotuloDoPedido('  tira as pausas   longas '), 'Pedido: "tira as pausas longas"');
+    assert.equal(rotuloDoPedido('tira a parte em que ele fala "pra acordar cedo"'), 'Pedido: "tira a parte em que ele fala "pra…""');
+    assert.equal(rotuloDoPedido('deixa o gancho mais curto e tira a respiração do começo'), 'Pedido: "deixa o gancho mais curto e tira a…"');
+    assert.equal(rotuloDoPedido('a'.repeat(50)), `Pedido: "${'a'.repeat(40)}…"`);
+  });
+
   test('o próximo pedido tira o botão do anterior (o topo passa a ser o dele)', async () => {
     const { store } = await import('./store.ts');
     const { runCommand } = await import('./agent.ts');
