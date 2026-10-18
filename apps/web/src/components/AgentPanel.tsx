@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Bot, BrainCircuit, Sparkles, User, Wand2 } from 'lucide-react';
+import { ArrowUp, Bot, BrainCircuit, Sparkles, Undo2, User, Wand2 } from 'lucide-react';
 import type { AgentState, LogEntry } from '@neweditor/core';
 import { api } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
@@ -26,6 +26,9 @@ export function AgentPanel({ brain }: { brain: Brain }) {
   const project = useEditor((s) => s.project);
   const logs = useEditor((s) => s.logs);
   const activity = useEditor((s) => s.activity);
+  // "Desfazer este pedido" só na última resposta do pedido cujo passo ainda é o topo do histórico (BL-0055).
+  const undoId = useEditor((s) => s.history.undoId);
+  const undoable = undoId ? logs.findLast((l) => l.by === 'agent' && l.step === undoId)?.id : undefined;
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const feed = useRef<HTMLDivElement>(null);
@@ -118,7 +121,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
       <div ref={feed} className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {logs.length === 0 && <p className="pt-6 text-center text-xs text-ink-400">O que o agente fizer aparece aqui, ao vivo.</p>}
         {logs.map((l) => (
-          <LogItem key={l.id} entry={l} />
+          <LogItem key={l.id} entry={l} undoable={l.id === undoable} />
         ))}
       </div>
 
@@ -163,7 +166,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
   );
 }
 
-function LogItem({ entry }: { entry: LogEntry }) {
+function LogItem({ entry, undoable }: { entry: LogEntry; undoable: boolean }) {
   const isUrl = entry.text.startsWith('/media/');
   if (entry.by === 'human')
     return (
@@ -185,9 +188,20 @@ function LogItem({ entry }: { entry: LogEntry }) {
         <div className="min-w-0">
           <span className={`whitespace-pre-wrap ${entry.by === 'system' ? 'text-ink-400' : 'text-ink-200'}`}>{entry.text}</span>
           {entry.suggestion && <ApplySuggestion suggestion={entry.suggestion} />}
+          {undoable && <UndoRequest />}
         </div>
       )}
     </div>
+  );
+}
+
+/** Desfaz o pedido inteiro pelo mesmo caminho do ⌘Z (some quando outro passo vira o topo). */
+function UndoRequest() {
+  const project = useEditor((s) => s.project);
+  return (
+    <button onClick={() => project && void api.undo(project.id)} className="mt-1 flex items-center gap-1 rounded-md bg-ink-750 px-2 py-0.5 text-ui-xs text-ink-200 hover:bg-ink-700">
+      <Undo2 size={11} /> Desfazer este pedido
+    </button>
   );
 }
 
