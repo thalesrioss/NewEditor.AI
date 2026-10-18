@@ -38,8 +38,8 @@ export async function runCommand(projectId: string, text: string, playhead?: num
   return sugestao;
 }
 
-/** O LLM copiou o molde em vez de preencher ("dá um zoom de <1.05 a 1.3> aqui", "corta de m:ss…"). */
-const moldeLiteral = (s: string) => /[<>]|1\.05 a 1\.3|m:ss|trecho literal/i.test(s);
+/** O LLM copiou o molde em vez de preencher ("dá um zoom de <1.05 a 1.3> aqui", "corta de m:ss…") ou devolveu "null" em texto. */
+const moldeLiteral = (s: string) => /[<>]|1\.05 a 1\.3|m:ss|trecho literal/i.test(s) || /^["']?(null|none|undefined|nenhum|-)?["']?$/i.test(s.trim());
 
 const GRAMMAR = [
   'corta de <m:ss> até <m:ss>',

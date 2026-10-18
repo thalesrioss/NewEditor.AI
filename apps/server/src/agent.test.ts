@@ -38,6 +38,7 @@ const REESCRITAS: Record<string, string | null> = {
   'coloca um som de whoosh nessa transição': 'dá um zoom de 1.05 aqui',
   'deixa a cor mais quente aqui': "tira o trecho onde ele fala 'tudo mudou'",
   'troca a fonte do lettering': null,
+  'tira o b-roll do começo': 'null', // o Qwen3 local devolveu "null" em texto na prova real
 };
 const deps = {
   llm: async () => true,
@@ -86,7 +87,7 @@ async function logs(): Promise<LogEntry[]> {
 }
 
 describe('reescrita do LLM local', () => {
-  test('os 5 pedidos do FB-0062: timeline idêntica, sugestão ou "Ainda não entendi"', async () => {
+  test('os pedidos do FB-0062: timeline idêntica, sugestão ou "Ainda não entendi"', async () => {
     const { store } = await import('./store.ts');
     const { runCommand, SUGESTAO } = await import('./agent.ts');
     const antes = structuredClone(store.get(projectId).timeline);
@@ -99,6 +100,7 @@ describe('reescrita do LLM local', () => {
     assert.equal(respostas['deixa a cor mais quente aqui'], `${SUGESTAO} "tira o trecho onde ele fala 'tudo mudou'"`);
     assert.match(respostas['a legenda tá pequena, aumenta um pouco']!, /^Ainda não entendi/); // molde literal
     assert.match(respostas['troca a fonte do lettering']!, /^Ainda não entendi/);
+    assert.match(respostas['tira o b-roll do começo']!, /^Ainda não entendi/);
 
     const l = await logs();
     const humanos = l.filter((e) => e.by === 'human').map((e) => e.text);
