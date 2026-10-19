@@ -175,28 +175,45 @@ export async function runQc(projectId: string): Promise<QcReport> {
   return report;
 }
 
-/** QC do MP4 exportado: loudness integrado, pico real e quadros pretos. */
-export async function runRenderQc(projectId: string, file: string): Promise<QcReport> {
+/**
+ * Loudness integrado e pico real do relatório do `ebur128`, lidos só do bloco `Summary:` do fim. As linhas
+ * por quadro também têm `I: … LUFS` (o integrado parcial, −70 no começo em silêncio): ler a primeira delas
+ * acusava loudness errado em todo render que começa sem som (FB-0015).
+ */
+export function parseEbur128Summary(text: string): { lufs?: number; truePeak?: number } {
+  const at = text.lastIndexOf('Summary:');
+  if (at < 0) return {};
+  const summary = text.slice(at);
+  const lufs = Number(/Integrated loudness:\s*I:\s*(-?[\d.]+) LUFS/.exec(summary)?.[1]);
+  const tp = Number(/True peak:\s*Peak:\s*(-?[\d.]+) dBFS/.exec(summary)?.[1]);
+  return { lufs: Number.isFinite(lufs) ? lufs : undefined, truePeak: Number.isFinite(tp) ? tp : undefined };
+}
+
+/**
+ * QC do MP4 exportado: loudness integrado, pico real, quadros pretos e duração do arquivo contra a da timeline
+ * (mais de 2 quadros de diferença bloqueia). `expectedDuration` troca a duração esperada (teste).
+ */
+export async function runRenderQc(projectId: string, file: string, opts: { expectedDuration?: number } = {}): Promise<QcReport> {
   const p = store.get(projectId);
-  const out = await run('ffmpeg', ['-v', 'info', '-i', file, '-vf', 'blackdetect=d=0.2:pic_th=0.98', '-af', 'ebur128=peak=true', '-f', 'null', '-']).catch(() => Buffer.from(''));
-  // O FFmpeg escreve o relatório no stderr; `run` só guarda o stdout, então mede de novo capturando o erro.
-  let text = out.toString();
-  if (!/Integrated loudness/.test(text)) {
-    try {
-      await run('ffmpeg', ['-v', 'info', '-i', file, '-vf', 'blackdetect=d=0.2:pic_th=0.98', '-af', 'ebur128=peak=true', '-f', 'null', '-'], { onStderr: (s) => (text += s) });
-    } catch (e) {
-      text += (e as Error).message;
-    }
+  // O FFmpeg escreve o relatório no stderr; `run` só devolve o stdout, então junta o stderr.
+  let text = '';
+  try {
+    await run('ffmpeg', ['-v', 'info', '-i', file, '-vf', 'blackdetect=d=0.2:pic_th=0.98', '-af', 'ebur128=peak=true', '-f', 'null', '-'], { onStderr: (s) => (text += s) });
+  } catch (e) {
+    text += (e as Error).message;
   }
-  const lufs = Number(/I:\s*(-?[\d.]+) LUFS/.exec(text)?.[1]);
-  const tp = Number(/Peak:\s*(-?[\d.]+) dBFS/.exec(text)?.[1]);
+  const { lufs, truePeak: tp } = parseEbur128Summary(text);
   const black = (text.match(/black_start:/g) ?? []).length;
+  const duration = Number((await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).catch(() => Buffer.from(''))).toString().trim()) || undefined;
+  const expected = opts.expectedDuration ?? timelineDuration(p.timeline);
+  const frame = 1 / (p.timeline.fps || 30);
   const issues: QcIssue[] = [];
   const push = (i: Omit<QcIssue, 'id'>) => issues.push({ id: `qcr_${issues.length + 1}`, ...i });
-  if (Number.isFinite(lufs) && Math.abs(lufs + 14) > 1.5) push({ severidade: 'bloqueia', regra: 'loudness', texto: `Loudness ${lufs.toFixed(1)} LUFS (alvo −14 ±1,5)` });
-  if (Number.isFinite(tp) && tp > -0.8) push({ severidade: 'bloqueia', regra: 'pico', texto: `Pico real ${tp.toFixed(1)} dBTP (alvo ≤ −1)` });
+  if (lufs !== undefined && Math.abs(lufs + 14) > 1.5) push({ severidade: 'bloqueia', regra: 'loudness', texto: `Loudness ${lufs.toFixed(1)} LUFS (alvo −14 ±1,5)` });
+  if (tp !== undefined && tp > -0.8) push({ severidade: 'bloqueia', regra: 'pico', texto: `Pico real ${tp.toFixed(1)} dBTP (alvo ≤ −1)` });
   if (black) push({ severidade: 'avisa', regra: 'quadro-preto', texto: `${black} trecho(s) de quadro preto no vídeo` });
-  const report: QcReport = { at: new Date().toISOString(), fase: 'render', issues: [...(p.qc?.fase === 'edicao' ? p.qc.issues : []), ...issues], render: { lufs: Number.isFinite(lufs) ? lufs : undefined, truePeak: Number.isFinite(tp) ? tp : undefined, blackFrames: black, file } };
+  if (duration !== undefined && Math.abs(duration - expected) > 2 * frame + 1e-6) push({ severidade: 'bloqueia', regra: 'duracao-render', texto: `Arquivo com ${duration.toFixed(2)} s; a timeline tem ${expected.toFixed(2)} s (${Math.round(Math.abs(duration - expected) / frame)} quadros de diferença, tolerância 2)` });
+  const report: QcReport = { at: new Date().toISOString(), fase: 'render', issues: [...(p.qc?.fase === 'edicao' ? p.qc.issues : []), ...issues], render: { lufs, truePeak: tp, blackFrames: black, duration, file } };
   store.update(projectId, { qc: report });
   return report;
 }

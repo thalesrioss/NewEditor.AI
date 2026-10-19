@@ -20,6 +20,7 @@ const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...a
 const probeDur = (f: string) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString().trim());
 
 let projectId = '';
+let rendered = '';
 
 before(async () => {
   ff(['-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', clip]);
@@ -28,7 +29,11 @@ before(async () => {
   const p = await store.create('Teste de pipeline', 'projeto de teste');
   projectId = p.id;
 });
-after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+// O store grava o projeto 400 ms depois da última mudança: espera essa gravação antes de apagar a pasta.
+after(async () => {
+  await new Promise((r) => setTimeout(r, 600));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
 
 describe('ingest e timeline', () => {
   test('ingest como B-roll gera proxy, thumbs e envelope, e não mexe no formato (só a fala define)', async () => {
@@ -88,5 +93,48 @@ describe('render', () => {
     assert.ok(fs.existsSync(file), `arquivo renderizado: ${JSON.stringify(res)}`);
     assert.ok(Math.abs(probeDur(file) - 2) < 0.25, `duração ${probeDur(file)}`);
     assert.deepEqual(res.skipped, []);
+    rendered = file;
+  });
+  test('QC do render lê o loudness do resumo do ebur128 e confere a duração (BL-0014)', async () => {
+    const { runRenderQc } = await import('./qc.ts');
+    const qc = await runRenderQc(projectId, rendered);
+    const regras = qc.issues.map((i) => i.regra);
+    assert.ok(!regras.includes('loudness'), `não esperava loudness: ${JSON.stringify(qc.issues)}`);
+    assert.ok(!regras.includes('duracao-render'), `não esperava duracao-render: ${JSON.stringify(qc.issues)}`);
+    const lufs = qc.render?.lufs;
+    assert.ok(lufs !== undefined && lufs >= -15.5 && lufs <= -12.5, `lufs ${lufs}`);
+    assert.ok(Math.abs((qc.render?.duration ?? 0) - 2) < 2 / 30, `duração ${qc.render?.duration}`);
+  });
+  test('QC do render bloqueia arquivo com duração diferente da esperada (duracao-render)', async () => {
+    const { runRenderQc } = await import('./qc.ts');
+    const qc = await runRenderQc(projectId, rendered, { expectedDuration: 2.5 });
+    const d = qc.issues.find((i) => i.regra === 'duracao-render');
+    assert.ok(d, `esperava duracao-render em ${qc.issues.map((i) => i.regra).join(',')}`);
+    assert.equal(d.severidade, 'bloqueia');
+    const ok = await runRenderQc(projectId, rendered, { expectedDuration: 2 + 1.5 / 30 });
+    assert.ok(!ok.issues.some((i) => i.regra === 'duracao-render'), 'até 2 quadros de diferença passa');
+  });
+});
+
+describe('parseEbur128Summary', () => {
+  test('ignora o I: das linhas por quadro e lê só o resumo', async () => {
+    const { parseEbur128Summary } = await import('./qc.ts');
+    const text = [
+      '[Parsed_ebur128_0 @ 0x1] t: 0.0999792  TARGET:-23 LUFS    M:-120.7 S:-120.7     I: -70.0 LUFS       LRA:   0.0 LU  FTPK: -10.0 dBFS  TPK: -10.0 dBFS',
+      '[Parsed_ebur128_0 @ 0x1] t: 0.399979   TARGET:-23 LUFS    M: -14.0 S:-120.7     I: -14.0 LUFS       LRA:   0.0 LU  FTPK: -10.3 dBFS  TPK: -10.0 dBFS',
+      '[Parsed_ebur128_0 @ 0x2] Summary:',
+      '',
+      '  Integrated loudness:',
+      '    I:         -13.8 LUFS',
+      '    Threshold: -24.0 LUFS',
+      '',
+      '  Loudness range:',
+      '    LRA:         0.0 LU',
+      '',
+      '  True peak:',
+      '    Peak:       -1.2 dBFS',
+    ].join('\n');
+    assert.deepEqual(parseEbur128Summary(text), { lufs: -13.8, truePeak: -1.2 });
+    assert.deepEqual(parseEbur128Summary(text.split('\n').slice(0, 2).join('\n')), {}, 'sem resumo, sem medição');
   });
 });
