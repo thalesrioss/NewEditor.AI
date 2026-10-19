@@ -34,9 +34,10 @@ export function AgentPanel({ brain }: { brain: Brain }) {
   const feed = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
+  // Cada entrada nova (e o "Desfazer este pedido", que chega depois da resposta) rola a conversa até o fim (BL-0062).
   useEffect(() => {
     feed.current?.scrollTo({ top: feed.current.scrollHeight, behavior: 'smooth' });
-  }, [logs.length]);
+  }, [logs.length, undoable]);
   // Clique direito num clipe → "Pedir ao agente aqui": o pedido chega pré-preenchido.
   const draft = useEditor((s) => s.agentDraft);
   useEffect(() => {
@@ -79,7 +80,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
       {/* A foto do avatar + "Cérebro do Editor" é o botão da aba do grafo (#/cerebro). */}
       <a
         href="#/cerebro"
-        className="group flex items-center gap-3 border-b border-ink-750 px-4 py-3 transition hover:bg-ink-800/60"
+        className="group flex shrink-0 items-center gap-3 border-b border-ink-750 px-4 py-3 transition hover:bg-ink-800/60"
         title="Cérebro do Editor — o conhecimento e as notas conectadas, em 3D"
       >
         <div className="h-12 w-12 overflow-hidden rounded-xl bg-gradient-to-b from-nc-600/30 to-ink-800 ring-1 ring-ink-700 transition group-hover:ring-nc-500 group-hover:shadow-[0_0_14px_rgba(31,92,255,0.35)]">
@@ -104,29 +105,32 @@ export function AgentPanel({ brain }: { brain: Brain }) {
         </span>
       </a>
 
-      <div className="border-b border-ink-750 p-3">
-        <button
-          onClick={decupar}
-          disabled={!hasTranscript || busy || !brain.ready}
-          className="flex w-full items-center justify-center gap-2 rounded-lg nc-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-nc-600/25 transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
-          title={!hasTranscript ? 'Aguardando transcrição do material' : ''}
-        >
-          <Wand2 size={16} /> Decupar automaticamente
-        </button>
-        {!brain.ready && <p className="mt-2 text-ui-xs text-amber-300/90">Cérebro Claude ligado sem ANTHROPIC_API_KEY no .env.</p>}
+      {/* Decupar + etapas cedem altura (rolagem própria) para a conversa nunca ficar abaixo de 40% do painel (BL-0062). */}
+      <div className="scroll-thin min-h-0 shrink overflow-y-auto">
+        <div className="border-b border-ink-750 p-3">
+          <button
+            onClick={decupar}
+            disabled={!hasTranscript || busy || !brain.ready}
+            className="flex w-full items-center justify-center gap-2 rounded-lg nc-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-nc-600/25 transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+            title={!hasTranscript ? 'Aguardando transcrição do material' : ''}
+          >
+            <Wand2 size={16} /> Decupar automaticamente
+          </button>
+          {!brain.ready && <p className="mt-2 text-ui-xs text-amber-300/90">Cérebro Claude ligado sem ANTHROPIC_API_KEY no .env.</p>}
+        </div>
+
+        <AgentPipeline />
       </div>
 
-      <AgentPipeline />
-
-      <div ref={feed} className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+      <div ref={feed} role="log" aria-label="Conversa com o agente" className="scroll-thin min-h-[40%] flex-1 space-y-2 overflow-y-auto p-3">
         {logs.length === 0 && <p className="pt-6 text-center text-xs text-ink-400">O que o agente fizer aparece aqui, ao vivo.</p>}
         {logs.map((l) => (
           <LogItem key={l.id} entry={l} undoable={l.id === undoable} />
         ))}
       </div>
 
-      <div className="border-t border-ink-750 p-3">
-        <div className="mb-2 flex flex-wrap gap-1.5">
+      <div className="shrink-0 border-t border-ink-750 p-3">
+        <div className="scroll-thin mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
@@ -134,7 +138,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
                 setText(s);
                 input.current?.focus();
               }}
-              className="rounded-full border border-ink-700 px-2 py-0.5 text-ui-xs text-ink-300 transition hover:border-nc-500 hover:text-white"
+              className="shrink-0 rounded-full border border-ink-700 px-2 py-0.5 text-ui-xs whitespace-nowrap text-ink-300 transition hover:border-nc-500 hover:text-white"
             >
               {s.trim()}
             </button>
