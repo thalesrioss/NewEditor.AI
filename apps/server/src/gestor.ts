@@ -7,6 +7,7 @@
  * um navegador baixaria (link "qualquer pessoa com o link").
  */
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { formatSize, type ProjectTask } from '@neweditor/core';
 import { ingest } from './ingest.ts';
@@ -266,6 +267,46 @@ export async function downloadDriveFile(fileId: string, dir: string, onProgress?
 
 // --- Criar o projeto a partir da tarefa ------------------------------------------------------------
 
+/** Extensões de mídia que o Gestor importa (Drive e disco). */
+const MEDIA_EXT = /\.(mp4|mov|m4v|mxf|mts|wav|mp3|m4a|aac|png|jpe?g)$/i;
+
+/**
+ * Caminhos absolutos citados no texto (`/...` ou `~/...`, com espaço e acento): os que terminam numa extensão
+ * de mídia, em qualquer lugar do texto, e o resto da linha `Material:` quando é um caminho (pasta ou arquivo
+ * sem extensão de mídia, para virar aviso). `~` vira a pasta do usuário.
+ */
+export function caminhosDoTexto(texto: string): string[] {
+  const out: string[] = [];
+  const vistos: string[] = [];
+  const add = (raw: string) => {
+    const c = raw.trim().replace(/^["'“‘`]+|["'”’`.,;)]+$/g, '').trim();
+    if (!c.startsWith('/') && !c.startsWith('~/')) return;
+    vistos.push(c);
+    const abs = c.startsWith('~/') ? path.join(os.homedir(), c.slice(2)) : c;
+    if (!out.includes(abs)) out.push(abs);
+  };
+  const ext = MEDIA_EXT.source.slice(0, -1); // sem o `$`
+  for (const m of texto.matchAll(new RegExp(`(?:^|[\\s"'“‘(\`])((?:~/|/)[^\\n]*?${ext})(?=$|[\\s"'”’).,;\`])`, 'gimu'))) add(m[1]!);
+  for (const m of texto.matchAll(/^\s*material\s*:\s*((?:~\/|\/)[^\n]+)$/gimu)) {
+    if (!vistos.some((v) => m[1]!.includes(v))) add(m[1]!);
+  }
+  return out;
+}
+
+/** Separa os caminhos que dá para importar (arquivo de mídia que existe) dos que viram aviso. */
+export async function conferirCaminhos(caminhos: string[]): Promise<{ arquivos: string[]; avisos: string[] }> {
+  const arquivos: string[] = [];
+  const avisos: string[] = [];
+  for (const c of caminhos) {
+    const st = await fs.stat(c).catch(() => null);
+    if (!st) avisos.push(`Não achei ${c} no disco: confira o caminho ou arraste o material na tela do projeto.`);
+    else if (!st.isFile()) avisos.push(`${c} não é um arquivo (pasta ainda não é importada pela tarefa): arraste os arquivos na tela do projeto.`);
+    else if (!MEDIA_EXT.test(c)) avisos.push(`${path.basename(c)} não é um arquivo de mídia que eu importe: arraste o material na tela do projeto.`);
+    else arquivos.push(c);
+  }
+  return { arquivos, avisos };
+}
+
 export interface GestorResult {
   projectId: string;
   briefing: ProjectTask;
@@ -274,8 +315,8 @@ export interface GestorResult {
 }
 
 /**
- * Cria o projeto com o briefing, baixa o material dos links do Drive (em segundo plano, um a um) e enfileira
- * a decupagem na fila global. O Kanban mostra tudo acontecendo.
+ * Cria o projeto com o briefing, importa o material citado por caminho local, baixa o dos links do Drive
+ * (em segundo plano, um a um) e enfileira a decupagem na fila global. O Kanban mostra tudo acontecendo.
  */
 export async function createFromTask(texto: string, opts: { nome?: string; links?: string[]; profileId?: string; formato?: { width: number; height: number; fps?: number } } = {}): Promise<GestorResult> {
   const briefing = await parseTask(texto);
@@ -303,8 +344,13 @@ export async function createFromTask(texto: string, opts: { nome?: string; links
     profileId = (doCliente.find((x) => x.formatoPeca && x.formatoPeca === briefing.formato) ?? doCliente.find((x) => !x.formatoPeca) ?? doCliente[0])?.id;
   }
   store.update(p.id, { task: briefing, client: briefing.cliente, dueAt: briefing.prazo, profileId });
-  const avisos: string[] = [];
   const baixados: string[] = [];
+  // Material já no disco (caminho colado na tarefa, como no Manual): importa do lugar, sem copiar.
+  const caminhos = caminhosDoTexto(texto);
+  const { arquivos: locais, avisos } = await conferirCaminhos(caminhos);
+  if (!links.length && !caminhos.length) avisos.push('Nenhum link do Drive nem caminho de arquivo na tarefa: arraste o material na tela do projeto.');
+  // Os avisos aparecem no painel do agente, não só na resposta da API.
+  for (const a of avisos) store.log(p.id, 'system', a);
   const dir = path.join(store.dir(p.id), 'material');
   // Material: baixa em segundo plano (um link por vez) e, quando a fala estiver transcrita, enfileira a decupagem.
   void (async () => {
@@ -320,13 +366,22 @@ export async function createFromTask(texto: string, opts: { nome?: string; links
         try {
           const list = await listDriveFolder(d.id);
           store.log(p.id, 'agent', `Pasta do Drive com ${list.length} arquivo(s).`);
-          files.push(...list.filter((f) => /\.(mp4|mov|m4v|mxf|mts|wav|mp3|m4a|aac|png|jpe?g)$/i.test(f.name) || !/\./.test(f.name)));
+          files.push(...list.filter((f) => MEDIA_EXT.test(f.name) || !/\./.test(f.name)));
         } catch (e) {
           store.log(p.id, 'system', `Não consegui listar a pasta do Drive: ${(e as Error).message}`);
         }
       }
     }
     let temFala = false;
+    for (const file of locais) {
+      try {
+        store.setActivity(p.id, { state: 'analyzing', message: `Importando do disco: ${path.basename(file)}` });
+        const asset = await ingest(p.id, file);
+        if (asset.role === 'fala') temFala = true;
+      } catch (e) {
+        store.log(p.id, 'system', `Não consegui importar ${path.basename(file)}: ${(e as Error).message}`);
+      }
+    }
     for (const f of files) {
       try {
         store.setActivity(p.id, { state: 'analyzing', message: `Baixando do Drive${f.name ? `: ${f.name}` : ''}` });
@@ -341,8 +396,7 @@ export async function createFromTask(texto: string, opts: { nome?: string; links
     }
     // Uma decupagem só, com todas as brutas já transcritas.
     if (temFala) enqueueJob(p.id, 'decupagem', {}).catch((e) => store.log(p.id, 'system', `Decupagem falhou: ${(e as Error).message}`));
-    store.setActivity(p.id, { state: 'idle', message: files.length ? 'Material pronto' : 'Esperando o material' });
+    store.setActivity(p.id, { state: 'idle', message: files.length || locais.length ? 'Material pronto' : 'Esperando o material' });
   })();
-  if (!links.length) avisos.push('Nenhum link do Drive na tarefa: arraste o material na tela do projeto.');
   return { projectId: p.id, briefing, baixados, avisos };
 }
