@@ -38,15 +38,17 @@ function parseTimes(s: string): number[] {
   return out;
 }
 
+const QUOTE_RE = /["“”'‘’]([^"“”'‘’]{2,})["“”'‘’]/;
+
 /** Texto citado: entre aspas, ou depois de "fala/diz/falando". */
 function quoted(raw: string): string | null {
-  const q = /["“”'‘’]([^"“”'‘’]{2,})["“”'‘’]/.exec(raw);
+  const q = QUOTE_RE.exec(raw);
   if (q) return q[1]!.trim();
   const f = /(?:fala|falando|diz|dizendo|disse|falou)\s+(?:d[oa]s?\s+|que\s+|sobre\s+)?(.{2,})$/i.exec(raw);
   return f ? f[1]!.replace(/[.!?]+$/, '').trim() : null;
 }
 
-/** Acha o texto na parte do bruto que ESTÁ na timeline. Devolve intervalo da fonte. */
+/** Acha o texto na parte do bruto que ESTÁ na timeline. Devolve intervalo da fonte e `at`, o tempo da 1ª palavra na timeline. */
 function findInTimeline(p: Project, transcripts: Map<string, Transcript>, text: string) {
   const q = text.split(/\s+/).map(normalizeToken).filter(Boolean);
   if (!q.length) return null;
@@ -58,8 +60,9 @@ function findInTimeline(p: Project, transcripts: Map<string, Transcript>, text: 
       if (hit / q.length < 0.8) continue;
       const a = tr.words[i]!;
       const b = tr.words[i + q.length - 1]!;
-      if (sourceToTimeline(p.timeline, assetId, (a.start + a.end) / 2) === null) continue;
-      return { assetId, start: a.start, end: b.end };
+      const at = sourceToTimeline(p.timeline, assetId, (a.start + a.end) / 2);
+      if (at === null) continue;
+      return { assetId, start: a.start, end: b.end, at };
     }
   }
   return null;
@@ -97,18 +100,29 @@ export async function runLocalCommand(projectId: string, raw: string, playhead =
     return finish(projectId, `Restaurei o trecho "${said || target.reason}".`);
   }
 
-  // Zoom.
+  // Zoom. Com texto entre aspas, vai no clipe dessa fala; sem aspas, no clipe sob o cursor.
   if (/\bzoom\b/.test(s)) {
-    if (!here) return finish(projectId, 'A timeline está vazia.');
-    const off = /\b(tira|tirar|remove|sem)\b/.test(s);
-    const num = /(\d+[.,]\d+)|(\d+)\s*%/.exec(s);
+    const cited = QUOTE_RE.exec(raw)?.[1]?.trim();
+    let target = here;
+    if (cited) {
+      const hit = findInTimeline(p, await loadTranscripts(p), cited);
+      target = hit ? locate(p.timeline, hit.at) : null;
+      if (!target) return finish(projectId, `Não achei "${cited}" na fala.`);
+    }
+    if (!target) return finish(projectId, 'A timeline está vazia.');
+    // O número do zoom vem de fora das aspas ("zoom de 1.2 em 'tenho 30 anos'").
+    const rest = cited ? norm(raw.replace(QUOTE_RE, ' ')) : s;
+    const off = /\b(tira|tirar|remove|sem)\b/.test(rest);
+    const num = /(\d+[.,]\d+)|(\d+)\s*%/.exec(rest);
     let zoom = 1.1;
     if (num?.[1]) zoom = Number(num[1].replace(',', '.'));
     else if (num?.[2]) zoom = 1 + Number(num[2]) / 100;
     if (off) zoom = 1;
     zoom = Math.max(1, Math.min(1.5, zoom));
-    const r = await act(projectId, { by: 'agent', op: { type: 'set_zoom', clipId: here.clip.id, zoom }, note: off ? `Tirei o zoom do clipe ${here.index + 1}` : `Zoom ${zoom}× no clipe ${here.index + 1}` }, 'motion', clipStarts(p.timeline)[here.index] ?? 0, off ? 'Tirando o zoom' : `Zoom ${zoom}×`);
-    return finish(projectId, r === 'ok' ? (off ? `Tirei o zoom do clipe ${here.index + 1}.` : `Apliquei zoom ${zoom}× no clipe ${here.index + 1} (${formatTime(clipStarts(p.timeline)[here.index] ?? 0)}).`) : r);
+    const n = target.index + 1;
+    const r = await act(projectId, { by: 'agent', op: { type: 'set_zoom', clipId: target.clip.id, zoom }, note: off ? `Tirei o zoom do clipe ${n}` : `Zoom ${zoom}× no clipe ${n}` }, 'motion', target.clipStart, off ? 'Tirando o zoom' : `Zoom ${zoom}×`);
+    const onde = cited ? `, onde fala "${cited}"` : '';
+    return finish(projectId, r === 'ok' ? (off ? `Tirei o zoom do clipe ${n}${onde}.` : `Apliquei zoom ${zoom}× no clipe ${n} (${formatTime(target.clipStart)}${onde}).`) : r);
   }
 
   // Pausas.
