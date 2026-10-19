@@ -74,6 +74,7 @@ export function ProjectDrawer({ p, onClose, onChange, onDelete }: { p: Project &
                 <span>Duração: <b className="text-ink-100">{p.task.duracaoAlvoS ? `${p.task.duracaoAlvoS[0]}–${p.task.duracaoAlvoS[1]} s` : '—'}</b></span>
                 <span className="col-span-2">Tom: <b className="text-ink-100">{p.task.tom ?? '—'}</b></span>
                 {p.task.naoPodeFaltar?.length ? <span className="col-span-2">Não pode faltar: <b className="text-ink-100">{p.task.naoPodeFaltar.join('; ')}</b></span> : null}
+                {p.task.pedidos?.length ? <span className="col-span-2">Pedidos: <b className="text-ink-100">{p.task.pedidos.join('; ')}</b></span> : null}
               </div>
               <details className="pt-1 text-ink-400">
                 <summary className="cursor-pointer">Texto original da tarefa</summary>
