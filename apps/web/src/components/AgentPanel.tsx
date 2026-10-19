@@ -182,8 +182,31 @@ function LogItem({ entry }: { entry: LogEntry }) {
           ▶ Ver vídeo exportado
         </button>
       ) : (
-        <span className={`whitespace-pre-wrap ${entry.by === 'system' ? 'text-ink-400' : 'text-ink-200'}`}>{entry.text}</span>
+        <div className="min-w-0">
+          <span className={`whitespace-pre-wrap ${entry.by === 'system' ? 'text-ink-400' : 'text-ink-200'}`}>{entry.text}</span>
+          {entry.suggestion && <ApplySuggestion suggestion={entry.suggestion} />}
+        </div>
       )}
     </div>
+  );
+}
+
+/** Reescrita do LLM local: só muda a timeline quando o editor clica (ADR-0005). */
+function ApplySuggestion({ suggestion }: { suggestion: NonNullable<LogEntry['suggestion']> }) {
+  const project = useEditor((s) => s.project);
+  const [state, setState] = useState<'idle' | 'sent' | 'error'>('idle');
+  const apply = async () => {
+    if (!project) return;
+    try {
+      await api.command(project.id, suggestion.text, suggestion.playhead ?? useEditor.getState().playhead);
+      setState('sent');
+    } catch {
+      setState('error');
+    }
+  };
+  return (
+    <button onClick={apply} disabled={state === 'sent'} className="mt-1 block rounded-md bg-nc-500/20 px-2 py-0.5 text-ui-xs text-nc-300 hover:bg-nc-500/30 disabled:opacity-40">
+      {state === 'sent' ? 'Aplicado' : state === 'error' ? 'Falhou, tentar de novo' : 'Aplicar'}
+    </button>
   );
 }

@@ -255,8 +255,8 @@ class Store {
     this.broadcast(id, { type: 'op', envelope: { op: { type: 'set_main', clips: p.timeline.main, removals: p.timeline.removals }, by: 'system' }, version: p.version, timeline: p.timeline, history: this.historyState(id) });
   }
 
-  log(id: string, by: LogEntry['by'], text: string): void {
-    const entry: LogEntry = { id: uid('log'), at: new Date().toISOString(), by, text };
+  log(id: string, by: LogEntry['by'], text: string, suggestion?: LogEntry['suggestion']): void {
+    const entry: LogEntry = { id: uid('log'), at: new Date().toISOString(), by, text, ...(suggestion && { suggestion }) };
     const l = this.logs.get(id) ?? [];
     l.push(entry);
     if (l.length > 500) l.shift();

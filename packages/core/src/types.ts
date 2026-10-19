@@ -465,6 +465,8 @@ export interface LogEntry {
   at: string;
   by: Actor;
   text: string;
+  /** Pedido reescrito pelo LLM local que o agente não executou: o chat mostra "Aplicar" (ADR-0005). */
+  suggestion?: { text: string; playhead?: number };
 }
 
 export type ClientMessage =

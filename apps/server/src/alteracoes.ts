@@ -4,7 +4,7 @@
  * entendeu como "manual", e o projeto volta para "Editado" com uma versão nova para comparar.
  */
 import { timelineDuration, type Project, type ProjectComment, type ProjectVersion, type Timeline } from '@neweditor/core';
-import { runCommand } from './agent.ts';
+import { runCommand, SUGESTAO } from './agent.ts';
 import { stepEnd, stepStart } from './estimate.ts';
 import { notify } from './notify.ts';
 import { runQc } from './qc.ts';
@@ -49,7 +49,7 @@ export async function runAlteracoes(projectId: string): Promise<{ feitos: number
     } catch (e) {
       resposta = (e as Error).message;
     }
-    const understood = !/^Ainda não entendi/i.test(resposta) && !/não entendi/i.test(resposta.slice(0, 40));
+    const understood = !/^Ainda não entendi/i.test(resposta) && !/não entendi/i.test(resposta.slice(0, 40)) && !resposta.startsWith(SUGESTAO);
     patchComment(projectId, c.id, { status: understood ? 'feito' : 'manual' });
     const list = (store.get(projectId).comments ?? []).map((x) => (x.id === c.id ? { ...x, resposta } : x));
     store.update(projectId, { comments: list });

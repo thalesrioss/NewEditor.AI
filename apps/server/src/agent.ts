@@ -5,28 +5,41 @@
  *
  * Cérebro local (padrão, sem API): commands-local.ts. Quando o pedido não cabe na gramática local e o LLM
  * local está ligado para "comando" (ADR-003 camada 3), o modelo reescreve o pedido numa frase que o
- * interpretador local entende. Cérebro Claude (opcional): claude/commands.ts, só com NEWEDITOR_BRAIN=claude.
+ * interpretador local entende. A reescrita nunca é executada sozinha (ADR-0005): vira sugestão no chat com
+ * "Aplicar", e só o clique do editor manda a frase como pedido. Cérebro Claude (opcional): claude/commands.ts,
+ * só com NEWEDITOR_BRAIN=claude.
  */
 import { clipDuration, clipStarts, formatTime } from '@neweditor/core';
 import { loadTranscripts } from './actions.ts';
 import { runLocalCommand } from './commands-local.ts';
 import { BRAIN } from './config.ts';
-import { askJson, llmFor } from './llm-local.ts';
+import { askJson, llmFor, type Ask } from './llm-local.ts';
 import { store } from './store.ts';
 
-export async function runCommand(projectId: string, text: string, playhead?: number): Promise<string> {
+/** Só para teste: LLM simulado no lugar do local. */
+export interface CommandDeps {
+  llm?: () => Promise<boolean>;
+  ask?: (q: Ask) => Promise<{ comando: string | null }>;
+}
+
+export const SUGESTAO = 'Não sei fazer isso direto. Sugestão:';
+
+export async function runCommand(projectId: string, text: string, playhead?: number, deps: CommandDeps = {}): Promise<string> {
   if (BRAIN === 'claude') {
     const { runClaudeCommand } = await import('./claude/commands.ts');
     return runClaudeCommand(projectId, text, playhead);
   }
   const answer = await runLocalCommand(projectId, text, playhead);
-  if (!/^Ainda não entendi/.test(answer) || !(await llmFor('comando'))) return answer;
-  const restated = await restateForLocal(projectId, text, playhead ?? 0).catch(() => null);
-  if (!restated || restated === text) return answer;
-  store.log(projectId, 'agent', `Entendi como: "${restated}"`);
-  const second = await runLocalCommand(projectId, restated, playhead);
-  return /^Ainda não entendi/.test(second) ? answer : second;
+  if (!/^Ainda não entendi/.test(answer) || !(await (deps.llm ?? (() => llmFor('comando')))())) return answer;
+  const restated = await restateForLocal(projectId, text, playhead ?? 0, deps.ask ?? askJson).catch(() => null);
+  if (!restated || restated === text || moldeLiteral(restated)) return answer;
+  const sugestao = `${SUGESTAO} "${restated}"`;
+  store.log(projectId, 'agent', sugestao, { text: restated, playhead });
+  return sugestao;
 }
+
+/** O LLM copiou o molde em vez de preencher ("dá um zoom de <1.05 a 1.3> aqui", "corta de m:ss…") ou devolveu "null" em texto. */
+const moldeLiteral = (s: string) => /[<>]|1\.05 a 1\.3|m:ss|trecho literal/i.test(s) || /^["']?(null|none|undefined|nenhum|-)?["']?$/i.test(s.trim());
 
 const GRAMMAR = [
   'corta de <m:ss> até <m:ss>',
@@ -42,7 +55,7 @@ const GRAMMAR = [
 ];
 
 /** O LLM local reescreve o pedido numa das frases que o interpretador local conhece, com a fala em volta do cursor. */
-async function restateForLocal(projectId: string, text: string, playhead: number): Promise<string | null> {
+async function restateForLocal(projectId: string, text: string, playhead: number, ask: NonNullable<CommandDeps['ask']>): Promise<string | null> {
   const p = store.get(projectId);
   const trs = await loadTranscripts(p);
   const starts = clipStarts(p.timeline);
@@ -55,7 +68,7 @@ async function restateForLocal(projectId: string, text: string, playhead: number
     near.push(ws.map((w) => w.w).join(' '));
   });
   const fala = near.join(' ').slice(0, 900);
-  const r = await askJson<{ comando: string | null }>({
+  const r = await ask({
     system: 'Você traduz pedidos de um editor de vídeo para comandos curtos que um programa simples entende. Responda só com JSON.',
     user: [`O editor está em ${formatTime(playhead)} da timeline. A fala perto do cursor é:`, `<<${fala}>>`, '', `Pedido do editor: "${text}"`, '', 'Formatos que o programa entende (use EXATAMENTE um deles, trocando o que está entre <>):', ...GRAMMAR.map((g) => `- ${g}`), '', 'Se o pedido não cabe em nenhum, devolva null. JSON: {"comando": "..."}'].join('\n'),
     maxTokens: 120,
