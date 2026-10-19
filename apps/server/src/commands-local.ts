@@ -9,7 +9,7 @@
  * "aqui" = onde está o cursor do editor. O que ele não entende, ele diz — e lista o que sabe fazer.
  */
 import path from 'node:path';
-import { clipStarts, formatTime, locate, sourceToTimeline, type Project } from '@neweditor/core';
+import { clipStarts, formatTime, locate, snapCut, sourceToTimeline, type Project } from '@neweditor/core';
 import type { Transcript } from './asr.ts';
 import { act, finish, loadTranscripts, textOf } from './actions.ts';
 import { analyze, normalizeToken } from './decupagem/analyze.ts';
@@ -161,7 +161,8 @@ export async function runLocalCommand(projectId: string, raw: string, playhead =
       const hit = findInTimeline(p, transcripts, q);
       if (!hit) return finish(projectId, `Não achei "${q}" no que está na timeline.`);
       const at = sourceToTimeline(p.timeline, hit.assetId, hit.start) ?? 0;
-      await act(projectId, { by: 'agent', op: { type: 'cut_source', assetId: hit.assetId, in: Math.max(0, hit.start - 0.03), out: hit.end + 0.05, kind: 'manual', reason: `pedido: "${q}"` }, note: `Cortei "${q}"` }, 'cutting', at, `Cortando "${q}"`);
+      const cut = snapCut(p.timeline, hit.assetId, Math.max(0, hit.start - 0.03), hit.end + 0.05);
+      await act(projectId, { by: 'agent', op: { type: 'cut_source', assetId: hit.assetId, in: cut.in, out: cut.out, kind: 'manual', reason: `pedido: "${q}"` }, note: `Cortei "${q}"` }, 'cutting', at, `Cortando "${q}"`);
       return finish(projectId, `Cortei "${q}" (em ${formatTime(at, true)}). Se ficou seco, me pede pra restaurar.`);
     }
   }

@@ -11,7 +11,7 @@
  *  - render: loudness −14 LUFS / −1 dBTP e quadros pretos.
  */
 import path from 'node:path';
-import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe } from '@neweditor/core';
+import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { run } from './media.ts';
 import { profileOf } from './profiles.ts';
@@ -81,7 +81,7 @@ export async function runQc(projectId: string): Promise<QcReport> {
   // --- Clipe que pisca ----------------------------------------------------------------------------
   tl.main.forEach((c, i) => {
     const d = clipDuration(c);
-    if (d < 0.35) push({ severidade: 'avisa', regra: 'pisca', texto: `Clipe de ${d.toFixed(2)} s em ${fmt(starts[i]!)} — curto demais, vira "pisca"`, at: starts[i] });
+    if (d < PISCA) push({ severidade: 'avisa', regra: 'pisca', texto: `Clipe de ${d.toFixed(2)} s em ${fmt(starts[i]!)} — curto demais, vira "pisca"`, at: starts[i] });
   });
   // --- Duração da peça ------------------------------------------------------------------------------
   if (total && (total < prof.peca.duracaoMin * 0.8 || total > prof.peca.duracaoMax * 1.25)) {
