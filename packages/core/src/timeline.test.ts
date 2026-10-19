@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, clipStarts, editorialWarnings, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
+import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
 import { DEFAULT_TRACKS, type Timeline } from './types.ts';
 import { buildCues, DEFAULT_CAPTIONS } from './text.ts';
 import { gradePixel, NEUTRAL_GRADE } from './color.ts';
@@ -330,4 +330,27 @@ test('zoom animado, flash, câmera e enquadramento', () => {
   assert.equal(t.reframe, true);
   assert.equal(t.main[1]!.framing!.x, 1);
   assert.throws(() => applyOp(t, { type: 'set_speed', clipId: t.main[1]!.id, speed: 9 }, 'human'), OpError);
+});
+
+test('snapCut: resto curto entre o corte por frase e uma remoção vizinha entra no corte (FB-0022)', () => {
+  let t = applyOp(base(), { type: 'cut_source', assetId: 'a', in: 51.18, out: 51.34, kind: 'silence', reason: 'pausa' }, 'agent');
+  const cut = snapCut(t, 'a', 51.45, 53.11);
+  close(cut.in, 51.34);
+  close(cut.out, 53.11);
+  t = applyOp(t, { type: 'cut_source', assetId: 'a', ...cut, kind: 'manual', reason: 'pedido' }, 'agent');
+  assert.deepEqual(t.main.map((c) => [c.in, c.out]), [[0, 51.18], [53.11, 100]]);
+  assert.ok(t.main.every((c) => clipDuration(c) >= PISCA));
+});
+
+test('snapCut: estende também para a direita, e não mexe quando o resto é longo ou o vizinho não é remoção', () => {
+  let t = applyOp(base(), { type: 'cut_source', assetId: 'a', in: 20.2, out: 21, kind: 'silence', reason: 'pausa' }, 'agent');
+  assert.deepEqual(snapCut(t, 'a', 18, 20), { in: 18, out: 20.2 });
+  assert.deepEqual(snapCut(t, 'a', 18, 19.5), { in: 18, out: 19.5 });
+  // Corte de clipe (split) em 30 não é remoção: o resto 30–30,1 fica.
+  t = applyOp(t, { type: 'split', time: 29.2 }, 'human');
+  assert.deepEqual(snapCut(t, 'a', 30.1, 32), { in: 30.1, out: 32 });
+  // Começo do material também não conta como vizinho.
+  assert.deepEqual(snapCut(t, 'a', 0.1, 2), { in: 0.1, out: 2 });
+  // Outro asset não é afetado.
+  assert.deepEqual(snapCut(t, 'b', 21.1, 22), { in: 21.1, out: 22 });
 });
