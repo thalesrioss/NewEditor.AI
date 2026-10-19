@@ -143,31 +143,64 @@ export async function downloadDriveFile(fileId: string, dir: string, onProgress?
 
 // --- Criar o projeto a partir da tarefa ------------------------------------------------------------
 
-/** Extensões de mídia que o Gestor importa (Drive e disco). */
-const MEDIA_EXT = /\.(mp4|mov|m4v|mxf|mts|wav|mp3|m4a|aac|png|jpe?g)$/i;
+/** Extensões de mídia que o Gestor importa (Drive e disco): uma lista só. */
+const MEDIA_EXTS = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'mxf', 'mts', 'wav', 'mp3', 'm4a', 'aac', 'png', 'jpg', 'jpeg'];
+const MEDIA_EXT = new RegExp(`\\.(${MEDIA_EXTS.join('|')})$`, 'i');
+
+/** Antes e depois de um caminho no texto: começo de linha, espaço, aspas, parêntese; ponto/vírgula no fim. */
+const ANTES = `(?:^|[\\s"'“‘(\`])`;
+const DEPOIS = `(?=$|[\\s"'”’).,;\`])`;
+
+/** Caminho como veio no texto → caminho do disco: sem aspas em volta, `\ ` do Terminal vira espaço, `~` vira a pasta do usuário. */
+function limparCaminho(raw: string): string {
+  const c = raw.trim().replace(/^["'“‘`]+|["'”’`.,;)]+$/g, '').trim().replace(/\\(.)/g, '$1');
+  return c.startsWith('~/') ? path.join(os.homedir(), c.slice(2)) : c;
+}
 
 /**
- * Caminhos absolutos citados no texto (`/...` ou `~/...`, com espaço e acento): os que terminam numa extensão
- * de mídia, em qualquer lugar do texto, e o resto da linha `Material:` quando é um caminho (pasta ou arquivo
- * sem extensão de mídia, para virar aviso). `~` vira a pasta do usuário.
+ * Caminhos absolutos citados no texto (`/...` ou `~/...`, com espaço e acento, entre aspas ou escapado com `\ `
+ * como o Terminal copia): os que terminam numa extensão de mídia, em qualquer lugar do texto, e o resto da linha
+ * `Material:` quando é um caminho (pasta ou arquivo sem extensão de mídia, para virar aviso).
  */
 export function caminhosDoTexto(texto: string): string[] {
   const out: string[] = [];
   const vistos: string[] = [];
   const add = (raw: string) => {
-    const c = raw.trim().replace(/^["'“‘`]+|["'”’`.,;)]+$/g, '').trim();
-    if (!c.startsWith('/') && !c.startsWith('~/')) return;
-    vistos.push(c);
-    const abs = c.startsWith('~/') ? path.join(os.homedir(), c.slice(2)) : c;
-    if (!out.includes(abs)) out.push(abs);
+    const c = limparCaminho(raw);
+    if (!c.startsWith('/')) return;
+    vistos.push(raw);
+    if (!out.includes(c)) out.push(c);
   };
   const ext = MEDIA_EXT.source.slice(0, -1); // sem o `$`
-  for (const m of texto.matchAll(new RegExp(`(?:^|[\\s"'“‘(\`])((?:~/|/)[^\\n]*?${ext})(?=$|[\\s"'”’).,;\`])`, 'gimu'))) add(m[1]!);
+  for (const m of texto.matchAll(new RegExp(`${ANTES}((?:~/|/)[^\\n]*?${ext})${DEPOIS}`, 'gimu'))) {
+    // "roteiro em /x/a.pdf. Bruto: /x/b.mp4": o caminho de mídia começa no último `/` que abre caminho.
+    const ini = [...m[1]!.matchAll(/[\s"'“‘(`](?=~\/|\/)/g)].pop();
+    add(ini ? m[1]!.slice(ini.index + 1) : m[1]!);
+  }
   for (const m of texto.matchAll(/^\s*material\s*:\s*((?:~\/|\/)[^\n]+)$/gimu)) {
     if (!vistos.some((v) => m[1]!.includes(v))) add(m[1]!);
   }
   return out;
 }
+
+/**
+ * Outros arquivos citados no texto: caminho absoluto com extensão que não é de mídia (`/Users/x/roteiro.pdf`),
+ * fora dos que `caminhosDoTexto` já pegou. Só viram aviso se existirem no disco (ver `conferirOutros`).
+ */
+export function outrosArquivosDoTexto(texto: string): string[] {
+  const midia = caminhosDoTexto(texto);
+  const out: string[] = [];
+  for (const m of texto.matchAll(new RegExp(`${ANTES}((?:~/|/)[^\\n]*?\\.[\\p{L}\\d]{2,5})${DEPOIS}`, 'gimu'))) {
+    const c = limparCaminho(m[1]!);
+    if (!c.startsWith('/') || MEDIA_EXT.test(c) || out.includes(c)) continue;
+    if (midia.some((x) => x.startsWith(c) || c.startsWith(x))) continue;
+    out.push(c);
+  }
+  return out;
+}
+
+const avisoDeFormato = (c: string) =>
+  `${path.basename(c)} é ${path.extname(c).toLowerCase() || 'sem extensão'}, formato que eu não importo (aceito ${MEDIA_EXTS.join(', ')}): arraste o material na tela do projeto.`;
 
 /** Separa os caminhos que dá para importar (arquivo de mídia que existe) dos que viram aviso. */
 export async function conferirCaminhos(caminhos: string[]): Promise<{ arquivos: string[]; avisos: string[] }> {
@@ -177,10 +210,17 @@ export async function conferirCaminhos(caminhos: string[]): Promise<{ arquivos: 
     const st = await fs.stat(c).catch(() => null);
     if (!st) avisos.push(`Não achei ${c} no disco: confira o caminho ou arraste o material na tela do projeto.`);
     else if (!st.isFile()) avisos.push(`${c} não é um arquivo (pasta ainda não é importada pela tarefa): arraste os arquivos na tela do projeto.`);
-    else if (!MEDIA_EXT.test(c)) avisos.push(`${path.basename(c)} não é um arquivo de mídia que eu importe: arraste o material na tela do projeto.`);
+    else if (!MEDIA_EXT.test(c)) avisos.push(avisoDeFormato(c));
     else arquivos.push(c);
   }
   return { arquivos, avisos };
+}
+
+/** Arquivo citado com extensão que não é de mídia: se existe, aviso de formato; se não existe, não era caminho. */
+export async function conferirOutros(caminhos: string[]): Promise<string[]> {
+  const avisos: string[] = [];
+  for (const c of caminhos) if ((await fs.stat(c).catch(() => null))?.isFile()) avisos.push(avisoDeFormato(c));
+  return avisos;
 }
 
 export interface GestorResult {
@@ -223,7 +263,8 @@ export async function createFromTask(texto: string, opts: { nome?: string; links
   // Material já no disco (caminho colado na tarefa, como no Manual): importa do lugar, sem copiar.
   const caminhos = caminhosDoTexto(texto);
   const { arquivos: locais, avisos } = await conferirCaminhos(caminhos);
-  if (!links.length && !caminhos.length) avisos.push('Nenhum link do Drive nem caminho de arquivo na tarefa: arraste o material na tela do projeto.');
+  avisos.push(...(await conferirOutros(outrosArquivosDoTexto(texto))));
+  if (!links.length && !caminhos.length && !avisos.length) avisos.push('Nenhum link do Drive nem caminho de arquivo na tarefa: arraste o material na tela do projeto.');
   // Os avisos aparecem no painel do agente, não só na resposta da API.
   for (const a of avisos) store.log(p.id, 'system', a);
   const dir = path.join(store.dir(p.id), 'material');
