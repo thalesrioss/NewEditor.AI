@@ -4,7 +4,7 @@
  * entendeu como "manual", e o projeto volta para "Editado" com uma versão nova para comparar.
  */
 import { timelineDuration, type Project, type ProjectComment, type ProjectVersion, type Timeline } from '@neweditor/core';
-import { runCommand, SUGESTAO } from './agent.ts';
+import { runCommand } from './agent.ts';
 import { stepEnd, stepStart } from './estimate.ts';
 import { notify } from './notify.ts';
 import { runQc } from './qc.ts';
@@ -44,12 +44,14 @@ export async function runAlteracoes(projectId: string): Promise<{ feitos: number
   for (const c of open) {
     store.setActivity(projectId, { state: 'thinking', message: `Alteração: "${c.text.slice(0, 60)}"`, at: c.at });
     let resposta = '';
+    const antes = JSON.stringify(store.get(projectId).timeline);
     try {
       resposta = await runCommand(projectId, c.text, c.at);
     } catch (e) {
       resposta = (e as Error).message;
     }
-    const understood = !/^Ainda não entendi/i.test(resposta) && !/não entendi/i.test(resposta.slice(0, 40)) && !resposta.startsWith(SUGESTAO);
+    // Feito é o que mudou a timeline, não o que a resposta diz ("Não achei…", sugestão, erro, "Cortei" sem efeito).
+    const understood = JSON.stringify(store.get(projectId).timeline) !== antes;
     patchComment(projectId, c.id, { status: understood ? 'feito' : 'manual' });
     const list = (store.get(projectId).comments ?? []).map((x) => (x.id === c.id ? { ...x, resposta } : x));
     store.update(projectId, { comments: list });
