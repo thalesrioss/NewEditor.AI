@@ -68,6 +68,19 @@ describe('caminhosDoTexto', () => {
     assert.deepEqual(caminhosDoTexto('material: /Users/x/Brutos do Davi/'), ['/Users/x/Brutos do Davi/']);
     assert.deepEqual(caminhosDoTexto('Tirar gaguejadas e/ou repetições.'), []);
   });
+  test('BL-0053: .mkv/.webm/.avi, caminho escapado do Terminal e entre aspas simples', async () => {
+    const { caminhosDoTexto } = await import('./gestor.ts');
+    assert.deepEqual(caminhosDoTexto('Live de ontem: /Users/x/Movies/gravacao obs.mkv, cortar o começo.'), ['/Users/x/Movies/gravacao obs.mkv']);
+    assert.deepEqual(caminhosDoTexto('Material: /Users/x/Bruto\\ do\\ cliente\\ ação\\ 2.mp4'), ['/Users/x/Bruto do cliente ação 2.mp4']);
+    assert.deepEqual(caminhosDoTexto("Usa '/tmp/x y.mp4' e /tmp/tela.webm e /tmp/velho.avi"), ['/tmp/x y.mp4', '/tmp/tela.webm', '/tmp/velho.avi']);
+  });
+  test('BL-0053: outro arquivo citado (não mídia) fica fora dos caminhos de mídia', async () => {
+    const { caminhosDoTexto, outrosArquivosDoTexto } = await import('./gestor.ts');
+    const texto = 'Roteiro em /Users/x/Docs/roteiro final.pdf. Bruto: /Users/x/v1.2 bruto.mp4';
+    assert.deepEqual(caminhosDoTexto(texto), ['/Users/x/v1.2 bruto.mp4']);
+    assert.deepEqual(outrosArquivosDoTexto(texto), ['/Users/x/Docs/roteiro final.pdf']);
+    assert.deepEqual(outrosArquivosDoTexto('Tirar gaguejadas e/ou repetições. Formato 9/16.'), []);
+  });
 });
 
 describe('createFromTask com caminho local', () => {
@@ -102,6 +115,34 @@ describe('createFromTask com caminho local', () => {
     await sleep(300);
     const { store } = await import('./store.ts');
     assert.equal(store.get(r.projectId).assets.length, 0);
+  });
+  test('BL-0053: .mkv escapado como o Terminal copia → 1 asset', async () => {
+    const { createFromTask } = await import('./gestor.ts');
+    const mkv = path.join(pasta, 'gravacao obs ação.mkv');
+    ff(['-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=30', '-t', '2', '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', mkv]);
+    const r = await createFromTask(`Cliente: Thales Rios\nMaterial: ${mkv.replace(/ /g, '\\ ')}`);
+    assert.deepEqual(r.avisos, []);
+    assert.equal(await esperarAssets(r.projectId, 1), 1);
+    const { store } = await import('./store.ts');
+    assert.equal(store.get(r.projectId).assets[0]!.path, mkv);
+  });
+  test("BL-0053: caminho entre aspas simples → 1 asset", async () => {
+    const { createFromTask } = await import('./gestor.ts');
+    const r = await createFromTask(`Usa '${clip}' no Reels.`);
+    assert.deepEqual(r.avisos, []);
+    assert.equal(await esperarAssets(r.projectId, 1), 1);
+  });
+  test('BL-0053: .pdf que existe → aviso com nome e formato, nunca "Nenhum link"', async () => {
+    const { createFromTask } = await import('./gestor.ts');
+    const pdf = path.join(pasta, 'doc.pdf');
+    fs.writeFileSync(pdf, '%PDF-1.4');
+    const r = await createFromTask(`Roteiro em ${pdf}, segue o texto.`);
+    assert.equal(r.avisos.length, 1, r.avisos.join(' | '));
+    assert.match(r.avisos[0]!, /^doc\.pdf é \.pdf, formato que eu não importo/);
+    assert.ok((await painel(r.projectId)).includes(r.avisos[0]!));
+    const r2 = await createFromTask(`Material: ${pdf}`);
+    assert.equal(r2.avisos.length, 1, r2.avisos.join(' | '));
+    assert.match(r2.avisos[0]!, /doc\.pdf é \.pdf/);
   });
   test('sem link e sem caminho → "Nenhum link do Drive" vai para o painel', async () => {
     const { createFromTask } = await import('./gestor.ts');
