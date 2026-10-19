@@ -29,9 +29,8 @@ before(async () => {
   const p = await store.create('Teste de pipeline', 'projeto de teste');
   projectId = p.id;
 });
-// O store grava o projeto 400 ms depois da última mudança: espera essa gravação antes de apagar a pasta.
 after(async () => {
-  await new Promise((r) => setTimeout(r, 600));
+  await (await import('./store.ts')).store.flush(); // grava o que espera o debounce de 400 ms antes de apagar a pasta
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
