@@ -11,7 +11,7 @@
  */
 import { clipDuration, clipStarts, formatTime } from '@neweditor/core';
 import { loadTranscripts } from './actions.ts';
-import { runLocalCommand } from './commands-local.ts';
+import { pedeDesfazer, runLocalCommand } from './commands-local.ts';
 import { BRAIN } from './config.ts';
 import { askJson, llmFor, type Ask } from './llm-local.ts';
 import { store } from './store.ts';
@@ -25,6 +25,25 @@ export interface CommandDeps {
 export const SUGESTAO = 'Não sei fazer isso direto. Sugestão:';
 
 export async function runCommand(projectId: string, text: string, playhead?: number, deps: CommandDeps = {}): Promise<string> {
+  // Um pedido = um passo de desfazer, com o rótulo do pedido (BL-0055). "Desfaz" fica fora: dentro de uma
+  // transação o store recusa desfazer.
+  if (pedeDesfazer(text)) return runOne(projectId, text, playhead, deps);
+  return store.transaction(projectId, rotuloDoPedido(text), () => runOne(projectId, text, playhead, deps));
+}
+
+/** `Pedido: "…"` para o histórico: até 40 caracteres, cortando no último espaço e fechando as aspas (FB-0099). */
+export function rotuloDoPedido(text: string): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  if (t.length <= 40) return `Pedido: "${t}"`;
+  const corte = t.slice(0, 40);
+  const espaco = corte.lastIndexOf(' ');
+  const curto = (espaco > 0 ? corte.slice(0, espaco) : corte).replace(/[\s"'“”.,;:!?-]+$/, '');
+  // Citação do pedido aberta no corte (`fala "pra…`) também fecha.
+  const aberta = (curto.match(/"/g)?.length ?? 0) % 2 === 1;
+  return `Pedido: "${curto}…${aberta ? '"' : ''}"`;
+}
+
+async function runOne(projectId: string, text: string, playhead: number | undefined, deps: CommandDeps): Promise<string> {
   if (BRAIN === 'claude') {
     const { runClaudeCommand } = await import('./claude/commands.ts');
     return runClaudeCommand(projectId, text, playhead);
