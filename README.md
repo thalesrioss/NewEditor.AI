@@ -33,6 +33,9 @@ dados em `~/Library/Application Support/Editor Brain/data` (Windows: `%APPDATA%/
 repositório, essa pasta pode ser um link para `data/`. Diário de abertura: `~/Library/Logs/Editor Brain/main.log` (diz se o servidor
 subiu no auxiliar ou, de reserva, no processo principal, e qual FFmpeg foi escolhido).
 
+Para automação (agente testador, CI) o app tem um modo oculto: `--hidden`, `NEWEDITOR_HIDDEN=1` ou, por padrão, qualquer abertura
+com `--remote-debugging-port` (`--show` desfaz). Ele sobe inteiro, mas sem janela na tela nem ícone no Dock.
+
 FFmpeg e ffprobe vão dentro do app (`ffmpeg-static` 6.0 e `ffprobe-static`, fora do asar); se a máquina tem o do Homebrew, ele é
 preferido por ser mais novo. O servidor lê `NEWEDITOR_FFMPEG` / `NEWEDITOR_FFPROBE` e escolhe a sintaxe certa por versão. Whisper, Qwen
 (uv/Python) e Chrome ainda vêm do sistema (ADR-009, ADR-013). Instalar a build: `npm run dist:mac` e depois `ditto` (nunca `cp -R`)

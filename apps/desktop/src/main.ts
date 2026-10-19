@@ -17,6 +17,15 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env.NEWEDITOR_DEV_URL;
 const isMac = process.platform === 'darwin';
+/**
+ * Modo oculto, para automação (agente testador, CI): `--hidden`, NEWEDITOR_HIDDEN=1 ou, por padrão, quando o app é
+ * aberto com `--remote-debugging-port` (quem liga o DevTools remoto é um script, não uma pessoa; `--show` desfaz).
+ * O app sobe inteiro (servidor, janela, DevTools remoto) mas a janela não aparece nem rouba o foco, e o ícone fica
+ * fora do Dock. Sem isso, cada rodada de teste abria o Editor Brain na frente do que a pessoa estava fazendo.
+ */
+const argv = process.argv.slice(1);
+const automated = argv.some((a) => a.startsWith('--remote-debugging-port')); // DevTools remoto = alguém (agente, Playwright) dirigindo o app
+const HIDDEN = !argv.includes('--show') && (argv.includes('--hidden') || process.env.NEWEDITOR_HIDDEN === '1' || automated);
 
 /** Diário do app em ~/Library/Logs/Editor Brain/main.log (Windows: %APPDATA%/Editor Brain/logs): o que aconteceu ao abrir. */
 const LOG_FILE = path.join(app.getPath('logs'), 'main.log');
@@ -224,7 +233,7 @@ async function createWindow(url: string): Promise<void> {
     webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   buildMenu(win);
-  win.once('ready-to-show', () => win.show());
+  if (!HIDDEN) win.once('ready-to-show', () => win.show());
   // Links externos abrem no navegador do sistema; a janela só navega dentro do app.
   win.webContents.setWindowOpenHandler(({ url: u }) => (void shell.openExternal(u), { action: 'deny' }));
   win.webContents.on('will-navigate', (e, u) => {
@@ -233,8 +242,9 @@ async function createWindow(url: string): Promise<void> {
   await win.loadURL(url);
 }
 
+if (HIDDEN && isMac) app.dock?.hide();
 app.whenReady().then(async () => {
-  log('ready');
+  log('ready', HIDDEN ? '(modo oculto)' : '');
   fixPath();
   resolveTools();
   try {
@@ -242,6 +252,8 @@ app.whenReady().then(async () => {
     await createWindow(url);
     log('janela aberta', url);
     app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && void createWindow(url));
+    // No modo oculto, a janela só aparece se alguém pedir de propósito (ativar o app no Dock/Spotlight).
+    if (HIDDEN) app.on('activate', () => BrowserWindow.getAllWindows()[0]?.show());
   } catch (e) {
     log('falhou ao abrir', e as Error);
     dialog.showErrorBox('Editor Brain não abriu', `${(e as Error).message}\n\nDiário: ${LOG_FILE}`);
