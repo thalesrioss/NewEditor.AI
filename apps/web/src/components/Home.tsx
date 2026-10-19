@@ -275,26 +275,51 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
   );
 }
 
+/** Rascunho do "Novo projeto" na aba: fechar o diálogo (clique fora, Esc, Cancelar) não perde a tarefa colada. */
+const DRAFT_KEY = 'ne-novo-projeto';
+type Draft = { mode: 'tarefa' | 'manual'; name: string; brief: string; path: string; client: string; dueAt: string; tarefa: string; profileId: string; fmt: string; cw: string; ch: string };
+const EMPTY_DRAFT: Draft = { mode: 'tarefa', name: '', brief: '', path: '', client: '', dueAt: '', tarefa: '', profileId: '', fmt: 'auto', cw: '1080', ch: '1920' };
+function loadDraft(): Draft {
+  try {
+    return { ...EMPTY_DRAFT, ...JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? '{}') };
+  } catch {
+    return EMPTY_DRAFT;
+  }
+}
+
 function NewProject({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<'tarefa' | 'manual'>('tarefa');
-  const [name, setName] = useState('');
-  const [brief, setBrief] = useState('');
-  const [path, setPath] = useState('');
-  const [client, setClient] = useState('');
-  const [dueAt, setDueAt] = useState('');
-  const [tarefa, setTarefa] = useState('');
+  const [draft] = useState(loadDraft);
+  const [mode, setMode] = useState<'tarefa' | 'manual'>(draft.mode);
+  const [name, setName] = useState(draft.name);
+  const [brief, setBrief] = useState(draft.brief);
+  const [path, setPath] = useState(draft.path);
+  const [client, setClient] = useState(draft.client);
+  const [dueAt, setDueAt] = useState(draft.dueAt);
+  const [tarefa, setTarefa] = useState(draft.tarefa);
   const [briefing, setBriefing] = useState<ProjectTask | null>(null);
   const [perfis, setPerfis] = useState<ClientProfile[]>([]);
-  const [profileId, setProfileId] = useState('');
+  const [profileId, setProfileId] = useState(draft.profileId);
   // Formato da entrega: 'auto' = pela tarefa (Reels → 1080×1920…), um preset, ou 'custom' com largura × altura.
-  const [fmt, setFmt] = useState<string>('auto');
-  const [cw, setCw] = useState('1080');
-  const [ch, setCh] = useState('1920');
+  const [fmt, setFmt] = useState<string>(draft.fmt);
+  const [cw, setCw] = useState(draft.cw);
+  const [ch, setCh] = useState(draft.ch);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  // Algo digitado? Então clique no fundo não fecha (só Esc, Cancelar ou criar).
+  const filled = [tarefa, name, brief, path, client, dueAt].some((v) => v.trim());
   useEffect(() => {
     api.perfis().then(setPerfis).catch(() => undefined);
   }, []);
+  useEffect(() => {
+    const d: Draft = { mode, name, brief, path, client, dueAt, tarefa, profileId, fmt, cw, ch };
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+  }, [mode, name, brief, path, client, dueAt, tarefa, profileId, fmt, cw, ch]);
+  // Esc fecha mesmo com o foco na textarea; o rascunho já está guardado.
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [onClose]);
   // Briefing ao vivo enquanto a tarefa é colada (Gestor de Projetos).
   useEffect(() => {
     if (!tarefa.trim()) return setBriefing(null);
@@ -316,9 +341,11 @@ function NewProject({ onClose }: { onClose: () => void }) {
     try {
       if (mode === 'tarefa') {
         const r = await api.gestor(tarefa, { nome: name.trim() || undefined, profileId: profileId || undefined, formato: formatoEscolhido() });
+        sessionStorage.removeItem(DRAFT_KEY);
         location.hash = `#/p/${r.projectId}`;
       } else {
         const p = await api.createProject(name, brief);
+        sessionStorage.removeItem(DRAFT_KEY);
         if (client.trim() || dueAt || profileId) await api.updateProject(p.id, { client: client.trim() || undefined, dueAt: dueAt || undefined, profileId: profileId || undefined });
         const f = formatoEscolhido();
         if (f) await api.op(p.id, { type: 'set_format', width: f.width, height: f.height }, `Formato ${f.width}×${f.height}`);
@@ -380,7 +407,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 backdrop-blur-sm" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 backdrop-blur-sm" onMouseDown={filled ? undefined : onClose}>
       <form onSubmit={submit} onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-lg space-y-4 rounded-[var(--radius-ui-lg)] border border-ink-700 bg-ink-850 p-6 shadow-[var(--shadow-ui-3)]">
         <div className="flex items-center gap-3">
           <h2 className="text-ui-lg font-semibold">Novo projeto</h2>
