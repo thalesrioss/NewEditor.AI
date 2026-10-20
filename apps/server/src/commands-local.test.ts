@@ -106,3 +106,57 @@ describe('zoom pelo chat', () => {
     assert.deepEqual(await zooms(), { c1: 1.1, c2: 1, c3: 1 });
   });
 });
+
+// BL-0076 / FB-0126: o punch-in automático (ritmo.ts) deixa `zoomTo` no clipe; o zoom pedido no chat é fixo.
+describe('zoom do chat sobre punch-in automático', () => {
+  const punchIn = async () => {
+    const { store } = await import('./store.ts');
+    store.apply(projectId, { by: 'agent', op: { type: 'set_zoom', clipId: 'c2', zoom: 1.083, zoomTo: 1.1 } });
+  };
+  const c2 = async () => {
+    const { store } = await import('./store.ts');
+    return store.get(projectId).timeline.main.find((c) => c.id === 'c2')!;
+  };
+
+  test('"zoom de 1.2" fica 1.2 fixo, sem herdar o zoomTo 1.1', async () => {
+    const { zoomAt } = await import('@neweditor/core');
+    const { runCommand } = await import('./agent.ts');
+    await punchIn();
+    await runCommand(projectId, 'dá um zoom de 1.2 em "tudo mudou"', 0);
+    const c = await c2();
+    assert.equal(c.zoom, 1.2);
+    assert.equal('zoomTo' in c, false);
+    assert.equal(zoomAt(c, 4.9), 1.2);
+  });
+
+  test('"tira o zoom" deixa o clipe sem zoom nenhum (não vira zoom-in 1→1.1)', async () => {
+    const { zoomAt } = await import('@neweditor/core');
+    const { runCommand } = await import('./agent.ts');
+    await punchIn();
+    await runCommand(projectId, 'tira o zoom em "tudo mudou"', 0);
+    const c = await c2();
+    assert.equal(c.zoom ?? 1, 1);
+    assert.equal('zoomTo' in c, false);
+    assert.equal(zoomAt(c, 0), 1);
+    assert.equal(zoomAt(c, 4.9), 1);
+  });
+
+  test('o pedido é um passo de desfazer: 1 desfazer volta o punch-in animado', async () => {
+    const { store } = await import('./store.ts');
+    const { runCommand } = await import('./agent.ts');
+    await punchIn();
+    await runCommand(projectId, 'dá um zoom de 1.2 em "tudo mudou"', 0);
+    assert.equal(store.undo(projectId), true);
+    const c = await c2();
+    assert.equal(c.zoom, 1.083);
+    assert.equal(c.zoomTo, 1.1);
+  });
+
+  test('clipe sem zoomTo continua igual', async () => {
+    const { runCommand } = await import('./agent.ts');
+    await runCommand(projectId, 'dá um zoom de 1.2 em "tudo mudou"', 0);
+    const c = await c2();
+    assert.equal(c.zoom, 1.2);
+    assert.equal('zoomTo' in c, false);
+  });
+});

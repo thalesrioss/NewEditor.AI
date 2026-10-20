@@ -122,8 +122,9 @@ export async function runLocalCommand(projectId: string, raw: string, playhead =
     else if (num?.[2]) zoom = 1 + Number(num[2]) / 100;
     if (off) zoom = 1;
     zoom = Math.max(1, Math.min(1.5, zoom));
+    // Zoom pedido é fixo: `zoomTo: null` apaga o punch-in animado do ritmo (BL-0076).
     const n = target.index + 1;
-    const r = await act(projectId, { by: 'agent', op: { type: 'set_zoom', clipId: target.clip.id, zoom }, note: off ? `Tirei o zoom do clipe ${n}` : `Zoom ${zoom}× no clipe ${n}` }, 'motion', target.clipStart, off ? 'Tirando o zoom' : `Zoom ${zoom}×`);
+    const r = await act(projectId, { by: 'agent', op: { type: 'set_zoom', clipId: target.clip.id, zoom, zoomTo: null }, note: off ? `Tirei o zoom do clipe ${n}` : `Zoom ${zoom}× no clipe ${n}` }, 'motion', target.clipStart, off ? 'Tirando o zoom' : `Zoom ${zoom}×`);
     const onde = cited ? `, onde fala "${cited}"` : '';
     return finish(projectId, r === 'ok' ? (off ? `Tirei o zoom do clipe ${n}${onde}.` : `Apliquei zoom ${zoom}× no clipe ${n} (${formatTime(target.clipStart)}${onde}).`) : r);
   }
