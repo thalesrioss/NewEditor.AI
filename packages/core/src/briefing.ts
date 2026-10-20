@@ -42,5 +42,5 @@ const mss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).p
 
 /** Texto do aviso, igual no QC e na revisão: as duas durações e quanto passa. */
 export function textoPassaDoAlvo({ total, alvo }: { total: number; alvo: number }): string {
-  return `Peça com ${mss(total)}; o briefing pede até ${mss(alvo)} (passa ${Math.ceil(total - alvo)} s)`;
+  return `Peça com ${mss(total)}; o briefing pede até ${mss(alvo)} (passa ${Math.max(1, Math.round(total - alvo))} s)`;
 }

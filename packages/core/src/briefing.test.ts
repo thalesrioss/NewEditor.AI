@@ -36,5 +36,5 @@ test('passaDoAlvo: só acima do alvo (com meio segundo de folga)', () => {
 });
 
 test('textoPassaDoAlvo: as duas durações e o excesso', () => {
-  assert.equal(textoPassaDoAlvo({ total: 74.2, alvo: 60 }), 'Peça com 1:14; o briefing pede até 1:00 (passa 15 s)');
+  assert.equal(textoPassaDoAlvo({ total: 74.2, alvo: 60 }), 'Peça com 1:14; o briefing pede até 1:00 (passa 14 s)');
 });
