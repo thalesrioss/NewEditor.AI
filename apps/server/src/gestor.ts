@@ -9,7 +9,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { formatSize, type ProjectTask } from '@neweditor/core';
+import { duracaoDoTexto, formatSize, type ProjectTask } from '@neweditor/core';
 import { ingest } from './ingest.ts';
 import { enqueueJob } from './jobs.ts';
 import { askJson, llmFor } from './llm-local.ts';
@@ -148,11 +148,9 @@ export function parseTaskRules(texto: string, hoje = hojeLocal()): ProjectTask {
   const t: ProjectTask = { texto };
   const low = texto.toLowerCase();
   for (const [re, fmt, dur] of FORMATS) if (re.test(texto)) ((t.formato = fmt), (t.duracaoAlvoS = dur), (() => undefined)());
-  // "até 60 s", "de 30 a 45 segundos", "1 min", "~2 min"
-  const dur = /(\d{1,3})\s*(?:a|–|-|até)\s*(\d{1,3})\s*(?:s\b|seg|segundos)/i.exec(texto) ?? /(?:até|max(?:imo)?|no m[áa]ximo)\s*(\d{1,3})\s*(?:s\b|seg|segundos)/i.exec(texto);
-  if (dur) t.duracaoAlvoS = dur[2] ? [+dur[1]!, +dur[2]!] : [Math.round(+dur[1]! * 0.6), +dur[1]!];
-  const min = /(\d{1,2})\s*(?:min\b|minutos?)/i.exec(texto);
-  if (!dur && min) t.duracaoAlvoS = [Math.round(+min[1]! * 60 * 0.7), +min[1]! * 60];
+  // "até 60 s", "de 30 a 45 segundos", "até 1:30": o mesmo parser do QC (BL-0024), para o drawer e o aviso concordarem.
+  const dur = duracaoDoTexto(texto);
+  if (dur) t.duracaoAlvoS = [dur.min ?? Math.round(dur.max * 0.6), dur.max];
   const tom = /\btom\s*(?::|de|é)?\s*([^.\n;]{3,60})/i.exec(texto);
   if (tom) t.tom = tom[1]!.trim();
   const must = [...texto.matchAll(/(?:não pode faltar|precisa ter|obrigat[óo]rio|tem que ter|incluir)\s*:?\s*([^.\n]{3,120})/gi)].map((m) => m[1]!.trim());

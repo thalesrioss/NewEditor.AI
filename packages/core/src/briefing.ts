@@ -11,18 +11,42 @@ const MIN = String.raw`(?:min\b|mins\b|minutos?\b)`;
 const N = String.raw`(\d{1,3}(?:[.,]\d)?)`;
 const num = (s: string) => Number(s.replace(',', '.'));
 
+const emSeg = (n: string, unidade: string) => num(n) * (new RegExp(MIN, 'i').test(unidade) ? 60 : 1);
+const TETO = String.raw`(?:até|m[áa]x(?:imo)?\.?|no m[áa]ximo)\s*(?:de\s*)?`;
+const FORMAS: { re: RegExp; dur: (m: RegExpMatchArray) => { min?: number; max: number } }[] = [
+  // "de 30 a 45 s", "1 a 2 min"
+  { re: new RegExp(String.raw`\b${N}\s*(?:a|até|–|-)\s*${N}\s*(${SEG}|${MIN})`, 'gi'), dur: (m) => ({ min: emSeg(m[1]!, m[3]!), max: emSeg(m[2]!, m[3]!) }) },
+  // "até 1:30"
+  { re: new RegExp(String.raw`${TETO}(\d{1,2}):([0-5]\d)\b`, 'gi'), dur: (m) => ({ max: +m[1]! * 60 + +m[2]! }) },
+  // "até 1min30", "no máximo 1 min e 30 s"
+  { re: new RegExp(String.raw`${TETO}(\d{1,2})\s*m(?:in(?:utos?)?)?\s*(?:e\s*)?([0-5]?\d)\s*(?:${SEG})?(?![\d:])`, 'gi'), dur: (m) => ({ max: +m[1]! * 60 + +m[2]! }) },
+  // "até 60s", "no máximo 2 min"
+  { re: new RegExp(String.raw`${TETO}${N}\s*(${SEG}|${MIN})`, 'gi'), dur: (m) => ({ max: emSeg(m[1]!, m[2]!) }) },
+];
+
+/**
+ * Duração pedida no texto, em segundos (`min` só quando o texto dá a faixa); `undefined` quando não pede.
+ * Um briefing fala de várias durações ("Reels até 60s, gancho de 3 a 5 segundos"): o alvo da peça é o MAIOR
+ * teto entre todas, porque as partes (gancho, pausa) cabem dentro da peça. Faixa depois de "mais de" é um
+ * mínimo ("pausas de mais de 2 a 3 seg"), não teto. Minutos soltos sem "até" ("o bruto tem 20 min") não viram alvo.
+ * Fonte única: o QC (`duracao-briefing`) e o briefing do Gestor (`duracaoAlvoS`) leem daqui.
+ */
+export function duracaoDoTexto(texto: string): { min?: number; max: number } | undefined {
+  const t = texto ?? '';
+  let melhor: { min?: number; max: number } | undefined;
+  for (const { re, dur } of FORMAS) {
+    for (const m of t.matchAll(re)) {
+      if (/mais de\s*$/i.test(t.slice(Math.max(0, m.index! - 12), m.index))) continue;
+      const d = dur(m);
+      if (d.max > 0 && (!melhor || d.max > melhor.max)) melhor = d;
+    }
+  }
+  return melhor;
+}
+
 /** Duração máxima pedida no texto, em segundos; `undefined` quando o texto não pede uma. */
 export function duracaoMaxDoTexto(texto: string): number | undefined {
-  const t = texto ?? '';
-  const faixa = new RegExp(String.raw`\b${N}\s*(?:a|até|–|-)\s*${N}\s*(${SEG}|${MIN})`, 'i').exec(t);
-  if (faixa) return num(faixa[2]!) * (new RegExp(MIN, 'i').test(faixa[3]!) ? 60 : 1);
-  const TETO = String.raw`(?:até|m[áa]x(?:imo)?\.?|no m[áa]ximo)\s*(?:de\s*)?`;
-  // "até 1:30", "até 1min30", "no máximo 1 min e 30 s"
-  const mmss = new RegExp(String.raw`${TETO}(\d{1,2}):([0-5]\d)\b`, 'i').exec(t) ?? new RegExp(String.raw`${TETO}(\d{1,2})\s*m(?:in(?:utos?)?)?\s*(?:e\s*)?([0-5]?\d)\s*(?:${SEG})?(?![\d:])`, 'i').exec(t);
-  if (mmss) return +mmss[1]! * 60 + +mmss[2]!;
-  const teto = new RegExp(String.raw`${TETO}${N}\s*(${SEG}|${MIN})`, 'i').exec(t);
-  if (teto) return num(teto[1]!) * (new RegExp(MIN, 'i').test(teto[2]!) ? 60 : 1);
-  return undefined;
+  return duracaoDoTexto(texto)?.max;
 }
 
 /** Duração-alvo do projeto: o texto da tarefa (Gestor) ou, sem tarefa, o briefing escrito à mão. */

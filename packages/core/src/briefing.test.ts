@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { duracaoAlvoDoProjeto, duracaoMaxDoTexto, passaDoAlvo, textoPassaDoAlvo } from './briefing.ts';
+import { duracaoAlvoDoProjeto, duracaoDoTexto, duracaoMaxDoTexto, passaDoAlvo, textoPassaDoAlvo } from './briefing.ts';
 import { DEFAULT_TRACKS, type Timeline } from './types.ts';
 
 test('duracaoMaxDoTexto: as frases de briefing que pedem duração máxima', () => {
@@ -12,6 +12,22 @@ test('duracaoMaxDoTexto: as frases de briefing que pedem duração máxima', () 
   assert.equal(duracaoMaxDoTexto('Peça de 30 a 45 s, legenda amarela'), 45);
   assert.equal(duracaoMaxDoTexto('Até 1:30, sem trilha'), 90);
   assert.equal(duracaoMaxDoTexto('até 1min30 no máximo'), 90);
+});
+
+test('duracaoMaxDoTexto: várias durações no texto, o alvo é o maior teto (devolução do lead)', () => {
+  // Duração de PARTE da peça (gancho, pausa) não vira alvo da peça.
+  assert.equal(duracaoMaxDoTexto('Reels até 60s, gancho de 3 a 5 segundos'), 60);
+  assert.equal(duracaoMaxDoTexto('Gancho forte até 3 s, vídeo de até 60s'), 60);
+  // Escolha: faixa depois de "mais de" é mínimo de pausa, não teto; sem outro número, sem alvo.
+  assert.equal(duracaoMaxDoTexto('Corta pausas de mais de 2 a 3 seg'), undefined);
+  assert.equal(duracaoMaxDoTexto('Shorts até 45 s; corta pausas de mais de 2 a 3 seg'), 45);
+});
+
+test('duracaoDoTexto: faixa dá o mínimo; teto sozinho só o máximo', () => {
+  assert.deepEqual(duracaoDoTexto('Peça de 30 a 45 s'), { min: 30, max: 45 });
+  assert.deepEqual(duracaoDoTexto('de 1 a 2 min'), { min: 60, max: 120 });
+  assert.deepEqual(duracaoDoTexto('até 1:30'), { max: 90 });
+  assert.equal(duracaoDoTexto('Reels do curso'), undefined);
 });
 
 test('duracaoMaxDoTexto: sem número de duração no texto, sem alvo', () => {
