@@ -1,7 +1,7 @@
 /**
  * Leitura dos proxies por partes (HTTP Range) + decodificação por WebCodecs (ADR-005).
  */
-import { findMoov, parseMp4, type Mp4Sample, type Mp4Track } from '@neweditor/core';
+import { findMoov, parseMp4, sampleIndexAt as indexAt, videoSampleAt, type Mp4Sample, type Mp4Track } from '@neweditor/core';
 
 export const webcodecsAvailable = () => typeof VideoDecoder !== 'undefined' && typeof AudioDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined';
 
@@ -42,19 +42,6 @@ export class MediaFile {
     const buf = await this.range(a, b);
     return list.map((s) => buf.subarray(s.offset - a, s.offset - a + s.size));
   }
-}
-
-/** Último índice cuja `pts` ≤ t (amostras em ordem de apresentação = decodificação nos proxies, sem quadro B). */
-function indexAt(samples: Mp4Sample[], t: number): number {
-  let lo = 0;
-  let hi = samples.length - 1;
-  if (!samples.length || t < samples[0]!.pts - 1e-4) return -1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (samples[mid]!.pts <= t + 1e-4) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo;
 }
 
 /**
@@ -119,8 +106,11 @@ export class VideoStream {
   /** Melhor quadro para o instante `t` (s, no tempo do arquivo). Também dispara a decodificação. */
   frameAt(t: number, ahead = 8): VideoFrame | null {
     if (this.broken) return null;
+    // Antes do 1º quadro do proxy (ex.: 0:00 com pts 0,021 s), vale o 1º quadro — senão o player abre preto.
+    const at = videoSampleAt(this.track.samples, t);
+    t = at.t;
     this.want = t;
-    const k = indexAt(this.track.samples, t);
+    const k = at.index;
     if (k < 0) return null;
     const first = this.frames[0];
     const behind = first && first.timestamp > this.track.samples[k]!.pts * 1e6 + 500;
