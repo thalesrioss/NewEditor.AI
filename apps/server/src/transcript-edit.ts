@@ -3,6 +3,7 @@
  * As bordas do corte saem da forma de onda (mesma lógica da decupagem), não do tempo do ASR.
  */
 import path from 'node:path';
+import { snapCut } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { analyze, complement, keptRanges } from './decupagem/analyze.ts';
 import { readEnvelope } from './media.ts';
@@ -29,12 +30,13 @@ export async function cutWords(projectId: string, assetId: string, from: number,
   const gap = complement(keeps, a.duration).find((r) => r.end > lo && r.start < hi);
   if (!gap) return { ok: false };
   const text = words.slice(from, to + 1).map((w) => w.w).join(' ');
+  const cut = snapCut(store.get(projectId).timeline, assetId, gap.start, gap.end);
   store.apply(projectId, {
     by: 'human',
-    op: { type: 'cut_source', assetId, in: gap.start, out: gap.end, kind: 'manual', reason: `apagado na transcrição: "${text}"` },
+    op: { type: 'cut_source', assetId, in: cut.in, out: cut.out, kind: 'manual', reason: `apagado na transcrição: "${text}"` },
     note: `Apagou "${text.length > 60 ? text.slice(0, 57) + '…' : text}"`,
   });
-  return { ok: true, in: gap.start, out: gap.end };
+  return { ok: true, in: cut.in, out: cut.out };
 }
 
 /** Restaura todo trecho cortado que toca as palavras selecionadas. */

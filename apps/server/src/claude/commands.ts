@@ -3,7 +3,7 @@
  */
 import { betaZodTool } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
-import { clipDuration, clipStarts, formatTime, sourceToTimeline, type OpEnvelope, type Project } from '@neweditor/core';
+import { clipDuration, clipStarts, formatTime, snapCut, sourceToTimeline, type OpEnvelope, type Project } from '@neweditor/core';
 import type { Transcript } from '../asr.ts';
 import { act as actOn, finish, loadTranscripts, textOf } from '../actions.ts';
 import { RefusalError } from '../llm.ts';
@@ -93,7 +93,8 @@ function tools(ctx: Ctx) {
       inputSchema: z.object({ asset_id: z.string(), inicio: z.number(), fim: z.number(), motivo: z.string() }),
       run: async ({ asset_id, inicio, fim, motivo }) => {
         const at = sourceToTimeline(project(ctx).timeline, asset_id, inicio) ?? 0;
-        return act(ctx, { by: 'agent', op: { type: 'cut_source', assetId: asset_id, in: inicio, out: fim, kind: 'manual', reason: motivo }, note: `Cortei do bruto ${formatTime(inicio)}–${formatTime(fim)}: ${motivo}` }, 'cutting', at, motivo);
+        const cut = snapCut(project(ctx).timeline, asset_id, inicio, fim);
+        return act(ctx, { by: 'agent', op: { type: 'cut_source', assetId: asset_id, in: cut.in, out: cut.out, kind: 'manual', reason: motivo }, note: `Cortei do bruto ${formatTime(inicio)}–${formatTime(fim)}: ${motivo}` }, 'cutting', at, motivo);
       },
     }),
     betaZodTool({

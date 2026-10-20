@@ -122,6 +122,26 @@ function subtractRange(c: Clip, a: number, b: number): Clip[] {
   return subtractFrom([c], c.assetId, a, b, 'clip');
 }
 
+/** Clipe abaixo disso vira "pisca" (QC avisa). */
+export const PISCA: Seconds = 0.35;
+
+/**
+ * Bordas de um corte por frase [a, b) na fonte, estendidas até a remoção vizinha quando o que sobraria entre
+ * as duas é mais curto que `PISCA` (a sílaba solta do FB-0022). Só estende até a borda de um trecho já removido;
+ * corte de clipe (split) ou começo do material não contam como vizinho.
+ */
+export function snapCut(t: Timeline, assetId: string, a: Seconds, b: Seconds): { in: Seconds; out: Seconds } {
+  const removedAt = (x: Seconds, side: 'in' | 'out') => t.removals.some((r) => r.assetId === assetId && Math.abs(r[side] - x) < 1e-3);
+  let lo = a;
+  let hi = b;
+  for (const c of t.main) {
+    if (c.assetId !== assetId || c.out <= a || c.in >= b) continue;
+    if (c.in < a && a - c.in < PISCA && removedAt(c.in, 'out')) lo = Math.min(lo, c.in);
+    if (c.out > b && c.out - b < PISCA && removedAt(c.out, 'in')) hi = Math.max(hi, c.out);
+  }
+  return { in: lo, out: hi };
+}
+
 const sortRanges = <T extends Ranged>(xs: T[]): T[] => [...xs].sort((x, y) => x.assetId.localeCompare(y.assetId) || x.in - y.in);
 
 function addPin(pins: Pin[], assetId: string, a: Seconds, b: Seconds, reason: string): Pin[] {
