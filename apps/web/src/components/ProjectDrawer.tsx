@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { ExternalLink, Trash2, X } from 'lucide-react';
-import { formatTime, type ClientProfile, type Project, type StepId } from '@neweditor/core';
+import { formatTime, profileOptions, profileValue, type ClientProfile, type Project, type StepId } from '@neweditor/core';
 import { api } from '../lib/api.ts';
 import { Button, ConfirmButton, IconButton } from './ui.tsx';
 
@@ -53,15 +53,12 @@ export function ProjectDrawer({ p, onClose, onChange, onDelete }: { p: Project &
             </label>
             <label className="col-span-2 space-y-1 text-ink-300">
               Perfil de edição
-              <select value={p.profileId ?? ''} onChange={(e) => void save({ profileId: e.target.value || null })} className="input py-1">
-                <option value="">Padrão da casa</option>
-                {perfis
-                  .filter((x) => x.id !== 'casa')
-                  .map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.nome}
-                    </option>
-                  ))}
+              <select value={profileValue(perfis, p.profileId)} onChange={(e) => void save({ profileId: e.target.value })} className="input py-1">
+                {profileOptions(perfis, { personalizado: true }).map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </label>
           </div>

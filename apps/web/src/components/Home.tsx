@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, BrainCircuit, Info, ListChecks, Plus, SlidersHorizontal, Trash2, User } from 'lucide-react';
 import { ProjectDrawer } from './ProjectDrawer.tsx';
-import { FORMAT_PRESETS, formatSize, formatTime, PROJECT_STATUSES, timelineDuration, type ClientProfile, type Project, type ProjectStatus, type ProjectTask } from '@neweditor/core';
+import { FORMAT_PRESETS, formatSize, formatTime, profileOptions, profileValue, PROJECT_STATUSES, timelineDuration, type ClientProfile, type Project, type ProjectStatus, type ProjectTask } from '@neweditor/core';
 import { api, mediaUrl } from '../lib/api.ts';
 import { Button } from './ui.tsx';
 import { STATUS_LABEL, STATUS_OWNER } from '../editor/shared.ts';
@@ -393,15 +393,12 @@ function NewProject({ onClose }: { onClose: () => void }) {
   );
   const perfilSelect = (
     <Field label="Perfil de edição (estilo do cliente)">
-      <select value={profileId} onChange={(e) => setProfileId(e.target.value)} className="input">
-        <option value="">Padrão da casa</option>
-        {perfis
-          .filter((p) => p.id !== 'casa')
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nome}
-            </option>
-          ))}
+      <select value={profileId || profileValue(perfis, undefined)} onChange={(e) => setProfileId(e.target.value)} className="input" aria-label="Perfil de edição">
+        {profileOptions(perfis, { personalizado: true }).map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
     </Field>
   );

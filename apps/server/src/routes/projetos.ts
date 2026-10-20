@@ -9,6 +9,7 @@ import { saveGabarito } from '../benchmark.ts';
 import { estimateRemaining } from '../estimate.ts';
 import { ingest, rebuild, setRole } from '../ingest.ts';
 import { cancelJobsFor, enqueue } from '../jobs.ts';
+import { houseProfile } from '../profiles.ts';
 import { runQc } from '../qc.ts';
 import { reviewDoubts } from '../review.ts';
 import { store } from '../store.ts';
@@ -33,7 +34,11 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
     ),
   );
 
-  app.post<{ Body: { name: string; brief?: string } }>('/api/projects', async (req) => store.create(req.body.name?.trim() || 'Sem nome', req.body.brief ?? ''));
+  // Todo projeto nasce com o perfil gravado (BL-0023): sem escolha, o padrão da casa de agora.
+  app.post<{ Body: { name: string; brief?: string } }>('/api/projects', async (req) => {
+    const p = await store.create(req.body.name?.trim() || 'Sem nome', req.body.brief ?? '');
+    return store.update(p.id, { profileId: (await houseProfile()).id });
+  });
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => store.get(req.params.id));
   app.patch<{ Params: { id: string }; Body: { name?: string; brief?: string; status?: ProjectStatus; client?: string; dueAt?: string; profileId?: string | null } }>('/api/projects/:id', async (req) => {
     const { name, brief, status, client, dueAt, profileId } = req.body;

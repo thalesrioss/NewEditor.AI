@@ -11,7 +11,7 @@
  *  - render: loudness −14 LUFS / −1 dBTP e quadros pretos.
  */
 import path from 'node:path';
-import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA } from '@neweditor/core';
+import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA, profileLabel } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { run } from './media.ts';
 import { profileOf } from './profiles.ts';
@@ -52,7 +52,7 @@ export async function runQc(projectId: string): Promise<QcReport> {
   const issues: QcIssue[] = [];
   const push = (i: Omit<QcIssue, 'id'>) => issues.push({ id: `qc_${issues.length + 1}`, ...i });
   // Formato (ADR-011, fase 1): a peça no formato do padrão, e sem tarja (material mais largo que o quadro sem reframe).
-  if (Math.abs(tl.width / tl.height - prof.formato.width / prof.formato.height) > 0.02) push({ severidade: 'avisa', regra: 'formato', texto: `Peça em ${tl.width}×${tl.height} (${ratioLabel(tl.width, tl.height)}); o padrão "${prof.nome}" é ${prof.formato.width}×${prof.formato.height}. Mude em Ajustes → Projeto → Formato, ou grave um padrão editorial para este formato.` });
+  if (Math.abs(tl.width / tl.height - prof.formato.width / prof.formato.height) > 0.02) push({ severidade: 'avisa', regra: 'formato', texto: `Peça em ${tl.width}×${tl.height} (${ratioLabel(tl.width, tl.height)}); o padrão "${profileLabel(prof)}" é ${prof.formato.width}×${prof.formato.height}. Mude em Ajustes → Projeto → Formato, ou grave um padrão editorial para este formato.` });
   const arTl = tl.width / tl.height;
   // Legenda dentro da área segura (ADR-011, fase 2: posição livre no player).
   if (tl.captions?.enabled) {
@@ -85,7 +85,7 @@ export async function runQc(projectId: string): Promise<QcReport> {
   });
   // --- Duração da peça ------------------------------------------------------------------------------
   if (total && (total < prof.peca.duracaoMin * 0.8 || total > prof.peca.duracaoMax * 1.25)) {
-    push({ severidade: 'avisa', regra: 'duracao', texto: `Peça com ${fmt(total)}; o perfil "${prof.nome}" espera ${prof.peca.duracaoMin}–${prof.peca.duracaoMax} s` });
+    push({ severidade: 'avisa', regra: 'duracao', texto: `Peça com ${fmt(total)}; o perfil "${profileLabel(prof)}" espera ${prof.peca.duracaoMin}–${prof.peca.duracaoMax} s` });
   }
 
   // --- Overlays: motion seco, lettering linhas, sobreposição, SFX por 3 s -----------------------------
