@@ -236,3 +236,26 @@ export function parseMp4(moov: Uint8Array): Mp4Track[] {
   }
   return tracks;
 }
+
+/** Último índice cuja `pts` ≤ t (amostras em ordem de apresentação = decodificação nos proxies, sem quadro B); -1 antes da primeira. */
+export function sampleIndexAt(samples: Mp4Sample[], t: number): number {
+  let lo = 0;
+  let hi = samples.length - 1;
+  if (!samples.length || t < samples[0]!.pts - 1e-4) return -1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (samples[mid]!.pts <= t + 1e-4) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/**
+ * Quadro de vídeo a mostrar no instante `t` do arquivo. Antes da primeira amostra (proxies começam em ~0,02 s
+ * por causa da lista de edição) vale o primeiro quadro: o player abre mostrando a imagem, não um canvas preto.
+ */
+export function videoSampleAt(samples: Mp4Sample[], t: number): { index: number; t: number } {
+  if (!samples.length) return { index: -1, t };
+  const at = Math.max(t, samples[0]!.pts);
+  return { index: sampleIndexAt(samples, at), t: at };
+}
