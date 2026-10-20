@@ -1,9 +1,12 @@
 """ASR local (Apple Silicon) com timestamps por palavra.
 
 Uso:
-  uv run --python 3.12 --with mlx-whisper services/asr/transcribe.py <audio> <saida.json> [idioma] [--limpo] [--chunks trechos.json]
+  uv run --python 3.12 --with mlx-whisper services/asr/transcribe.py <audio> <saida.json> [idioma] [--limpo] [--chunks trechos.json] [--glossario "Termo, Outro termo"]
 
 Saída: {"language", "duration", "words": [{"w","start","end","p","k"}], "segments": [{"start","end","text","k"}]}
+
+--glossario: nomes e marcas do perfil do cliente (BL-0081), com a grafia certa. Entram no initial_prompt depois do
+prompt "ao pé da letra"; sem glossário o prompt é exatamente o de antes.
 
 --chunks: lista JSON de [início, fim] em segundos. Cada trecho de fala é transcrito SEPARADO.
 Transcrevendo o arquivo inteiro, o Whisper trata várias tentativas da mesma frase como uma só e espalha
@@ -29,7 +32,15 @@ VERBATIM_PROMPT = "Então, é... eu, eu acho que... que, tipo, ahn, a gente, a g
 HALLUCINATION = re.compile(r"(legendas? (pela|por)|amara\.org|inscreva-se|obrigad[oa] por assistir|^\W*(obrigad[oa]|tchau)\W*$)", re.I)
 
 
-def transcribe(audio, lang, verbatim):
+def initial_prompt(verbatim, glossario=None):
+    """Prompt do Whisper: o "ao pé da letra" (se ligado) + os termos do glossário do cliente (se houver)."""
+    parts = [VERBATIM_PROMPT] if verbatim else []
+    if glossario and glossario.strip():
+        parts.append("Nomes e marcas: " + glossario.strip() + ".")
+    return " ".join(parts) or None
+
+
+def transcribe(audio, lang, verbatim, glossario=None):
     return mlx_whisper.transcribe(
         audio,
         path_or_hf_repo=MODEL,
@@ -37,7 +48,7 @@ def transcribe(audio, lang, verbatim):
         word_timestamps=True,
         # Sem condicionar no texto anterior: em fala com retake o modelo tende a "limpar" repetições.
         condition_on_previous_text=False,
-        initial_prompt=VERBATIM_PROMPT if verbatim else None,
+        initial_prompt=initial_prompt(verbatim, glossario),
         verbose=None,
     )
 
@@ -68,7 +79,8 @@ def collect(r, offset, k, words, segments, limit=None):
 
 def main() -> None:
     src, out = sys.argv[1], sys.argv[2]
-    args = [a for a in sys.argv[3:] if not a.startswith("--")]
+    glossario = sys.argv[sys.argv.index("--glossario") + 1] if "--glossario" in sys.argv else None
+    args = [a for a in sys.argv[3:] if not a.startswith("--") and a != glossario]
     lang = next((a for a in args if not a.endswith(".json")), "pt")
     verbatim = "--limpo" not in sys.argv
     chunks = None
@@ -82,13 +94,13 @@ def main() -> None:
             piece = audio[int(a * SAMPLE_RATE) : int(b * SAMPLE_RATE)]
             if len(piece) < SAMPLE_RATE * 0.1:
                 continue
-            collect(transcribe(piece, lang, verbatim), a, k, words, segments, limit=b)
+            collect(transcribe(piece, lang, verbatim, glossario), a, k, words, segments, limit=b)
         duration = len(audio) / SAMPLE_RATE
     else:
-        collect(transcribe(src, lang, verbatim), 0.0, 0, words, segments)
+        collect(transcribe(src, lang, verbatim, glossario), 0.0, 0, words, segments)
         duration = segments[-1]["end"] if segments else 0
     json.dump(
-        {"language": lang, "duration": duration, "model": MODEL, "verbatim": verbatim, "chunked": bool(chunks), "elapsed": round(time.time() - t0, 2), "words": words, "segments": segments},
+        {"language": lang, "duration": duration, "model": MODEL, "verbatim": verbatim, **({"glossario": glossario} if glossario else {}), "chunked": bool(chunks), "elapsed": round(time.time() - t0, 2), "words": words, "segments": segments},
         open(out, "w"),
         ensure_ascii=False,
     )

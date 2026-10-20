@@ -6,12 +6,14 @@
  *  - cortes grandes de "bastidor";
  *  - dúvidas que o próprio agente registrou na decupagem;
  *  - palavras que ficaram no corte e estão fora do dicionário (a transcrição ouviu errado: "eustosina") ou com
- *    pouca confiança — a grafia corrigida vale para legenda, lettering e motion.
+ *    pouca confiança — a grafia corrigida vale para legenda, lettering e motion. Palavra que está no glossário do
+ *    cliente (BL-0081) já tem a grafia conferida: não vira dúvida (nem conta no QC "grafia").
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fixedText, sourceToTimeline, type Project, type TextWord } from '@neweditor/core';
+import { fixedText, glossarioKey, glossarioWords, sourceToTimeline, type Project, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
+import { profileOf } from './profiles.ts';
 import { misspelled } from './spell.ts';
 import { store } from './store.ts';
 
@@ -48,6 +50,8 @@ export async function reviewDoubts(p: Project): Promise<ReviewDoubt[]> {
   const resolved = new Set(p.review?.resolvidas ?? []);
   const out: ReviewDoubt[] = [];
   const ids = [...new Set(tl.main.map((c) => c.assetId))];
+  const glossario = glossarioWords((await profileOf(p).catch(() => undefined))?.glossario);
+  const noGlossario = (t: string) => glossario.has(glossarioKey(t));
 
   for (const assetId of ids) {
     const a = p.assets.find((x) => x.id === assetId);
@@ -114,7 +118,7 @@ export async function reviewDoubts(p: Project): Promise<ReviewDoubt[]> {
     // 4. Palavras no corte: fora do dicionário (provável erro da transcrição) ou de baixa confiança.
     const kept = words.filter((w) => {
       const m = w.c ?? (w.start + w.end) / 2;
-      return tl.main.some((c) => c.assetId === assetId && m >= c.in && m < c.out);
+      return tl.main.some((c) => c.assetId === assetId && m >= c.in && m < c.out) && !noGlossario(strip(fixedText(tl, assetId, w)));
     });
     const tokens = kept.map((w) => strip(fixedText(tl, assetId, w))).filter((t) => t.length >= 3 && !/\d/.test(t) && !STOPLIKE.test(t));
     const wrong = await misspelled(tokens);

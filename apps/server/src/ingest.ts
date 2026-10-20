@@ -5,6 +5,7 @@ import { transcribe, writeCenters } from './asr.ts';
 import { analyze, speechChunks } from './decupagem/analyze.ts';
 import { makeEnvelope, makeProxy, makeThumbs, makeWav16k, probe, readEnvelope } from './media.ts';
 import { enqueue } from './jobs.ts';
+import { profileOf } from './profiles.ts';
 import { store } from './store.ts';
 
 /**
@@ -108,7 +109,9 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
     const trFile = path.join(dir, 'transcript.json');
     // Trecho a trecho (ver speechChunks): o texto de cada trecho é o que foi dito nele — retake aparece como retake.
     const env = await readEnvelope(path.join(dir, 'envelope.f32'));
-    const tr = await transcribe(path.join(dir, 'audio16k.wav'), trFile, 'pt', speechChunks(env));
+    // Nomes e marcas do glossário do cliente (BL-0081) entram no prompt da transcrição.
+    const glossario = (await profileOf(store.get(projectId)).catch(() => undefined))?.glossario;
+    const tr = await transcribe(path.join(dir, 'audio16k.wav'), trFile, 'pt', speechChunks(env), glossario);
     await writeCenters(trFile, tr, analyze(tr.words, env).centers);
     asset.transcript = rel('transcript.json');
     progress.audio = 1;
