@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { compileProfileMarkdown, fillProfile, formatoLabel, guessFormato, HOUSE_PROFILE, PERSONALIZADO_ID, profileFromTimeline, type ClientProfile, type FormatoPeca, type Project } from '@neweditor/core';
+import { addGlossario, compileProfileMarkdown, fillProfile, formatoLabel, guessFormato, HOUSE_PROFILE, PERSONALIZADO_ID, profileFromTimeline, type ClientProfile, type FormatoPeca, type Project } from '@neweditor/core';
 import { DATA_DIR } from './config.ts';
 
 export const PROFILES_DIR = path.join(path.dirname(DATA_DIR), 'perfis');
@@ -99,6 +99,17 @@ export async function patchProfile(id: string, patch: Partial<ClientProfile>): P
     if (patch[k]) (merged as unknown as Record<string, unknown>)[k] = { ...(cur[k] as object), ...(patch[k] as object) };
   }
   return save(merged);
+}
+
+/**
+ * "Guardar no perfil do cliente" (BL-0081): o termo entra no topo do glossário do perfil do projeto (o da casa se
+ * o projeto não escolheu). "Personalizado" não é um perfil gravado: não tem onde guardar.
+ */
+export async function addTermoAoPerfil(p: Project, termo: string): Promise<ClientProfile> {
+  if (!termo.trim()) throw Object.assign(new Error('termo vazio'), { statusCode: 400 });
+  if (p.profileId === PERSONALIZADO_ID) throw Object.assign(new Error('O perfil "Personalizado" não guarda glossário: escolha o perfil do cliente no projeto.'), { statusCode: 409 });
+  const prof = await getProfile(p.profileId);
+  return patchProfile(prof.id, { glossario: addGlossario(prof.glossario, termo) });
 }
 
 export async function createProfile(nome: string, baseId?: string): Promise<ClientProfile> {

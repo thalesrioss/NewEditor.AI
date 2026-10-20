@@ -180,7 +180,14 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
   const seek = useEditor((s) => s.seek);
   const [fix, setFix] = useState(d.suggestions?.[0] ?? d.text);
   const [all, setAll] = useState(true);
+  // Nome próprio/marca: guardar no glossário do cliente já vem marcado (BL-0081).
+  const [guardar, setGuardar] = useState(d.kind === 'nome');
+  const [guardado, setGuardado] = useState('');
   const isWord = d.kind === 'palavra' || d.kind === 'nome';
+  const guardarTermo = (text: string) => {
+    if (!guardar) return;
+    api.guardarNoGlossario(project.id, text).then((r) => setGuardado(`"${text}" guardado no glossário de ${r.nome}.`), (e: Error) => setGuardado(e.message));
+  };
 
   const applyFix = (text: string) => {
     const words = transcripts[d.assetId] ?? [];
@@ -189,6 +196,7 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
     const hits = all ? words.filter((w) => strip(w.w).toLowerCase() === target) : words.filter((w) => Math.abs(w.start - (d.wordAt ?? -1)) < 0.02);
     const fixes = hits.map((w) => ({ assetId: d.assetId, at: w.start, text: text + (w.w.match(/[^\p{L}\p{N}]+$/u)?.[0] ?? '') }));
     if (fixes.length) sendOp({ op: { type: 'fix_words', fixes }, note: `Corrigiu "${d.text}" → "${text}"${fixes.length > 1 ? ` (${fixes.length}×)` : ''}` });
+    guardarTermo(text);
   };
 
   return (
@@ -231,6 +239,10 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
           <label className="flex items-center gap-1.5 text-ui-xs text-ink-400">
             <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="accent-nc-500" /> em todo o vídeo
           </label>
+          <label className="flex items-center gap-1.5 text-ui-xs text-ink-400" title="Nos próximos projetos deste cliente a transcrição já ouve assim e a revisão não pergunta de novo">
+            <input type="checkbox" checked={guardar} onChange={(e) => setGuardar(e.target.checked)} className="accent-nc-500" /> Guardar no perfil do cliente
+          </label>
+          {guardado && <p className="text-ui-xs text-emerald-300">{guardado}</p>}
         </div>
       ) : null}
 
@@ -246,7 +258,7 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
             <RotateCcw size={12} /> Restaurar
           </button>
         )}
-        <button onClick={onResolve} className="flex flex-1 items-center justify-center gap-1 rounded-md border border-ink-600 py-1 text-ui-xs text-ink-300 hover:border-nc-500 hover:text-white">
+        <button onClick={() => (isWord && guardarTermo(strip(d.text)), onResolve())} className="flex flex-1 items-center justify-center gap-1 rounded-md border border-ink-600 py-1 text-ui-xs text-ink-300 hover:border-nc-500 hover:text-white">
           <Check size={12} /> {isWord ? 'Está certo' : 'O agente acertou'}
         </button>
       </div>
