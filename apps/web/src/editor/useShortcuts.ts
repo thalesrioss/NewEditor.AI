@@ -3,6 +3,7 @@ import { clipStarts, formatTime, locate, timelineDuration, trackFlag } from '@ne
 import { api } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { cutSelection } from '../components/TranscriptPanel.tsx';
+import { markKeyHandled, setEditHandler, type EditCmd } from '../lib/editMenu.ts';
 
 /**
  * Atalhos do editor (os do CapCut mais os de edição por texto):
@@ -12,6 +13,12 @@ import { cutSelection } from '../components/TranscriptPanel.tsx';
  */
 export function useShortcuts(projectId: string, actions: { onExport: () => void }): void {
   useEffect(() => {
+    // Mesmo caminho para a tecla e para o menu Editar do app (ver lib/editMenu.ts).
+    const edit = (cmd: EditCmd) => {
+      if (cmd === 'undo') void api.undo(projectId);
+      else if (cmd === 'redo') void api.redo(projectId);
+      else useEditor.getState().selectMany([], useEditor.getState().project?.timeline.overlays.map((o) => o.id) ?? []);
+    };
     const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable]');
     const down = (e: KeyboardEvent) => {
       if (typing(e)) return;
@@ -34,15 +41,16 @@ export function useShortcuts(projectId: string, actions: { onExport: () => void 
         s.setPlaying(!s.playing);
       } else if (mod && k === 'z') {
         e.preventDefault();
-        if (e.shiftKey) void api.redo(projectId);
-        else void api.undo(projectId);
+        const cmd = e.shiftKey ? 'redo' : 'undo';
+        markKeyHandled(cmd);
+        edit(cmd);
       } else if (mod && k === 'e') {
         e.preventDefault();
         actions.onExport();
       } else if (mod && k === 'a') {
         e.preventDefault();
-        const ids = tl?.overlays.map((o) => o.id) ?? [];
-        s.selectMany([], ids);
+        markKeyHandled('selectAll');
+        edit('selectAll');
       } else if (mod && k === 'b') {
         e.preventDefault();
         if (tl && !locked('V1')) s.sendOp({ op: { type: 'split', time: s.playhead }, note: `Dividiu em ${formatTime(s.playhead)}` });
@@ -110,7 +118,9 @@ export function useShortcuts(projectId: string, actions: { onExport: () => void 
     window.addEventListener('keydown', onKey);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
+    const offEdit = setEditHandler(edit);
     return () => {
+      offEdit();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
