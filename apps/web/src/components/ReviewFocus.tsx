@@ -4,14 +4,14 @@
  */
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, Play, RotateCcw, Undo2, X } from 'lucide-react';
-import { formatTime } from '@neweditor/core';
+import { formatTime, textoPassaDoAlvo } from '@neweditor/core';
 import { api, type ReviewDoubt } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { Button, IconButton } from './ui.tsx';
 
 const KIND_LABEL: Record<ReviewDoubt['kind'], string> = { tomada: 'Tomada', corte: 'Corte', agente: 'Dúvida do agente', palavra: 'Grafia', nome: 'Nome' };
 
-export function ReviewFocus({ doubts, onListen, playing, onResolve, onClose, onApprove }: { doubts: ReviewDoubt[]; onListen: (d: ReviewDoubt) => void; playing: string | null; onResolve: (d: ReviewDoubt) => void; onClose: () => void; onApprove: () => void }) {
+export function ReviewFocus({ doubts, acima, onListen, playing, onResolve, onClose, onApprove }: { doubts: ReviewDoubt[]; acima?: { total: number; alvo: number }; onListen: (d: ReviewDoubt) => void; playing: string | null; onResolve: (d: ReviewDoubt) => void; onClose: () => void; onApprove: () => void }) {
   const project = useEditor((s) => s.project)!;
   const sendOp = useEditor((s) => s.sendOp);
   const seek = useEditor((s) => s.seek);
@@ -99,7 +99,7 @@ export function ReviewFocus({ doubts, onListen, playing, onResolve, onClose, onA
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <p className="text-ui-md text-emerald-300">Nada pendente.</p>
+            {acima ? <p className="max-w-sm text-ui-md text-amber-300">{textoPassaDoAlvo(acima)}.</p> : <p className="text-ui-md text-emerald-300">Nada pendente.</p>}
             <Button variant="primary" onClick={onApprove}>
               Aprovar decupagem e finalizar <kbd className="ml-1 text-ui-2xs opacity-70">Enter</kbd>
             </Button>
