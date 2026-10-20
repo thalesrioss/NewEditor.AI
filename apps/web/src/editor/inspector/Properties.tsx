@@ -16,11 +16,12 @@ import {
   SFX_LABEL,
   VOICE_DENOISE_LEVELS,
   DEFAULT_CAPTIONS,
-  formatoLabel,
   FORMAT_PRESETS,
   formatPresetOf,
   ratioLabel,
   PERSONALIZADO_ID,
+  profileLabel,
+  profileValue,
   type ClientProfile,
   type LetteringSpec,
   type LetteringStyleId,
@@ -577,8 +578,8 @@ function PadraoEditorial({ project }: { project: import('@neweditor/core').Proje
   const [msg, setMsg] = useState('');
   const reload = () => api.perfis().then(setPerfis).catch(() => undefined);
   useEffect(() => void reload(), [project.profileId]);
-  const atual = project.profileId === PERSONALIZADO_ID ? null : perfis.find((p) => p.id === project.profileId) ?? perfis.find((p) => p.padraoCasa);
-  const nome = project.profileId === PERSONALIZADO_ID ? 'Personalizado (esta edição)' : atual ? `${atual.nome}${atual.formatoPeca && !atual.nome.includes(formatoLabel(atual.formatoPeca)) ? ` · ${formatoLabel(atual.formatoPeca)}` : ''}` : 'Padrão da casa';
+  const atual = project.profileId === PERSONALIZADO_ID ? null : perfis.find((p) => p.id === profileValue(perfis, project.profileId));
+  const nome = project.profileId === PERSONALIZADO_ID ? 'Personalizado (esta edição)' : atual ? profileLabel(atual) : 'Padrão da casa';
   return (
     <Section title="Padrão de edição">
       <Row k="Valendo agora" v={nome} />

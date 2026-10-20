@@ -13,7 +13,7 @@ import { formatSize, type ProjectTask } from '@neweditor/core';
 import { ingest } from './ingest.ts';
 import { enqueueJob } from './jobs.ts';
 import { askJson, llmFor } from './llm-local.ts';
-import { listProfiles, slug } from './profiles.ts';
+import { houseProfile, listProfiles, slug } from './profiles.ts';
 import { store } from './store.ts';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0 Safari/537.36';
@@ -383,7 +383,8 @@ export async function createFromTask(texto: string, opts: { nome?: string; links
     // Com um padrão editorial por formato, o do formato pedido vem primeiro.
     profileId = (doCliente.find((x) => x.formatoPeca && x.formatoPeca === briefing.formato) ?? doCliente.find((x) => !x.formatoPeca) ?? doCliente[0])?.id;
   }
-  store.update(p.id, { task: briefing, client: briefing.cliente, dueAt: briefing.prazo, profileId });
+  // Sem perfil do cliente: grava o padrão da casa de agora (BL-0023), para o projeto dizer qual estilo vale.
+  store.update(p.id, { task: briefing, client: briefing.cliente, dueAt: briefing.prazo, profileId: profileId ?? (await houseProfile()).id });
   const baixados: string[] = [];
   // Material já no disco (caminho colado na tarefa, como no Manual): importa do lugar, sem copiar.
   const caminhos = caminhosDoTexto(texto);

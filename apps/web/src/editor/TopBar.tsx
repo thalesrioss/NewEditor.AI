@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Download, Keyboard, ListChecks, PanelLeft, PanelRight } from 'lucide-react';
-import { formatoLabel, PERSONALIZADO_ID, type ClientProfile, type Project, type ProjectStatus } from '@neweditor/core';
+import { profileOptions, profileValue, type ClientProfile, type Project, type ProjectStatus } from '@neweditor/core';
 import { api } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { IconButton } from '../components/ui.tsx';
@@ -125,23 +125,17 @@ function ProfileSelect({ project }: { project: Project }) {
   }, []);
   return (
     <select
-      value={project.profileId ?? ''}
+      value={profileValue(perfis, project.profileId)}
       aria-label="Perfil de edição"
       title="Padrão de edição: o estilo do cliente (Cérebro do Editor), ou Personalizado = as regras saem desta edição"
-      onChange={(e) => void api.updateProject(project.id, { profileId: e.target.value || null })}
+      onChange={(e) => void api.updateProject(project.id, { profileId: e.target.value })}
       className="max-w-[160px] truncate rounded-full border border-ink-700 bg-ink-800 px-2.5 py-0.5 text-ui-xs text-ink-200 focus:outline-none"
     >
-      <option value="">Padrão da casa</option>
-      {perfis
-        .filter((p) => p.id !== 'casa' && !p.padraoCasa)
-        .map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.nome}
-            {p.formatoPeca && !p.nome.includes(formatoLabel(p.formatoPeca)) ? ` · ${formatoLabel(p.formatoPeca)}` : ''}
-            {p.validado === false ? ' (teste)' : ''}
-          </option>
-        ))}
-      <option value={PERSONALIZADO_ID}>Personalizado (esta edição)</option>
+      {profileOptions(perfis, { personalizado: true }).map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
     </select>
   );
 }

@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_CAPTIONS, type Project, type Removal } from '@neweditor/core';
+import { DEFAULT_CAPTIONS, profileLabel, type Project, type Removal } from '@neweditor/core';
 import { autoMotions } from './agent-motion.ts';
 import { autoReframe } from './reframe.ts';
 import { autoLettering } from './agent-text.ts';
@@ -102,7 +102,7 @@ export async function finalize(projectId: string): Promise<void> {
   if (!store.get(projectId).timeline.captions) {
     // Altura: a do perfil; se o perfil pede "abaixo do queixo" (ou o rosto está onde a legenda cairia), mede o rosto.
     let position = prof.legenda.y;
-    let porque = `altura do perfil ${prof.nome}`;
+    let porque = `altura do perfil ${profileLabel(prof)}`;
     const safe = await safeTextY(p, prof.legenda.y);
     if (prof.lettering.posicao === 'abaixo-do-queixo' || Math.abs(safe.y - prof.legenda.y) > 0.12) {
       position = safe.y;

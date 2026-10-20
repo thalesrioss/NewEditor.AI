@@ -180,6 +180,35 @@ export function fillProfile(p: Partial<ClientProfile> & Pick<ClientProfile, 'id'
 
 export const HOUSE_PROFILE: ClientProfile = fillProfile({ id: 'casa', nome: 'Padrão da casa (NewContent)', atualizadoEm: '2026-10-10T00:00:00.000Z' });
 
+/**
+ * Nome do perfil como o editor vê em todo lugar (BL-0023): seletores do "Novo projeto", do editor e da gaveta,
+ * "Valendo agora" e o QC. O perfil que é o padrão da casa diz que é o da casa.
+ */
+export function profileLabel(p: ClientProfile): string {
+  if (p.id === PERSONALIZADO_ID) return p.nome;
+  const base = `${p.nome}${p.formatoPeca && !p.nome.includes(formatoLabel(p.formatoPeca)) ? ` · ${formatoLabel(p.formatoPeca)}` : ''}${p.validado === false ? ' (teste)' : ''}`;
+  return (p.padraoCasa || p.id === HOUSE_PROFILE.id) && !p.nome.startsWith('Padrão da casa') ? `Padrão da casa · ${base}` : base;
+}
+
+/** O padrão da casa numa lista vinda de `/api/perfis` (o marcado `padraoCasa`, senão o genérico). */
+export const houseOf = (perfis: ClientProfile[]): ClientProfile | undefined => perfis.find((p) => p.padraoCasa) ?? perfis.find((p) => p.id === HOUSE_PROFILE.id);
+
+/**
+ * Opções do seletor de perfil, iguais no "Novo projeto", no editor e na gaveta: o padrão da casa uma vez só e
+ * primeiro, os outros perfis, e "Personalizado" no fim (com `personalizado`).
+ */
+export function profileOptions(perfis: ClientProfile[], opts: { personalizado?: boolean } = {}): { value: string; label: string }[] {
+  const house = houseOf(perfis) ?? HOUSE_PROFILE;
+  const outros = perfis.filter((p) => p.id !== house.id && p.id !== HOUSE_PROFILE.id && p.id !== PERSONALIZADO_ID);
+  return [house, ...outros].map((p) => ({ value: p.id, label: profileLabel(p) })).concat(opts.personalizado ? [{ value: PERSONALIZADO_ID, label: 'Personalizado (esta edição)' }] : []);
+}
+
+/** Valor do seletor para o perfil gravado no projeto: sem perfil (projeto antigo) ou perfil que sumiu = o padrão da casa. */
+export function profileValue(perfis: ClientProfile[], profileId: string | undefined): string {
+  if (profileId === PERSONALIZADO_ID || (profileId && perfis.some((p) => p.id === profileId && p.id !== HOUSE_PROFILE.id))) return profileId;
+  return (houseOf(perfis) ?? HOUSE_PROFILE).id;
+}
+
 const num = (s: string) => Number(s.replace(',', '.'));
 
 /**
