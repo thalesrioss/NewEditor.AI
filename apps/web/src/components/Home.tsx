@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, BrainCircuit, Info, ListChecks, Plus, SlidersHorizontal, Trash2, User } from 'lucide-react';
 import { ProjectDrawer } from './ProjectDrawer.tsx';
-import { FORMAT_PRESETS, formatSize, formatTime, PROJECT_STATUSES, timelineDuration, type ClientProfile, type Project, type ProjectStatus, type ProjectTask } from '@neweditor/core';
+import { diasAtePrazo, seloPrazo, FORMAT_PRESETS, formatSize, formatTime, PROJECT_STATUSES, timelineDuration, type ClientProfile, type Project, type ProjectStatus, type ProjectTask } from '@neweditor/core';
 import { api, mediaUrl } from '../lib/api.ts';
 import { Button } from './ui.tsx';
 import { STATUS_LABEL, STATUS_OWNER } from '../editor/shared.ts';
@@ -176,7 +176,6 @@ export function Home() {
   );
 }
 
-const dayDiff = (iso: string) => Math.ceil((new Date(`${iso}T23:59:59`).getTime() - Date.now()) / 86400000);
 /** Trabalho do agente que ainda falta: vem do servidor (calibrado pelo histórico de cada etapa). */
 function agentEta(p: Project & { estimativa?: number }): number | null {
   if (p.status === 'editado' || p.status === 'alteracao' || p.status === 'entregue' || p.status === 'revisao') return null;
@@ -199,7 +198,8 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
   const first = p.timeline.main[0];
   const owner = STATUS_OWNER[p.status];
   const eta = agentEta(p);
-  const due = p.dueAt ? dayDiff(p.dueAt) : null;
+  const due = p.dueAt ? diasAtePrazo(p.dueAt) : null;
+  const selo = due !== null ? seloPrazo(due) : null;
   useEffect(() => {
     const v = video.current;
     if (!v || !first) return;
@@ -261,7 +261,7 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
         <div className="text-ui-md leading-snug font-medium text-ink-100">{p.name}</div>
         {p.brief && <div className="mt-1 line-clamp-2 text-ui-xs text-ink-400">{p.brief}</div>}
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-ui-2xs text-ink-400">
-          {due !== null && <span className={`rounded px-1.5 py-px font-semibold ${due < 0 ? 'bg-rose-500/20 text-rose-300' : due <= 1 ? 'bg-amber-400/15 text-amber-300' : 'bg-ink-750 text-ink-300'}`}>{due < 0 ? `atrasado ${-due}d` : due === 0 ? 'entrega hoje' : `entrega em ${due}d`}</span>}
+          {selo && <span className={`rounded px-1.5 py-px font-semibold ${selo.tom === 'atrasado' ? 'bg-rose-500/20 text-rose-300' : selo.tom === 'perto' ? 'bg-amber-400/15 text-amber-300' : 'bg-ink-750 text-ink-300'}`}>{selo.texto}</span>}
           {eta !== null && <span className="rounded bg-[var(--color-agent)]/10 px-1.5 py-px text-[var(--color-agent)]">agente ≈{eta < 60 ? `${Math.round(eta)} s` : `${Math.round(eta / 60)} min`}</span>}
           {p.status === 'revisao' && (
             <span className={`flex items-center gap-1 rounded px-1.5 py-px font-semibold ${p.pendentes ? 'bg-amber-400/15 text-amber-300' : 'bg-emerald-400/15 text-emerald-300'}`}>

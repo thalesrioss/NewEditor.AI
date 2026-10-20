@@ -10,3 +10,4 @@ export * from './srt.ts';
 export * from './fonts.ts';
 export * from './profile.ts';
 export * from './cerebro.ts';
+export * from './prazo.ts';
