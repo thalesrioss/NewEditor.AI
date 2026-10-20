@@ -26,7 +26,7 @@ before(async () => {
   await store.load();
 });
 after(async () => {
-  await sleep(600); // o store grava o project.json 400 ms depois do último update
+  await (await import('./store.ts')).store.flush(); // grava o que espera o debounce de 400 ms antes de apagar a pasta
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

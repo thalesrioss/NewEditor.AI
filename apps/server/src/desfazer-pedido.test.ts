@@ -55,9 +55,8 @@ beforeEach(async () => {
   store.apply(projectId, { by: 'human', op: { type: 'set_main', clips: [{ id: 'c1', assetId: 'a1', in: 0.9, out: 10.6, by: 'human' }], removals: [] } });
 });
 
-// Espera o debounce de gravação (400 ms) e o "Pronto" do agente (2,2 s) antes de apagar a pasta.
 after(async () => {
-  await new Promise((r) => setTimeout(r, 2500));
+  await (await import('./store.ts')).store.flush(); // grava o que espera o debounce de 400 ms antes de apagar a pasta
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

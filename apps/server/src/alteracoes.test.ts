@@ -44,9 +44,8 @@ before(async () => {
   });
 });
 
-// Espera o debounce de gravação (400 ms) e o "Pronto" (2,4 s) antes de apagar a pasta.
 after(async () => {
-  await new Promise((r) => setTimeout(r, 2600));
+  await (await import('./store.ts')).store.flush(); // grava o que espera o debounce de 400 ms antes de apagar a pasta
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

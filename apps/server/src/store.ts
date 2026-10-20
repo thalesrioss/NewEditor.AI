@@ -309,15 +309,48 @@ class Store {
 
   private schedulePersist(id: string): void {
     clearTimeout(this.saveTimers.get(id));
-    this.saveTimers.set(id, setTimeout(() => void this.persist(id), 400));
+    this.saveTimers.set(
+      id,
+      setTimeout(() => {
+        this.saveTimers.delete(id);
+        void this.persist(id);
+      }, 400),
+    );
   }
 
-  private async persist(id: string): Promise<void> {
-    const p = this.projects.get(id);
-    if (!p) return;
-    await writeAtomic(path.join(this.dir(id), 'project.json'), JSON.stringify(p, null, 2));
-    const h = this.history.get(id);
-    if (h) await writeAtomic(path.join(this.dir(id), 'history.json'), JSON.stringify(h));
+  /**
+   * Grava agora o que está esperando o debounce e aguarda as gravações em curso.
+   * Para testes e desligamento: depois do `await`, nenhum `project.json` está sendo escrito.
+   */
+  async flush(): Promise<void> {
+    const pendentes = [...this.saveTimers.keys()];
+    for (const id of pendentes) clearTimeout(this.saveTimers.get(id));
+    this.saveTimers.clear();
+    await Promise.all(pendentes.map((id) => this.persist(id)));
+    await Promise.all(this.writing.values());
+  }
+
+  /** Gravações em curso por projeto, encadeadas para nunca escreverem o mesmo `.tmp` ao mesmo tempo. */
+  private writing = new Map<string, Promise<void>>();
+
+  private persist(id: string): Promise<void> {
+    const next = (this.writing.get(id) ?? Promise.resolve()).then(async () => {
+      const p = this.projects.get(id);
+      if (!p) return;
+      await writeAtomic(path.join(this.dir(id), 'project.json'), JSON.stringify(p, null, 2));
+      const h = this.history.get(id);
+      if (h) await writeAtomic(path.join(this.dir(id), 'history.json'), JSON.stringify(h));
+    });
+    // A cadeia não rejeita (uma falha não trava as próximas gravações); quem chamou recebe o erro em `next`.
+    const settled = next.then(
+      () => {},
+      () => {},
+    );
+    this.writing.set(id, settled);
+    void settled.then(() => {
+      if (this.writing.get(id) === settled) this.writing.delete(id);
+    });
+    return next;
   }
 }
 
