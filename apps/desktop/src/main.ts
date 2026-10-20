@@ -188,6 +188,8 @@ async function startServer(): Promise<string> {
 
 function buildMenu(win: BrowserWindow): void {
   const go = (hash: string) => () => void win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`);
+  const edit = (cmd: 'undo' | 'redo' | 'selectAll') => () =>
+    void win.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('ne:edit', { detail: ${JSON.stringify(cmd)} }))`);
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ label: 'Editor Brain', submenu: [{ role: 'about' as const }, { type: 'separator' as const }, { role: 'hide' as const }, { role: 'hideOthers' as const }, { role: 'unhide' as const }, { type: 'separator' as const }, { role: 'quit' as const }] }] : []),
     {
@@ -204,9 +206,21 @@ function buildMenu(win: BrowserWindow): void {
       ],
     },
     {
-      // Sem desfazer/refazer/selecionar tudo aqui: o editor trata ⌘Z, ⇧⌘Z e ⌘A na própria timeline.
+      // ⌘Z/⇧⌘Z/⌘A precisam estar no menu, senão não funcionam nos campos de texto do Mac. O renderer decide
+      // (apps/web/src/lib/editMenu.ts): campo em foco → edita o campo; senão → desfaz/refaz/seleciona na timeline.
       label: 'Editar',
-      submenu: [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { type: 'separator' }, { label: 'Atalhos do teclado', accelerator: 'Shift+/', click: () => void win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }))`) }],
+      submenu: [
+        { label: 'Desfazer', accelerator: 'CmdOrCtrl+Z', click: edit('undo') },
+        { label: 'Refazer', accelerator: 'Shift+CmdOrCtrl+Z', click: edit('redo') },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { label: 'Selecionar tudo', accelerator: 'CmdOrCtrl+A', click: edit('selectAll') },
+        { type: 'separator' },
+        // Sem acelerador: com "Shift+/" o menu engolia o "?" digitado no chat. O "?" fora de campo já abre a folha.
+        { label: 'Atalhos do teclado (?)', click: () => void win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }))`) },
+      ],
     },
     {
       label: 'Ver',
