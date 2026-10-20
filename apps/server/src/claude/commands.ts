@@ -139,7 +139,7 @@ function tools(ctx: Ctx) {
       run: async ({ clip_id, zoom }) => {
         const p = project(ctx);
         const i = p.timeline.main.findIndex((c) => c.id === clip_id);
-        return act(ctx, { by: 'agent', op: { type: 'set_zoom', clipId: clip_id, zoom }, note: `Zoom ${zoom}× no clipe ${i + 1}` }, 'motion', clipStarts(p.timeline)[i] ?? 0, `Zoom ${zoom}×`);
+        return act(ctx, { by: 'agent', op: { type: 'set_zoom', clipId: clip_id, zoom, zoomTo: null }, note: `Zoom ${zoom}× no clipe ${i + 1}` }, 'motion', clipStarts(p.timeline)[i] ?? 0, `Zoom ${zoom}×`);
       },
     }),
     betaZodTool({
