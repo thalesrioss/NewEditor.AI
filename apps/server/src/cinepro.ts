@@ -37,6 +37,16 @@ export const CINEPRO_TIPOS: Record<CineproTipo, string> = { sfx: 'SFX', musica: 
 /** Que abas mostram cada tipo: CinePRO = som; Efeitos = visual; Cor = looks. */
 export type CineproModo = 'som' | 'visual' | 'lut';
 const MODO_TIPOS: Record<CineproModo, CineproTipo[]> = { som: ['sfx', 'musica'], visual: ['overlay', 'transicao', 'flare', 'frame', 'gif', 'lowerthird', 'preset'], lut: ['lut'] };
+/** Nomes que o editor usa para cada aba ("cor" é o nome da aba dos looks na interface; CH-0001). */
+const MODO_ALIAS: Record<string, CineproModo> = { som: 'som', sons: 'som', audio: 'som', sfx: 'som', visual: 'visual', efeitos: 'visual', lut: 'lut', luts: 'lut', cor: 'lut', look: 'lut', looks: 'lut' };
+
+/** Modo da query (com apelidos); desconhecido vira erro 400 com os valores aceitos, nunca 500. */
+export function cineproModo(raw?: string): CineproModo {
+  if (raw === undefined || raw === '') return 'som';
+  const modo = MODO_ALIAS[norm(raw.trim())];
+  if (!modo) throw Object.assign(new Error(`modo "${raw}" desconhecido: use som, visual ou lut (looks / cor)`), { statusCode: 400 });
+  return modo;
+}
 
 export interface CineproItem {
   id: string;
@@ -142,7 +152,8 @@ export async function cineproCatalogo(force = false) {
   return cache;
 }
 
-export async function cineproResumo(modo: CineproModo = 'som') {
+export async function cineproResumo(modoRaw?: string) {
+  const modo = cineproModo(modoRaw);
   const c = await cineproCatalogo();
   const lista = c.itens.filter((i) => MODO_TIPOS[modo].includes(i.tipo));
   const porTipo: Record<string, number> = {};
@@ -153,9 +164,9 @@ export async function cineproResumo(modo: CineproModo = 'som') {
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 /** Busca com filtros: modo (aba), pasta (prefixo da árvore), tipo e texto (nome, pasta, tags); paginada. */
-export async function cineproItens(q: { modo?: CineproModo; pasta?: string; tipo?: string; busca?: string; offset?: number; limit?: number }): Promise<{ total: number; itens: CineproItem[] }> {
+export async function cineproItens(q: { modo?: string; pasta?: string; tipo?: string; busca?: string; offset?: number; limit?: number }): Promise<{ total: number; itens: CineproItem[] }> {
+  const modo = cineproModo(q.modo);
   const c = await cineproCatalogo();
-  const modo = q.modo ?? 'som';
   const terms = norm(q.busca ?? '').split(/\s+/).filter(Boolean);
   const list = c.itens.filter((it) => {
     if (!MODO_TIPOS[modo].includes(it.tipo)) return false;

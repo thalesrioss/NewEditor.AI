@@ -4,16 +4,16 @@ import fsp from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import { SFX_CONCEPTS, type SfxKind } from '@neweditor/core';
 import { beatsForBroll, searchCafe, useCafeClip, type CafeClip } from '../cinefilo.ts';
-import { cineproCatalogo, cineproFile, cineproItens, cineproPick, cineproResumo, cineproThumb, cineproUsar, mime as cineproMime, type CineproModo } from '../cinepro.ts';
+import { cineproCatalogo, cineproFile, cineproItens, cineproPick, cineproResumo, cineproThumb, cineproUsar, mime as cineproMime } from '../cinepro.ts';
 
 export async function rotasCinepro(app: FastifyInstance): Promise<void> {
   // CinePRO dentro do Editor Brain, pela nuvem do CinePRO: catálogo por aba (som / visual / looks), prévia, arquivo e inserção no cursor.
-  app.get<{ Querystring: { modo?: CineproModo } }>('/api/cinepro', async (req) => cineproResumo(req.query.modo ?? 'som'));
+  app.get<{ Querystring: { modo?: string } }>('/api/cinepro', async (req) => cineproResumo(req.query.modo));
   app.post('/api/cinepro/reindexar', async () => {
     const c = await cineproCatalogo(true);
     return { total: c.itens.length, builtAt: c.builtAt };
   });
-  app.get<{ Querystring: { modo?: CineproModo; pasta?: string; tipo?: string; busca?: string; offset?: string; limit?: string } }>('/api/cinepro/itens', async (req) => cineproItens({ modo: req.query.modo, pasta: req.query.pasta, tipo: req.query.tipo, busca: req.query.busca, offset: Number(req.query.offset) || 0, limit: Number(req.query.limit) || 120 }));
+  app.get<{ Querystring: { modo?: string; pasta?: string; tipo?: string; busca?: string; offset?: string; limit?: string } }>('/api/cinepro/itens', async (req) => cineproItens({ modo: req.query.modo, pasta: req.query.pasta, tipo: req.query.tipo, busca: req.query.busca, offset: Number(req.query.offset) || 0, limit: Number(req.query.limit) || 120 }));
   app.get<{ Params: { id: string } }>('/api/cinepro/thumb/:id', async (req, reply) => {
     const t = await cineproThumb(req.params.id);
     if (!t) return reply.code(404).send({ message: 'sem miniatura' });
