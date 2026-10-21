@@ -270,13 +270,17 @@ export interface CaptionEdit {
   split?: boolean;
   /** Proíbe começar legenda nesta palavra: ela vai junto com a anterior (juntar). */
   join?: boolean;
+  /** Altura desta legenda no quadro (0–1, centro do bloco), no lugar da posição global (CH-0014: tela dividida). */
+  position?: number;
+  /** Com `position`: vale para todas as legendas que começam entre `at` e `until` (no bruto, mesmo arquivo) — um trecho. */
+  until?: Seconds;
 }
 
 export interface CaptionEditOp {
   assetId: string;
   at: Seconds;
   /** `text: null` volta ao texto automático (undefined some no JSON do WebSocket — por isso null). */
-  patch: { text?: string | null; hidden?: boolean; force?: boolean; split?: boolean; join?: boolean } | null;
+  patch: { text?: string | null; hidden?: boolean; force?: boolean; split?: boolean; join?: boolean; position?: number | null; until?: Seconds | null } | null;
 }
 
 /** Grafia corrigida pelo editor de uma palavra da transcrição (vale para legenda, lettering e motion). */

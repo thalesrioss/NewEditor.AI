@@ -480,8 +480,12 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
         if (!ed.patch) continue;
         const merged: Record<string, unknown> = { ...prev, ...ed.patch, assetId: ed.assetId, at: prev?.at ?? ed.at };
         // Campo zerado (null/false) sai; ajuste sem nada vira automático de novo.
-        for (const k of ['text', 'hidden', 'force', 'split', 'join']) if (merged[k] === undefined || merged[k] === null || merged[k] === false) delete merged[k];
-        if (merged.text !== undefined || merged.hidden || merged.force || merged.split || merged.join) list.push(merged as unknown as CaptionEdit);
+        for (const k of ['text', 'hidden', 'force', 'split', 'join', 'position', 'until']) if (merged[k] === undefined || merged[k] === null || merged[k] === false) delete merged[k];
+        // Posição por legenda: dentro da área segura; trecho (`until`) só faz sentido com posição e depois de `at`.
+        if (typeof merged.position === 'number' && Number.isFinite(merged.position)) merged.position = Math.round(Math.max(0.06, Math.min(0.94, merged.position)) * 1000) / 1000;
+        else delete merged.position;
+        if (merged.position === undefined || typeof merged.until !== 'number' || !(merged.until > (merged.at as number))) delete merged.until;
+        if (merged.text !== undefined || merged.hidden || merged.force || merged.split || merged.join || merged.position !== undefined) list.push(merged as unknown as CaptionEdit);
       }
       return { ...t, captionEdits: list };
     }
