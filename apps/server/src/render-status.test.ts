@@ -66,7 +66,7 @@ describe('status do render pela API (BL-0103)', () => {
     assert.equal(body.queued, true);
     const { vistos, fim } = await acompanhar(projectId, body.job);
     assert.ok(vistos.includes('rodando'), `deveria passar por rodando (${vistos.join(' → ')})`);
-    assert.equal(fim.estado, 'pronto', fim.mensagem);
+    assert.equal(fim.estado, 'pronto', fim.mensagem ?? '');
     assert.match(fim.file!, /^renders\/.+\.mp4$/);
     assert.ok(fs.existsSync(fim.caminho!), 'arquivo do render deveria existir');
     assert.equal(fim.bytes, fs.statSync(fim.caminho!).size, 'pronto só com o arquivo inteiro no disco');
