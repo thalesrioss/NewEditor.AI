@@ -9,6 +9,7 @@ import {
   letteringAccent,
   letteringCues,
   letteringFromText,
+  templateCliente,
   MOTION_TEMPLATES,
   motionCues,
   NARRATIVE_FUNCTIONS,
@@ -24,6 +25,7 @@ import {
   profileValue,
   type ClientProfile,
   type LetteringSpec,
+  type LetteringTemplate,
   type LetteringStyleId,
   type MotionSpec,
   type MotionTemplateId,
@@ -495,10 +497,10 @@ const letteringText = (sp: LetteringSpec) => {
 function ApplyToAll({ spec, id }: { spec: LetteringSpec; id: string }) {
   const overlays = useEditor((s) => s.project?.timeline.overlays ?? []);
   const sendOp = useEditor((s) => s.sendOp);
-  const others = overlays.filter((o) => o.id !== id && o.source.type === 'lettering' && (o.source.lettering.estilo !== spec.estilo || o.source.lettering.accent !== spec.accent));
+  const others = overlays.filter((o) => o.id !== id && o.source.type === 'lettering' && (o.source.lettering.estilo !== spec.estilo || o.source.lettering.accent !== spec.accent || JSON.stringify(o.source.lettering.template) !== JSON.stringify(spec.template)));
   if (!others.length) return null;
   return (
-    <Button size="sm" variant="ghost" className="w-full" onClick={() => others.forEach((o) => o.source.type === 'lettering' && sendOp({ op: { type: 'set_overlay_lettering', id: o.id, lettering: { ...o.source.lettering, estilo: spec.estilo, accent: spec.accent } }, note: `Estilo ${LETTERING_STYLES[spec.estilo].label} em todos os letterings` }))}>
+    <Button size="sm" variant="ghost" className="w-full" onClick={() => others.forEach((o) => o.source.type === 'lettering' && sendOp({ op: { type: 'set_overlay_lettering', id: o.id, lettering: { ...o.source.lettering, estilo: spec.estilo, accent: spec.accent, template: spec.template } }, note: `Estilo ${LETTERING_STYLES[spec.estilo].label} em todos os letterings` }))}>
       Aplicar a todos os letterings ({others.length})
     </Button>
   );
@@ -551,6 +553,7 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
             </button>
           ))}
         </div>
+        {spec.estilo === 'cliente' && <TemplateCliente spec={spec} commit={commit} />}
         <label className="flex items-center justify-between text-ui-xs text-ink-300">
           Cor de acento
           <input type="color" value={letteringAccent(spec)} onChange={(e) => commit({ ...spec, accent: e.target.value }, 'Mudou a cor do lettering')} className="h-6 w-8 cursor-pointer rounded border border-ink-600 bg-transparent" />
@@ -560,6 +563,40 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
         {spec.refName && <p className="text-ui-xs text-ink-400">Referência: {spec.refName}</p>}
       </Section>
     </>
+  );
+}
+
+/** Template do cliente (CH-0012): fonte instalada no Mac, peso, cor, tracking, caixa alta, tamanho; sem animação. */
+function TemplateCliente({ spec, commit }: { spec: LetteringSpec; commit: (next: LetteringSpec, note: string) => void }) {
+  const tp = templateCliente(spec.template);
+  const set = (p: Partial<LetteringTemplate>, note: string) => commit({ ...spec, template: { ...spec.template, ...p } }, note);
+  const [font, setFont] = useState(spec.template?.font ?? 'Helvetica Neue');
+  useEffect(() => setFont(spec.template?.font ?? 'Helvetica Neue'), [spec.template?.font]);
+  return (
+    <div className="space-y-2 rounded-[var(--radius-ui-md)] border border-ink-700 p-2">
+      <label className="block space-y-1 text-ui-xs text-ink-300">
+        Fonte (nome instalado no Mac)
+        <input value={font} onChange={(e) => setFont(e.target.value)} onBlur={() => font.trim() !== (spec.template?.font ?? '') && set({ font: font.trim() || undefined }, `Lettering em ${font.trim() || 'Helvetica Neue'}`)} onKeyDown={(e) => e.stopPropagation()} className="input py-1 text-ui-xs" aria-label="Fonte do template do cliente" />
+      </label>
+      <label className="flex items-center justify-between text-ui-xs text-ink-300">
+        Peso
+        <select value={tp.weight} onChange={(e) => set({ weight: Number(e.target.value) }, `Peso ${e.target.value} no lettering`)} className="input w-24 py-1 text-ui-xs">
+          {[300, 400, 500, 600, 700, 800, 900].map((w) => (
+            <option key={w} value={w}>
+              {w}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center justify-between text-ui-xs text-ink-300">
+        Cor do texto
+        <input type="color" value={tp.color.length === 4 ? `#${[...tp.color.slice(1)].map((c) => c + c).join('')}` : tp.color} onChange={(e) => set({ color: e.target.value.toUpperCase() }, 'Mudou a cor do template')} className="h-6 w-8 cursor-pointer rounded border border-ink-600 bg-transparent" />
+      </label>
+      <RangeField label="Espaço entre letras" value={tp.tracking} min={-0.2} max={0.3} step={0.01} unit=" em" resetTo={0} onCommit={(v) => set({ tracking: v }, `Tracking ${v} em no lettering`)} />
+      <RangeField label="Tamanho" value={tp.size} min={2} max={16} step={0.1} unit="%" resetTo={6} onCommit={(v) => set({ size: v }, `Lettering em ${v}% da altura`)} />
+      <Toggle label="Caixa alta" on={tp.upper} onChange={(v) => set({ upper: v }, v ? 'Lettering em caixa alta' : 'Lettering em caixa mista')} />
+      <Toggle label="Sombra" on={tp.shadow} onChange={(v) => set({ shadow: v }, v ? 'Sombra no lettering' : 'Lettering sem sombra')} />
+    </div>
   );
 }
 

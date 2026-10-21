@@ -10,7 +10,7 @@ import type { Seconds, Timeline } from './types.ts';
 
 export type CaptionStyle = 'reels' | 'frase';
 
-export type CaptionFont = 'inter' | 'montserrat' | 'bebas' | 'anton' | 'playfair';
+export type CaptionFont = 'inter' | 'montserrat' | 'bebas' | 'anton' | 'playfair' | 'helvetica';
 /** Animação de entrada do bloco (função do tempo: igual no preview e no export). */
 export type CaptionAnim = 'none' | 'pop' | 'slide' | 'fade' | 'type';
 export type CaptionAnimOut = 'none' | 'fade' | 'slide';
@@ -25,6 +25,8 @@ export const CAPTION_FONTS: Record<CaptionFont, { label: string; family: string 
   bebas: { label: 'Bebas Neue', family: "'Bebas Neue','Oswald',Impact,sans-serif" },
   anton: { label: 'Anton', family: "'Anton',Impact,sans-serif" },
   playfair: { label: 'Playfair Display', family: "'Playfair Display',Georgia,serif" },
+  // Fonte do sistema (macOS), não empacotada: a licença não permite (ADR-005). Preview e export rodam no Mac (CH-0012).
+  helvetica: { label: 'Helvetica Neue', family: "'Helvetica Neue',Helvetica,Arial,sans-serif" },
 };
 
 export interface CaptionSettings {
@@ -146,7 +148,7 @@ export function captionInlineStyle(s: CaptionSettings, anim?: { t: Seconds; star
   }
   const transform = `transform:translateY(calc(-50% + var(--u)*${r2(shift)})) rotate(${d.rotation}deg) scale(${r2(scale)});`;
   const deco = d.underline ? 'text-decoration:underline;text-underline-offset:0.12em;' : '';
-  return `top:${(d.position * 100).toFixed(2)}%;left:${left.toFixed(2)}%;right:${right.toFixed(2)}%;font-family:${CAPTION_FONTS[d.font].family};font-weight:${d.weight};font-style:${d.italic ? 'italic' : 'normal'};font-size:calc(var(--u)*${d.size});color:${d.color};--hl:${d.accent};letter-spacing:${d.letterSpacing}em;line-height:${d.lineHeight};text-shadow:${sh};opacity:${r2(opacity)};${transform}${deco}${stroke}${box}`;
+  return `top:${(d.position * 100).toFixed(2)}%;left:${left.toFixed(2)}%;right:${right.toFixed(2)}%;font-family:${(CAPTION_FONTS[d.font] ?? CAPTION_FONTS.inter).family};font-weight:${d.weight};font-style:${d.italic ? 'italic' : 'normal'};font-size:calc(var(--u)*${d.size});color:${d.color};--hl:${d.accent};letter-spacing:${d.letterSpacing}em;line-height:${d.lineHeight};text-shadow:${sh};opacity:${r2(opacity)};${transform}${deco}${stroke}${box}`;
 }
 
 /** A legenda está dentro da área segura do quadro? (QC: `legenda-fora-do-quadro`.) */

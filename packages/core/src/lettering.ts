@@ -9,7 +9,7 @@
  */
 import type { SfxCue } from './sfx.ts';
 
-export type LetteringStyleId = 'auto-serifa' | 'auto-serifa-bold' | 'auto-condensada' | 'apple' | 'glow' | 'marca-texto' | 'impacto' | 'typewriter' | 'pop-box';
+export type LetteringStyleId = 'auto-serifa' | 'auto-serifa-bold' | 'auto-condensada' | 'apple' | 'glow' | 'marca-texto' | 'impacto' | 'typewriter' | 'pop-box' | 'cliente';
 
 export const LETTERING_STYLES: Record<LetteringStyleId, { label: string; desc: string; accent?: string }> = {
   'auto-serifa': { label: 'Auto · Serifa itálica', desc: 'Apoio em sans e a palavra-chave grande em serifa itálica, encavaladas; cada palavra sai do desfoque.' },
@@ -21,7 +21,31 @@ export const LETTERING_STYLES: Record<LetteringStyleId, { label: string; desc: s
   impacto: { label: 'Impacto', desc: 'Caixa alta condensada, palavra por palavra em escala; a chave em cor.', accent: '#FFE11A' },
   typewriter: { label: 'Máquina de escrever', desc: 'Letra por letra, com cursor, no ritmo da fala.' },
   'pop-box': { label: 'Pop com caixa', desc: 'A palavra-chave salta dentro de uma caixa colorida.', accent: '#E8262C' },
+  cliente: { label: 'Template do cliente', desc: 'Fonte, peso, cor e espaçamento do cliente; entra e sai seco, sem animação.' },
 };
+
+/**
+ * Template do cliente (estilo `cliente`, CH-0012): o equivalente ao Text+ salvo do editor. Tudo opcional; sem valor,
+ * Helvetica Neue 700, branco, sem tracking, caixa mista, sem sombra. `font` é o nome da família instalada no Mac
+ * (ex. "Helvetica Neue"); só letras, números, espaço e hífen passam.
+ */
+export interface LetteringTemplate {
+  font?: string;
+  /** 100–900. */
+  weight?: number;
+  /** Cor do texto (#RGB ou #RRGGBB). */
+  color?: string;
+  /** Distância entre letras em em (ex. −0,06). */
+  tracking?: number;
+  upper?: boolean;
+  /** Tamanho em % da altura do quadro (padrão 6). */
+  size?: number;
+  shadow?: boolean;
+  italic?: boolean;
+}
+
+/** Template do Guilherme Alvares (CH-0012): Helvetica Neue Bold, caixa alta, vermelho 213/24/0, tracking −0,06. */
+export const TEMPLATE_EXEMPLO: LetteringTemplate = { font: 'Helvetica Neue', weight: 700, color: '#D51800', tracking: -0.06, upper: true };
 
 export interface LetteringWord {
   text: string;
@@ -48,6 +72,8 @@ export interface LetteringSpec {
   align?: 'left' | 'center' | 'right';
   /** Centro horizontal livre (0–1), quando o editor arrasta o lettering no player; vale com `align` centro. */
   x?: number;
+  /** Só no estilo `cliente`. */
+  template?: LetteringTemplate;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +111,7 @@ const TYPO: Record<LetteringStyleId, { apoio: Face; destaque: Face; flow?: boole
   'marca-texto': { apoio: { font: APPLE, weight: 400, size: 4.4, track: -0.02, cw: 0.54 }, destaque: { font: APPLE, weight: 800, size: 4.4, track: -0.02, cw: 0.6 }, flow: true, overlap: 0 },
   impacto: { apoio: { font: IMPACT, weight: 400, size: 6, upper: true, track: 0, cw: 0.48 }, destaque: { font: IMPACT, weight: 400, size: 8.6, upper: true, track: 0, cw: 0.48 }, overlap: -0.02 },
   typewriter: { apoio: { font: TYPE, weight: 400, size: 4, track: 0, cw: 0.6 }, destaque: { font: TYPE, weight: 700, size: 4.6, track: 0, cw: 0.62 }, flow: true, overlap: 0 },
+  cliente: { apoio: { font: "'Helvetica Neue',Helvetica,Arial,sans-serif", weight: 700, size: 6, track: 0, cw: 0.6 }, destaque: { font: "'Helvetica Neue',Helvetica,Arial,sans-serif", weight: 700, size: 6, track: 0, cw: 0.6 }, overlap: 0 },
   'pop-box': { apoio: { font: SANS, weight: 600, size: 3.9, track: -0.03, cw: 0.58 }, destaque: { font: SANS, weight: 800, size: 5.8, upper: true, track: -0.01, cw: 0.66 }, overlap: -0.04 },
 };
 
@@ -126,6 +153,7 @@ export function letteringAccent(spec: LetteringSpec): string {
  */
 export function letteringFrameHtml(spec: LetteringSpec, t: number, dur: number, wu: number, position: number): string {
   if (t < 0 || t >= dur || !spec.words.length) return '';
+  if (spec.estilo === 'cliente') return clienteHtml(spec, wu, position);
   const typo = TYPO[spec.estilo] ?? TYPO['auto-serifa'];
   const accent = letteringAccent(spec);
   const lines = [...new Set(spec.words.map((w) => w.line))].sort((a, b) => a - b).map((l) => spec.words.filter((w) => w.line === l));
@@ -246,6 +274,50 @@ export function letteringFrameHtml(spec: LetteringSpec, t: number, dur: number, 
   return `<div class="ne-lt" style="top:${r((spec.y ?? position) * 100, 2)}%;${side}text-shadow:${shadow}${haze};opacity:${r(1 - ex)};filter:blur(${r(ex * 0.25)}em);transform:${shift}translateY(calc(-50% - ${r(ex * 0.4)}em))">${html}</div>`;
 }
 
+const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+
+/** Template do cliente com os valores conferidos (nada do spec entra cru no HTML/CSS). */
+export function templateCliente(tpl: LetteringTemplate | undefined) {
+  const t = tpl ?? {};
+  const name = typeof t.font === 'string' ? t.font.replace(/[^\p{L}\p{N} -]/gu, '').trim().slice(0, 60) : '';
+  return {
+    family: `${name ? `'${name}',` : ''}'Helvetica Neue',Helvetica,Arial,sans-serif`,
+    weight: Math.round(num(t.weight, 100, 900, 700) / 100) * 100,
+    color: typeof t.color === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(t.color) ? t.color : '#FFFFFF',
+    tracking: num(t.tracking, -0.3, 1, 0),
+    upper: t.upper === true,
+    size: num(t.size, 1, 30, 6),
+    shadow: t.shadow === true,
+    italic: t.italic === true,
+  };
+}
+
+/**
+ * Estilo `cliente`: troca seca, sem animação — o texto inteiro aparece no 1º quadro e some depois do último, igual
+ * ao template do editor. As linhas do spec viram linhas; a palavra-chave usa a cor de acento só se houver `accent`.
+ */
+function clienteHtml(spec: LetteringSpec, wu: number, position: number): string {
+  const tp = templateCliente(spec.template);
+  const lines = [...new Set(spec.words.map((w) => w.line))].sort((a, b) => a - b).map((l) => spec.words.filter((w) => w.line === l));
+  const txt = (w: LetteringWord) => {
+    const x = w.text.replace(/\.\.\.$|…$/, '');
+    return tp.upper ? x.toLocaleUpperCase('pt-BR') : x;
+  };
+  // Cabe na largura (mesma estimativa dos outros estilos; Helvetica Bold ≈ 0,7 em por letra em caixa alta, 0,58 em mista).
+  const cw = Math.max(0.2, (tp.upper ? 0.7 : 0.58) + tp.tracking);
+  const maxW = Math.max(...lines.map((ws) => ws.reduce((a, w) => a + (txt(w).length + 0.3) * cw * tp.size, 0)));
+  const k = Math.min(1, (wu * 0.9) / Math.max(1, maxW));
+  const html = lines
+    .map((ws) => `<div>${ws.map((w) => (w.destaque && spec.accent && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(spec.accent) ? `<span style="color:${spec.accent}">${esc(txt(w))}</span>` : esc(txt(w)))).join(' ')}</div>`)
+    .join('');
+  const al = spec.align ?? 'center';
+  const side = al === 'center' ? '' : al === 'left' ? 'left:7%;right:auto;text-align:left;' : 'right:7%;left:auto;text-align:right;';
+  const shift = spec.x !== undefined && al === 'center' ? `translateX(${r((spec.x - 0.5) * 100, 2)}%) ` : '';
+  const face = `font-family:${tp.family};font-weight:${tp.weight};${tp.italic ? 'font-style:italic;' : ''}font-size:calc(var(--u)*${r(tp.size * k, 2)});letter-spacing:${tp.tracking}em;line-height:1.05;white-space:nowrap;color:${tp.color};`;
+  const shadow = tp.shadow ? 'text-shadow:0 0.05em 0.3em rgba(0,0,0,.62);' : 'text-shadow:none;';
+  return `<div class="ne-lt" style="top:${r((spec.y ?? position) * 100, 2)}%;${side}${face}${shadow}transform:${shift}translateY(-50%)">${html}</div>`;
+}
+
 export const LETTERING_CSS = `
 .ne-lt { position:absolute; left:0; right:0; text-align:center; color:#fff; font-size:calc(var(--u)*3); font-variant-numeric:lining-nums; }
 .ne-lt > div { position:relative; }
@@ -265,6 +337,8 @@ export function letteringCues(spec: LetteringSpec, dur: number): SfxCue[] {
   const key = spec.words.filter((w) => w.destaque);
   const first = key[0];
   switch (spec.estilo) {
+    case 'cliente':
+      break;
     case 'glow':
     case 'pop-box':
       if (first) add(first.at - 0.01, 'pop', 0.42);
