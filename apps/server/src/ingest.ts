@@ -26,7 +26,7 @@ export async function ingest(projectId: string, filePath: string, role?: MediaAs
   saveAsset(projectId, asset);
   // Formato e fps já na leitura do arquivo, não no fim da preparação: o ASR leva minutos (ou falha) — CH-0005.
   if (asset.role === 'fala') inheritFormat(projectId, asset);
-  store.log(projectId, 'agent', `Recebi ${asset.name} (${fmtDur(asset.duration)}${asset.width ? `, ${asset.width}×${asset.height}` : ''}) como ${asset.role === 'fala' ? (segundaBruta ? 'fala (2ª bruta — entra na decupagem junto)' : 'fala principal') : 'B-roll'}`);
+  store.log(projectId, 'agent', `Recebi ${asset.name} (${fmtDur(asset.duration)}${asset.width ? `, ${asset.width}×${asset.height}` : ''}) como ${asset.role === 'fala' ? (segundaBruta ? 'fala (2ª bruta — entra na decupagem junto)' : 'fala principal') : asset.role === 'motion' ? 'motion' : 'B-roll'}`);
   return prepare(projectId, asset);
 }
 
