@@ -391,6 +391,27 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_captions':
       return { ...t, captions: op.captions };
 
+    case 'set_overlay_speed': {
+      if (op.speed !== undefined && op.speed !== null && !(op.speed >= 0.25 && op.speed <= 4)) throw new OpError('set_overlay_speed: velocidade entre 0,25 e 4');
+      if (op.freeze !== undefined && op.freeze !== null && !(op.freeze >= 0 && op.freeze <= 10)) throw new OpError('set_overlay_speed: congelamento entre 0 e 10 s');
+      if (!t.overlays.some((o) => o.id === op.id && o.source.type === 'media')) throw new OpError('set_overlay_speed: overlay de mídia não encontrado');
+      return {
+        ...t,
+        overlays: t.overlays.map((o) => {
+          if (o.id !== op.id) return o;
+          const next: OverlayItem = { ...o };
+          if (op.speed !== undefined) {
+            if (op.speed === null || Math.abs(op.speed - 1) < 1e-6) delete next.speed;
+            else next.speed = Math.round(op.speed * 10000) / 10000;
+          }
+          if (op.freeze !== undefined) {
+            if (op.freeze === null || op.freeze <= 0) delete next.freeze;
+            else next.freeze = Math.round(op.freeze * 1000) / 1000;
+          }
+          return next;
+        }),
+      };
+    }
     case 'set_overlay_text':
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id && o.source.type === 'text' ? { ...o, source: { type: 'text' as const, text: op.text } } : o)) };
     case 'set_overlay_motion':
@@ -548,4 +569,21 @@ export function cutEndAfter(t: Timeline, at: Seconds): Seconds {
     if (at < end - 0.02) return end;
   }
   return starts.length ? starts[starts.length - 1]! + clipDuration(t.main[t.main.length - 1]!) : at;
+}
+
+// --- Velocidade e congelamento do B-roll (CH-0004) ----------------------------------------------
+
+/** Quanto da fonte o overlay toca antes de congelar (s de fonte) e por quanto tempo da timeline ele anda. */
+export function overlayPlayback(o: Pick<OverlayItem, 'duration' | 'speed' | 'freeze'>, duration = o.duration): { speed: number; moving: Seconds; frozen: Seconds; sourceSpan: Seconds } {
+  const speed = o.speed && o.speed > 0 ? o.speed : 1;
+  const frozen = Math.min(Math.max(0, o.freeze ?? 0), duration);
+  const moving = Math.max(0, duration - frozen);
+  return { speed, moving, frozen, sourceSpan: moving * speed };
+}
+
+/** Instante da fonte mostrado `local` s depois do início do overlay (com velocidade e congelamento). */
+export function overlaySourceTime(o: Pick<OverlayItem, 'duration' | 'speed' | 'freeze' | 'source'>, local: Seconds): Seconds {
+  const srcIn = o.source.type === 'media' ? o.source.in : 0;
+  const { speed, moving } = overlayPlayback(o);
+  return srcIn + Math.min(Math.max(0, local), moving) * speed;
 }

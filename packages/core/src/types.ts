@@ -180,6 +180,10 @@ export interface OverlayItem {
   mix?: AudioMix;
   /** SFX de um motion de mídia (render do Motion Studio): cues lidos do film.js, sintetizados aqui. */
   sfx?: import('./sfx.ts').SfxCue[];
+  /** Velocidade do B-roll (1 = normal; 0,25–4): 0,5 = câmera lenta, o mesmo trecho da fonte dura o dobro. */
+  speed?: number;
+  /** Congela o quadro nos últimos `freeze` s do overlay (a duração na timeline não muda). */
+  freeze?: Seconds;
 }
 
 export interface Timeline {
@@ -395,6 +399,8 @@ export type TimelineOp =
   | { type: 'remove_overlay'; id: string }
   | { type: 'set_captions'; captions: import('./text.ts').CaptionSettings }
   | { type: 'set_overlay_mix'; id: string; mix: AudioMix; sourceIn?: Seconds }
+  /** Velocidade e congelamento do B-roll (CH-0004); null ou ausente = como estava (null volta ao normal). */
+  | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
