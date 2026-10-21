@@ -2,9 +2,9 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
-import { SFX_CONCEPTS, type SfxKind } from '@neweditor/core';
+import { localLutPath, SFX_CONCEPTS, type SfxKind } from '@neweditor/core';
 import { beatsForBroll, searchCafe, useCafeClip, type CafeClip } from '../cinefilo.ts';
-import { cineproCatalogo, cineproFile, cineproItens, cineproPick, cineproResumo, cineproThumb, cineproUsar, mime as cineproMime } from '../cinepro.ts';
+import { cineproCatalogo, cineproFile, localCubeFile, cineproItens, cineproPick, cineproResumo, cineproThumb, cineproUsar, mime as cineproMime } from '../cinepro.ts';
 
 export async function rotasCinepro(app: FastifyInstance): Promise<void> {
   // CinePRO dentro do Editor Brain, pela nuvem do CinePRO: catálogo por aba (som / visual / looks), prévia, arquivo e inserção no cursor.
@@ -35,6 +35,11 @@ export async function rotasCinepro(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/api/cinepro/lut/:id', async (req, reply) => {
     const { file } = await cineproFile(req.params.id);
     return reply.type('text/plain').header('cache-control', 'max-age=86400').send(fs.createReadStream(file));
+  });
+  // Um look do disco (`local:<caminho>`, CH-0009), pelo caminho na query: caminho longo não cabe no parâmetro da rota.
+  app.get<{ Querystring: { id?: string } }>('/api/cinepro/lut-local', async (req, reply) => {
+    const file = await localCubeFile(localLutPath(req.query.id) ?? '');
+    return reply.type('text/plain').header('cache-control', 'no-cache').send(fs.createReadStream(file));
   });
   app.get<{ Querystring: { kind: string; seed?: string } }>('/api/cinepro/pick', async (req, reply) => {
     const it = SFX_CONCEPTS[req.query.kind as SfxKind] ? await cineproPick(req.query.kind as SfxKind, Number(req.query.seed) || 0) : null;

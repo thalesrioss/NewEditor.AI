@@ -4,8 +4,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance } from 'fastify';
-import { OpError, type ClientMessage, type ProjectStatus } from '@neweditor/core';
+import { normalizeGradeLut, OpError, type ClientMessage, type ProjectStatus } from '@neweditor/core';
 import { saveGabarito } from '../benchmark.ts';
+import { cineproCube } from '../cinepro.ts';
 import { estimateRemaining } from '../estimate.ts';
 import { ingest, rebuild, setRole } from '../ingest.ts';
 import { cancelJobsFor, enqueue } from '../jobs.ts';
@@ -111,6 +112,12 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
   // Operação avulsa por HTTP (o mesmo `apply` do WebSocket; útil para scripts e para o ⌘K).
   app.post<{ Params: { id: string }; Body: { op: Parameters<typeof store.apply>[1]['op']; note?: string; by?: 'human' | 'agent' } }>('/api/projects/:id/op', async (req) => {
     if (!req.body?.op?.type) throw erro('op obrigatória');
+    // Look de um .cube do disco (`lut: { path }`, CH-0009): confere o arquivo antes, para não sair render sem o look.
+    const op = req.body.op;
+    if (op.type === 'set_grade' && op.grade?.lut) {
+      const lut = normalizeGradeLut(op.grade).lut!;
+      if (lut.path) await cineproCube(lut.id);
+    }
     store.apply(req.params.id, { by: req.body.by ?? 'human', op: req.body.op, note: req.body.note });
     return { ok: true };
   });

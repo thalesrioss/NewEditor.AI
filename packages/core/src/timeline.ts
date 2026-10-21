@@ -1,5 +1,6 @@
 import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
+import { normalizeGradeLut } from './color.ts';
 
 /** Menor duração de clipe que mantemos; abaixo disso é resíduo de corte. */
 export const MIN_CLIP: Seconds = 0.04;
@@ -392,7 +393,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
 
     case 'set_grade': {
       const grades = { ...(t.grades ?? {}) };
-      if (op.grade) grades[op.assetId] = op.grade;
+      if (op.grade) grades[op.assetId] = normalizeGradeLut(op.grade);
       else delete grades[op.assetId];
       return { ...t, grades };
     }

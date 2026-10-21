@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { anchorAt, cutEndAfter, parseCube, SFX_CONCEPTS, timelineDuration, type CubeLut, type SfxKind } from '@neweditor/core';
+import { anchorAt, cutEndAfter, localLutPath, parseCube, SFX_CONCEPTS, timelineDuration, type CubeLut, type SfxKind } from '@neweditor/core';
 import { DATA_ROOT } from './config.ts';
 import { ingest } from './ingest.ts';
 import { run } from './media.ts';
@@ -264,9 +264,32 @@ export function mime(file: string): string {
   );
 }
 
+/**
+ * Um .cube do disco (look fora do catálogo, ex. a pasta "Luts Marcelo S'antana" do pack — CH-0009): caminho
+ * absoluto, extensão .cube, arquivo que existe e que o parseCube lê. Erro 400 com a mensagem para o editor.
+ */
+export async function localCubeFile(file: string): Promise<string> {
+  const bad = (m: string) => Object.assign(new Error(m), { statusCode: 400 });
+  if (!path.isAbsolute(file)) throw bad(`lut.path precisa ser caminho absoluto (veio "${file}")`);
+  if (path.extname(file).toLowerCase() !== '.cube') throw bad('lut.path precisa ser um arquivo .cube');
+  const st = await fsp.stat(file).catch(() => null);
+  if (!st?.isFile()) throw bad(`não achei o .cube em "${file}"`);
+  return file;
+}
+
 const cubes = new Map<string, CubeLut>();
-/** Um look do CinePRO (.cube) lido e em memória — o export e o preview usam o mesmo. */
+/** Um look (.cube) lido e em memória — do CinePRO pelo id, ou do disco (`local:<caminho>`); o export e o preview usam o mesmo. */
 export async function cineproCube(id: string): Promise<CubeLut> {
+  const local = localLutPath(id);
+  if (local) {
+    const file = await localCubeFile(local);
+    const key = `${id}@${(await fsp.stat(file)).mtimeMs}`;
+    const hit = cubes.get(key);
+    if (hit) return hit;
+    const cube = parseCube(await fsp.readFile(file, 'utf8'));
+    cubes.set(key, cube);
+    return cube;
+  }
   const hit = cubes.get(id);
   if (hit) return hit;
   const { item, file } = await cineproFile(id);
