@@ -101,7 +101,9 @@ describe('render', () => {
     assert.ok(!regras.includes('loudness'), `não esperava loudness: ${JSON.stringify(qc.issues)}`);
     assert.ok(!regras.includes('duracao-render'), `não esperava duracao-render: ${JSON.stringify(qc.issues)}`);
     const lufs = qc.render?.lufs;
-    assert.ok(lufs !== undefined && lufs >= -15.5 && lufs <= -12.5, `lufs ${lufs}`);
+    assert.ok(lufs !== undefined && Math.abs(lufs + 14) <= 0.5, `lufs ${lufs}`);
+    assert.ok(!regras.includes('pico'), `não esperava pico: ${JSON.stringify(qc.issues)}`);
+    assert.ok((qc.render?.truePeak ?? 0) <= -1, `pico ${qc.render?.truePeak}`);
     assert.ok(Math.abs((qc.render?.duration ?? 0) - 2) < 2 / 30, `duração ${qc.render?.duration}`);
   });
   test('QC do render bloqueia arquivo com duração diferente da esperada (duracao-render)', async () => {
