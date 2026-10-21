@@ -24,8 +24,21 @@ export async function ingest(projectId: string, filePath: string, role?: MediaAs
   const asset: MediaAsset = { id: uid('ast'), name: path.basename(filePath), path: filePath, ...meta, role: role ?? ((!hasFala && meta.hasAudio) || segundaBruta ? 'fala' : 'broll') };
   await fs.mkdir(path.join(store.dir(projectId), asset.id), { recursive: true });
   saveAsset(projectId, asset);
+  // Formato e fps já na leitura do arquivo, não no fim da preparação: o ASR leva minutos (ou falha) — CH-0005.
+  if (asset.role === 'fala') inheritFormat(projectId, asset);
   store.log(projectId, 'agent', `Recebi ${asset.name} (${fmtDur(asset.duration)}${asset.width ? `, ${asset.width}×${asset.height}` : ''}) como ${asset.role === 'fala' ? (segundaBruta ? 'fala (2ª bruta — entra na decupagem junto)' : 'fala principal') : 'B-roll'}`);
   return prepare(projectId, asset);
+}
+
+/**
+ * O primeiro vídeo de fala define o formato da timeline vazia; se o formato foi escolhido (à mão ou pela
+ * tarefa, `formatoManual`), herda só o fps do bruto.
+ */
+function inheritFormat(projectId: string, asset: MediaAsset): void {
+  const tl = store.get(projectId).timeline;
+  if (tl.main.length) return;
+  if (!tl.formatoManual && asset.width && asset.height) store.setFormat(projectId, { width: asset.width, height: asset.height, fps: asset.fps ?? 30 });
+  else if (tl.formatoManual && asset.fps) store.setFormat(projectId, { fps: asset.fps });
 }
 
 /** Montagem ainda crua: nenhum corte, só os brutos inteiros postos pelo sistema. */
@@ -124,9 +137,7 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
   const p = store.get(projectId);
   const cur = p.assets.find((x) => x.id === asset.id) ?? asset;
   if (cur.role === 'fala' && !p.timeline.main.some((c) => c.assetId === asset.id) && (p.timeline.main.length === 0 || isRaw(p.timeline))) {
-    // O primeiro vídeo define o formato, a não ser que o formato tenha sido escolhido (à mão ou pela tarefa).
-    if (p.timeline.main.length === 0 && !p.timeline.formatoManual && asset.width && asset.height) store.setFormat(projectId, { width: asset.width, height: asset.height, fps: asset.fps ?? 30 });
-    else if (p.timeline.main.length === 0 && p.timeline.formatoManual && asset.fps) store.setFormat(projectId, { fps: asset.fps });
+    inheritFormat(projectId, asset); // retomada de importação antiga (backfill) passa só por aqui
     store.apply(projectId, {
       by: 'system',
       op: { type: 'set_main', clips: [...p.timeline.main, { id: uid('clip'), assetId: asset.id, in: 0, out: asset.duration, by: 'system', reason: 'material bruto' }], removals: [] },
