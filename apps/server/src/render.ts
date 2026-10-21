@@ -196,8 +196,9 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       if ((o.role === 'broll' || o.role === 'motion') && (a.kind === 'video' || a.kind === 'image')) {
         // Motion do Studio (alfa): encaixa no quadro sem cortar, fundo transparente; B-roll preenche e leva a cor.
         const fit = a.alpha ? `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0.0,format=yuva420p` : `${coverFilter(a, W, H, o.framing)}${lutFilter(a.id)}`;
-        parts.push(`[${idx}:v:0]${overlayTiming(o, srcIn, start, d)},${fit},setsar=1,fps=${fps}[ov${n}]`);
-        parts.push(`[${vCur}][ov${n}]overlay=enable='between(t,${start},${end})':eof_action=pass[vo${n}]`);
+        const w = overlayFrames(start, end, fps);
+        parts.push(`[${idx}:v:0]${overlayTiming(o, srcIn, w.at, d)},${fit},setsar=1,fps=${fps},tpad=stop_mode=clone:stop_duration=${(2 / fps).toFixed(4)}[ov${n}]`);
+        parts.push(`[${vCur}][ov${n}]overlay=enable='${w.enable}':eof_action=pass[vo${n}]`);
         vCur = `vo${n}`;
         videoTouched = true;
       } else if ((o.role === 'sfx' || o.role === 'music') && a.hasAudio) {
@@ -296,6 +297,17 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
   parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
   if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
   return parts.join(',');
+}
+
+/**
+ * Janela de um overlay de imagem no grid de quadros da timeline (CH-0008): do quadro round(início·fps) até o quadro
+ * antes de round(fim·fps), com a fronteira no meio do quadro. Overlays encostados (fim de um = início do outro)
+ * dividem os quadros sem vão nem sobreposição. `at` = início do stream no quadro exato.
+ */
+export function overlayFrames(start: number, end: number, fps: number): { f0: number; f1: number; at: number; enable: string } {
+  const f0 = Math.round(start * fps);
+  const f1 = Math.max(f0 + 1, Math.round(end * fps));
+  return { f0, f1, at: f0 / fps, enable: `gte(t,${((f0 - 0.5) / fps).toFixed(6)})*lt(t,${((f1 - 0.5) / fps).toFixed(6)})` };
 }
 
 /**
