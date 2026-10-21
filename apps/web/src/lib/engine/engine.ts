@@ -168,8 +168,8 @@ export class Engine {
       if (a?.kind === 'video') {
         const srcT = cam ? loc.sourceTime + (cam.syncOffset ?? 0) : loc.sourceTime;
         const f = this.video(a.id)?.frameAt(srcT, this.playing ? 10 : 2);
-        const reframe = !!tl.reframe && !!loc.clip.framing && !!a.width && !!a.height && a.width / a.height > tl.width / tl.height + 0.02;
-        if (f) layers.push({ frame: f, fit: reframe ? 'reframe' : 'contain', zoom: zoomAt(loc.clip, loc.local), cx: loc.clip.framing?.x, grade: gradeOf(loc.clip.assetId) });
+        const reframe = !!tl.reframe && loc.clip.framing?.x !== undefined && !!a.width && !!a.height && a.width / a.height > tl.width / tl.height + 0.02;
+        if (f) layers.push({ frame: f, fit: reframe ? 'reframe' : 'contain', zoom: zoomAt(loc.clip, loc.local), cx: loc.clip.framing?.x, cy: loc.clip.framing?.y, grade: gradeOf(loc.clip.assetId) });
         else complete = false;
       }
     }

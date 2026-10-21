@@ -323,8 +323,17 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
         main: t.main.map((c) => {
           if (c.id !== op.clipId) return c;
           const next: Clip = { ...c };
-          if (op.x === null) delete next.framing;
-          else next.framing = { x: Math.min(1, Math.max(0, op.x)) };
+          const framing = { ...c.framing };
+          for (const k of ['x', 'y'] as const) {
+            const v = op[k];
+            if (v === null) delete framing[k];
+            else if (v !== undefined) {
+              if (!Number.isFinite(v)) throw new OpError(`set_framing: ${k} entre 0 e 1`);
+              framing[k] = Math.min(1, Math.max(0, v));
+            }
+          }
+          if (framing.x === undefined && framing.y === undefined) delete next.framing;
+          else next.framing = framing;
           return next;
         }),
       };
@@ -494,7 +503,7 @@ export function coalesce(main: Clip[]): Clip[] {
   const out: Clip[] = [];
   for (const c of main) {
     const prev = out[out.length - 1];
-    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x;
+    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y;
     if (prev && prev.assetId === c.assetId && Math.abs(prev.out - c.in) < 1e-3 && same(prev, c)) {
       out[out.length - 1] = { ...prev, out: c.out };
     } else out.push(c);

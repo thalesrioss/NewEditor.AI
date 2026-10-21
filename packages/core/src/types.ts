@@ -65,8 +65,11 @@ export interface Clip {
   freeze?: Seconds;
   /** 2ª câmera para este clipe (asset com `role: 'cam'` e `syncOffset`); o áudio continua o da fala. */
   cam?: string;
-  /** Enquadramento no reframe (centro horizontal 0–1 em volta do rosto). */
-  framing?: { x: number };
+  /**
+   * Enquadramento: `x` = centro horizontal (0–1) do recorte no reframe; `y` = âncora vertical (0–1, altura dos olhos
+   * na fonte) do zoom: o ponto nessa altura fica parado na tela ao ampliar. Sem `y`, o zoom amplia pelo centro.
+   */
+  framing?: { x?: number; y?: number };
 }
 
 /** Trecho da fonte que foi descartado — fica visível para o humano poder restaurar. */
@@ -396,7 +399,8 @@ export type TimelineOp =
   | { type: 'set_flash'; clipId: string; on: boolean }
   | { type: 'set_speed'; clipId: string; speed?: number | null; freeze?: number | null }
   | { type: 'set_cam'; clipId: string; assetId: string | null }
-  | { type: 'set_framing'; clipId: string; x: number | null }
+  /** `x`/`y` ausentes mantêm o valor; `null` tira. */
+  | { type: 'set_framing'; clipId: string; x?: number | null; y?: number | null }
   | { type: 'set_reframe'; on: boolean }
   /** Formato da entrega em pixels (e fps): presets ou livre. Fica no histórico. */
   | { type: 'set_format'; width: number; height: number; fps?: number }
