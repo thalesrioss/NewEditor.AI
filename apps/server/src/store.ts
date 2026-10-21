@@ -138,6 +138,9 @@ class Store {
   setFormat(id: string, fmt: Partial<Pick<Timeline, 'width' | 'height' | 'fps' | 'formatoManual'>>): void {
     const p = this.get(id);
     p.timeline = { ...p.timeline, ...fmt };
+    // Grava e avisa a tela: o formato muda logo na importação, minutos antes da primeira operação (CH-0005).
+    this.schedulePersist(id);
+    this.broadcast(id, { type: 'snapshot', project: p, history: this.historyState(id) });
   }
 
   upsertAsset(id: string, asset: MediaAsset): void {
