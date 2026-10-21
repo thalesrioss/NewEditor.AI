@@ -25,3 +25,12 @@ test('set_captions com posição fora do número cai no padrão', () => {
   const t = applyOp(base(), { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, position: 'meio' as unknown as number } }, 'agent');
   assert.equal(t.captions?.position, DEFAULT_CAPTIONS.position);
 });
+
+test('overLayers (BL-0100): legenda continua visível sob B-roll; sem a opção, some como antes', async () => {
+  const { buildCues, cueVisible } = await import('./text.ts');
+  const words = { a: [{ w: 'olha', start: 1, end: 1.4 }, { w: 'isso', start: 1.4, end: 1.8 }] };
+  const t = applyOp(base(), { type: 'add_overlay', item: { trackId: 'V2', role: 'broll', anchor: { assetId: 'a', at: 0.5 }, duration: 2, source: { type: 'media', assetId: 'b', in: 0 } } }, 'agent');
+  const s = { ...DEFAULT_CAPTIONS, enabled: true };
+  assert.ok(buildCues(t, words, s).every((c) => !cueVisible(c)), 'sem overLayers a legenda some sob o B-roll');
+  assert.ok(buildCues(t, words, { ...s, overLayers: true }).every((c) => cueVisible(c)), 'com overLayers a legenda fica');
+});

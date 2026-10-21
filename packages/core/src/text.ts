@@ -82,6 +82,8 @@ export interface CaptionSettings {
   rotation?: number;
   /** Escala do bloco (padrão 1; o tamanho da fonte continua em `size`). */
   scale?: number;
+  /** Legenda por cima de B-roll, motion e lettering (padrão: some quando coberta; `force` por legenda continua valendo). */
+  overLayers?: boolean;
   underline?: boolean;
   /** Animação de entrada/saída do bloco e da palavra falada. */
   animIn?: CaptionAnim;
@@ -94,7 +96,7 @@ export interface CaptionSettings {
 export const DEFAULT_CAPTIONS: CaptionSettings = { enabled: false, style: 'reels', uppercase: true, highlight: true, position: 0.72 };
 
 /** Os valores efetivos (padrões por estilo preenchidos). */
-export function captionDefaults(s: CaptionSettings): Required<Omit<CaptionSettings, 'enabled' | 'maxChars'>> & { maxChars?: number } {
+export function captionDefaults(s: CaptionSettings): Required<Omit<CaptionSettings, 'enabled' | 'maxChars' | 'overLayers'>> & { maxChars?: number } {
   const reels = s.style === 'reels';
   return {
     style: s.style, uppercase: s.uppercase, highlight: s.highlight, position: s.position,
@@ -293,7 +295,8 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
     if (e?.force) c.forced = true;
   }
   // Coberta por camada: lettering, motion ou B-roll em cima de mais de 1/3 da legenda (ou do seu começo).
-  const layers = tl.overlays
+  // Com `overLayers`, nenhuma camada esconde a legenda (padrão de cliente com legenda sobre o insert).
+  const layers = (s.overLayers ? [] : tl.overlays)
     .filter((o) => o.role === 'lettering' || o.role === 'motion' || o.role === 'broll')
     .map((o) => ({ role: o.role as 'lettering' | 'motion' | 'broll', pos: resolveOverlay(tl, o) }))
     .filter((x): x is { role: 'lettering' | 'motion' | 'broll'; pos: { start: number; end: number } } => !!x.pos);

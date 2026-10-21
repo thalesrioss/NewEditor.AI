@@ -95,6 +95,9 @@ export function CaptionPanel() {
         <Row label="Destacar a palavra falada">
           <Toggle on={caps.highlight} onChange={(v) => set({ highlight: v })} />
         </Row>
+        <Row label="Por cima de B-roll e motion">
+          <Toggle on={!!caps.overLayers} onChange={(v) => set({ overLayers: v || undefined }, v ? 'Legenda por cima de B-roll e motion' : 'Legenda some sob B-roll e motion')} />
+        </Row>
       </Group>
 
       <Group title="Animação">
