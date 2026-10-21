@@ -6,7 +6,7 @@
  *   rampas de 5 ms do export — o corte é exato por amostra. Trilha e SFX entram no mesmo relógio, com volume,
  *   fades e o "abaixa quando você fala".
  */
-import { clipDuration, clipPlayed, clipSpeed, clipStarts, DEFAULT_MUSIC_MIX, overlayActive, trackFlag, zoomAt, locate, resolveOverlay, timelineDuration, type ColorGrade, type MediaAsset, type Timeline } from '@neweditor/core';
+import { clipDuration, clipPlayed, clipSpeed, clipStarts, DEFAULT_MUSIC_MIX, overlayActive, overlaySourceTime, trackFlag, zoomAt, locate, resolveOverlay, timelineDuration, type ColorGrade, type MediaAsset, type Timeline } from '@neweditor/core';
 import { Compositor, type Layer } from './compositor.ts';
 import { AudioStream, MediaFile, VideoStream } from './media.ts';
 
@@ -179,7 +179,9 @@ export class Engine {
       if (this.assets.get(o.source.assetId)?.kind !== 'video') continue; // imagens: camada DOM (MediaMotionLayer)
       const pos = resolveOverlay(tl, o);
       if (!pos || t < pos.start || t >= pos.end) continue;
-      const f = this.video(o.source.assetId)?.frameAt(o.source.in + (t - pos.start), this.playing ? 10 : 2);
+      // Velocidade e congelamento (CH-0004): o instante da fonte, preso no último quadro dela.
+      const dur = this.assets.get(o.source.assetId)?.duration ?? Infinity;
+      const f = this.video(o.source.assetId)?.frameAt(Math.min(overlaySourceTime(o, t - pos.start), dur - 1 / (tl.fps || 30)), this.playing ? 10 : 2);
       if (f) layers.push({ frame: f, fit: 'cover', framing: o.framing, grade: gradeOf(o.source.assetId) });
       else complete = false;
     }

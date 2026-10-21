@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, coverCrop, clipSpeed, FLASH_FRAMES, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type TextWord } from '@neweditor/core';
+import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -192,7 +192,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       if ((o.role === 'broll' || o.role === 'motion') && (a.kind === 'video' || a.kind === 'image')) {
         // Motion do Studio (alfa): encaixa no quadro sem cortar, fundo transparente; B-roll preenche e leva a cor.
         const fit = a.alpha ? `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0.0,format=yuva420p` : `${coverFilter(a, W, H, o.framing)}${lutFilter(a.id)}`;
-        parts.push(`[${idx}:v:0]trim=start=${srcIn}:end=${srcIn + d},setpts=PTS-STARTPTS+${start}/TB,${fit},setsar=1,fps=${fps}[ov${n}]`);
+        parts.push(`[${idx}:v:0]${overlayTiming(o, srcIn, start, d)},${fit},setsar=1,fps=${fps}[ov${n}]`);
         parts.push(`[${vCur}][ov${n}]overlay=enable='between(t,${start},${end})':eof_action=pass[vo${n}]`);
         vCur = `vo${n}`;
         videoTouched = true;
@@ -335,4 +335,20 @@ export function coverFilter(a: Pick<MediaAsset, 'width' | 'height'>, W: number, 
   const c = coverCrop(a.width, a.height, W, H, framing);
   const f = (n: number) => n.toFixed(5);
   return `crop=w='iw*${f(c.kx)}':h='ih*${f(c.ky)}':x='iw*${f(c.u0)}':y='ih*${f(c.v0)}',scale=${W}:${H}`;
+}
+
+/**
+ * Trecho da fonte de um B-roll no tempo da timeline: com velocidade (setpts) e congelamento do último quadro
+ * (tpad clone) — CH-0004. Sem os dois, o mesmo filtro de antes.
+ */
+export function overlayTiming(o: Parameters<typeof overlayPlayback>[0], srcIn: number, start: number, d: number): string {
+  const pb = overlayPlayback(o);
+  if (pb.speed === 1 && pb.frozen === 0) return `trim=start=${srcIn}:end=${srcIn + d},setpts=PTS-STARTPTS+${start}/TB`;
+  const moving = Math.min(pb.moving, d);
+  const hold = Math.max(0, d - moving);
+  const r = (n: number) => Number(n.toFixed(4));
+  const pts = pb.speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${r(pb.speed)}`;
+  // Clona o último quadro também sem congelamento: fonte que acaba um quadro antes não mostra a fala por baixo.
+  const pad = `,tpad=stop_mode=clone:stop_duration=${r(hold + 0.1)}`;
+  return `trim=start=${r(srcIn)}:end=${r(srcIn + moving * pb.speed)},${pts}${pad},setpts=PTS+${start}/TB`;
 }

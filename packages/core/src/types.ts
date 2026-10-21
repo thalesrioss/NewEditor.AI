@@ -182,6 +182,10 @@ export interface OverlayItem {
   sfx?: import('./sfx.ts').SfxCue[];
   /** Enquadramento do B-roll que preenche o quadro: centro do recorte (0–1 na fonte) e zoom (1 = só preencher). */
   framing?: OverlayFraming;
+  /** Velocidade do B-roll (1 = normal; 0,25–4): 0,5 = câmera lenta, o mesmo trecho da fonte dura o dobro. */
+  speed?: number;
+  /** Congela o quadro nos últimos `freeze` s do overlay (a duração na timeline não muda). */
+  freeze?: Seconds;
 }
 
 export interface OverlayFraming {
@@ -405,6 +409,8 @@ export type TimelineOp =
   | { type: 'set_overlay_mix'; id: string; mix: AudioMix; sourceIn?: Seconds }
   /** Posição e zoom do B-roll (CH-0003); campos ausentes ficam como estão, null volta ao recorte central. */
   | { type: 'set_overlay_framing'; id: string; framing: Partial<OverlayFraming> | null }
+  /** Velocidade e congelamento do B-roll (CH-0004); null ou ausente = como estava (null volta ao normal). */
+  | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
