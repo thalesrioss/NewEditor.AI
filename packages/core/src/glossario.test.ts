@@ -37,6 +37,11 @@ test('palavras do glossário: termo de várias palavras conta palavra a palavra,
   assert.equal(w.has('eustosina'), false);
 });
 
+test('palavras do glossário: pedaço com menos de 3 letras não entra ("do" de "Banco do Brasil")', () => {
+  const w = glossarioWords(['Banco do Brasil', 'Jo']);
+  assert.deepEqual([...w].sort(), ['banco', 'brasil']);
+});
+
 test('ASR: sem glossário nenhum argumento extra; com glossário, os termos limpos', () => {
   assert.deepEqual(asrGlossarioArgs(undefined), []);
   assert.deepEqual(asrGlossarioArgs([]), []);

@@ -74,7 +74,7 @@ describe('revisão com glossário do cliente', () => {
     const id = await projeto('cliente');
     const r = await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: { termo: 'Bioquimica' } });
     assert.equal(r.statusCode, 200);
-    assert.deepEqual(r.json(), { perfil: 'cliente', nome: 'Clínica Sol', glossario: ['Bioquimica', 'Eustócina'] });
+    assert.deepEqual(r.json(), { perfil: 'cliente', nome: 'Clínica Sol', termo: 'Bioquimica', glossario: ['Bioquimica', 'Eustócina'] });
     assert.deepEqual(await grafias(id), ['Eustosina']);
     const salvo = JSON.parse(fs.readFileSync(path.join(perfisDir, 'cliente.json'), 'utf8')) as { glossario: string[] };
     assert.deepEqual(salvo.glossario, ['Bioquimica', 'Eustócina']);
@@ -84,6 +84,33 @@ describe('revisão com glossário do cliente', () => {
     const id = await projeto('personalizado');
     assert.equal((await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: { termo: 'X' } })).statusCode, 409);
     assert.equal((await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: { termo: '  ' } })).statusCode, 400);
+  });
+
+  test('termo que não é texto é 400 (não 500); termo longo responde com a grafia gravada (60 caracteres)', async () => {
+    const id = await projeto('cliente');
+    assert.equal((await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: { termo: 42 } })).statusCode, 400);
+    assert.equal((await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: {} })).statusCode, 400);
+    const r = await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: { termo: 'x'.repeat(80) } });
+    assert.equal(r.statusCode, 200);
+    assert.equal(r.json().termo, 'x'.repeat(60));
+  });
+
+  test('perfil do projeto apagado: 404, o termo não vai para o padrão da casa', async () => {
+    const id = await projeto('perfil-que-sumiu');
+    assert.equal((await app.inject({ method: 'POST', url: `/api/projects/${id}/glossario`, payload: { termo: 'Zeta' } })).statusCode, 404);
+    const casa = JSON.parse(fs.readFileSync(path.join(perfisDir, 'casa.json'), 'utf8')) as { glossario?: string[] };
+    assert.equal(casa.glossario?.includes('Zeta') ?? false, false);
+  });
+
+  test('"Tornar esta edição o padrão" regravando o perfil do cliente mantém o glossário', async () => {
+    const { patchProfile, saveProfileFromProject } = await import('./profiles.ts');
+    const id = await projeto();
+    const p = store.get(id);
+    const a = await saveProfileFromProject(p, { cliente: 'Loja Lua', formato: 'reels' });
+    await patchProfile(a.id, { glossario: ['Lunária'] });
+    const b = await saveProfileFromProject(p, { cliente: 'Loja Lua', formato: 'reels' });
+    assert.equal(b.id, a.id);
+    assert.deepEqual(b.glossario, ['Lunária']);
   });
 });
 

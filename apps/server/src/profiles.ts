@@ -79,7 +79,7 @@ export async function saveProfileFromProject(p: Project, opts: { cliente?: strin
   await loadAll();
   const next = await profileFromProject(p, opts);
   const cur = cache.get(next.id);
-  return save(cur ? { ...next, padraoCasa: cur.padraoCasa, notas: [...next.notas.slice(0, 1), ...cur.notas.filter((n) => !n.startsWith('Padrão editorial lido da edição'))] } : next);
+  return save(cur ? { ...next, padraoCasa: cur.padraoCasa, glossario: cur.glossario, notas: [...next.notas.slice(0, 1), ...cur.notas.filter((n) => !n.startsWith('Padrão editorial lido da edição'))] } : next);
 }
 
 async function save(p: ClientProfile): Promise<ClientProfile> {
@@ -103,12 +103,14 @@ export async function patchProfile(id: string, patch: Partial<ClientProfile>): P
 
 /**
  * "Guardar no perfil do cliente" (BL-0081): o termo entra no topo do glossário do perfil do projeto (o da casa se
- * o projeto não escolheu). "Personalizado" não é um perfil gravado: não tem onde guardar.
+ * o projeto não escolheu; 404 se o perfil escolhido foi apagado). "Personalizado" não é um perfil gravado: não tem onde guardar.
  */
 export async function addTermoAoPerfil(p: Project, termo: string): Promise<ClientProfile> {
   if (!termo.trim()) throw Object.assign(new Error('termo vazio'), { statusCode: 400 });
   if (p.profileId === PERSONALIZADO_ID) throw Object.assign(new Error('O perfil "Personalizado" não guarda glossário: escolha o perfil do cliente no projeto.'), { statusCode: 409 });
   const prof = await getProfile(p.profileId);
+  // Perfil escolhido que não existe mais: não guarda no padrão da casa sem ninguém saber.
+  if (p.profileId && prof.id !== p.profileId) throw Object.assign(new Error('O perfil deste projeto não existe mais: escolha o perfil do cliente no projeto.'), { statusCode: 404 });
   return patchProfile(prof.id, { glossario: addGlossario(prof.glossario, termo) });
 }
 

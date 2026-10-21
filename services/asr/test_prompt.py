@@ -30,6 +30,15 @@ class InitialPrompt(unittest.TestCase):
         self.assertEqual(t.initial_prompt(True, "Daniel Sun, Eustosina"), t.VERBATIM_PROMPT + " Nomes e marcas: Daniel Sun, Eustosina.")
         self.assertEqual(t.initial_prompt(False, "Eustosina"), "Nomes e marcas: Eustosina.")
 
+    def test_glossario_longo_nao_empurra_o_ao_pe_da_letra(self):
+        termos = ", ".join("Termo%02d %s" % (i, "x" * 40) for i in range(30))
+        p = t.initial_prompt(True, termos)
+        self.assertTrue(p.startswith(t.VERBATIM_PROMPT))
+        trecho = t.glossario_trecho(termos)
+        self.assertLessEqual(len(trecho), t.GLOSSARIO_MAX_CHARS)
+        self.assertTrue(trecho.startswith("Termo00 "))
+        self.assertTrue(all(len(x) == 48 for x in trecho.split(", ")))  # nenhum termo cortado no meio
+
 
 if __name__ == "__main__":
     unittest.main()

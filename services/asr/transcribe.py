@@ -32,11 +32,29 @@ VERBATIM_PROMPT = "Então, é... eu, eu acho que... que, tipo, ahn, a gente, a g
 HALLUCINATION = re.compile(r"(legendas? (pela|por)|amara\.org|inscreva-se|obrigad[oa] por assistir|^\W*(obrigad[oa]|tchau)\W*$)", re.I)
 
 
+# O Whisper guarda só os últimos ~223 tokens do prompt: um glossário longo empurraria o VERBATIM_PROMPT para fora.
+GLOSSARIO_MAX_CHARS = 600
+
+
+def glossario_trecho(glossario):
+    """Termos do glossário ("A, B, C") até GLOSSARIO_MAX_CHARS, sem cortar termo no meio (os primeiros são os mais recentes)."""
+    out = ""
+    for termo in (t.strip() for t in glossario.split(",")):
+        if not termo:
+            continue
+        nxt = termo if not out else out + ", " + termo
+        if len(nxt) > GLOSSARIO_MAX_CHARS:
+            break
+        out = nxt
+    return out
+
+
 def initial_prompt(verbatim, glossario=None):
     """Prompt do Whisper: o "ao pé da letra" (se ligado) + os termos do glossário do cliente (se houver)."""
     parts = [VERBATIM_PROMPT] if verbatim else []
-    if glossario and glossario.strip():
-        parts.append("Nomes e marcas: " + glossario.strip() + ".")
+    trecho = glossario_trecho(glossario) if glossario else ""
+    if trecho:
+        parts.append("Nomes e marcas: " + trecho + ".")
     return " ".join(parts) or None
 
 

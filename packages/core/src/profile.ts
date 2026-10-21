@@ -207,12 +207,15 @@ export function normGlossario(termos: readonly string[] | undefined): string[] {
 /** Acrescenta um termo no topo (o mais recente primeiro); se já existe, sobe para o topo com a grafia nova. */
 export const addGlossario = (termos: readonly string[] | undefined, termo: string): string[] => normGlossario([termo, ...(termos ?? []).filter((t) => glossarioKey(t) !== glossarioKey(termo))]);
 
-/** Palavras do glossário (termos de várias palavras contam palavra a palavra), na chave de comparação. */
+/**
+ * Palavras do glossário (termos de várias palavras contam palavra a palavra), na chave de comparação. Pedaços com
+ * menos de 3 letras ("do" de "Banco do Brasil") ficam de fora para não calar dúvida em qualquer contexto.
+ */
 export function glossarioWords(termos: readonly string[] | undefined): Set<string> {
   const out = new Set<string>();
   for (const t of termos ?? []) for (const w of t.split(/[\s\-–—/]+/)) {
     const k = glossarioKey(w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''));
-    if (k) out.add(k);
+    if (k.length >= 3) out.add(k);
   }
   return out;
 }

@@ -45,7 +45,10 @@ export function ProfilesPage() {
     if (!draft) return;
     setBusy(true);
     try {
-      const saved = await api.patchPerfil(draft.id, draft);
+      // Glossário só vai quando foi editado aqui: um "Guardar no perfil" feito na revisão com esta tela aberta não some.
+      const { glossario, ...resto } = draft;
+      const editouGlossario = JSON.stringify(glossario ?? []) !== JSON.stringify(cur?.glossario ?? []);
+      const saved = await api.patchPerfil(draft.id, editouGlossario ? draft : resto);
       setList((l) => l.map((p) => (p.id === saved.id ? saved : p)));
       setMsg(`Perfil "${saved.nome}" salvo.`);
     } catch (e) {
