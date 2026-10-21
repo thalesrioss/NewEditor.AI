@@ -4,7 +4,7 @@
  *  - fala: zoom = recorte central (crop iw/z), depois "contain" no quadro (letterbox);
  *  - B-roll: "cover" (preenche e recorta).
  */
-import { buildLut, isNeutral, type ColorGrade, type CubeLut, textureOf } from '@neweditor/core';
+import { buildLut, coverCrop, isNeutral, type ColorGrade, type CubeLut, type OverlayFraming, textureOf } from '@neweditor/core';
 
 const N = 33;
 
@@ -56,6 +56,8 @@ export interface Layer {
   rotate?: 0 | 90 | 180 | 270;
   /** Reframe: centro horizontal (0–1) do recorte em volta do rosto. */
   cx?: number;
+  /** Cover: enquadramento do B-roll (centro e zoom), a mesma conta do export (core coverCrop). */
+  framing?: OverlayFraming;
 }
 
 export class Compositor {
@@ -191,18 +193,9 @@ export class Compositor {
         v0 = 0.5 - ky / 2;
         v1 = 0.5 + ky / 2;
       } else {
-        // cover: recorta o excesso do lado que sobra
-        const ar = fw / fh;
-        const AR = W / H;
-        if (ar > AR) {
-          const k = AR / ar;
-          u0 = 0.5 - k / 2;
-          u1 = 0.5 + k / 2;
-        } else {
-          const k = ar / AR;
-          v0 = 0.5 - k / 2;
-          v1 = 0.5 + k / 2;
-        }
+        // cover: recorta o excesso do lado que sobra, no centro ou no enquadramento do B-roll
+        const c = coverCrop(fw, fh, W, H, l.framing);
+        [u0, v0, u1, v1] = [c.u0, c.v0, c.u0 + c.kx, c.v0 + c.ky];
       }
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.tex);

@@ -391,6 +391,40 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_captions':
       return { ...t, captions: op.captions };
 
+    case 'set_overlay_framing': {
+      const o0 = t.overlays.find((o) => o.id === op.id);
+      if (!o0 || o0.source.type !== 'media') throw new OpError('set_overlay_framing: overlay de mídia não encontrado');
+      const f = op.framing === null ? null : normalizeFraming({ ...(o0.framing ?? DEFAULT_FRAMING), ...op.framing });
+      return {
+        ...t,
+        overlays: t.overlays.map((o) => {
+          if (o.id !== op.id) return o;
+          const { framing: _drop, ...rest } = o;
+          return f && !isDefaultFraming(f) ? { ...rest, framing: f } : rest;
+        }),
+      };
+    }
+    case 'set_overlay_speed': {
+      if (op.speed !== undefined && op.speed !== null && !(op.speed >= 0.25 && op.speed <= 4)) throw new OpError('set_overlay_speed: velocidade entre 0,25 e 4');
+      if (op.freeze !== undefined && op.freeze !== null && !(op.freeze >= 0 && op.freeze <= 10)) throw new OpError('set_overlay_speed: congelamento entre 0 e 10 s');
+      if (!t.overlays.some((o) => o.id === op.id && o.source.type === 'media')) throw new OpError('set_overlay_speed: overlay de mídia não encontrado');
+      return {
+        ...t,
+        overlays: t.overlays.map((o) => {
+          if (o.id !== op.id) return o;
+          const next: OverlayItem = { ...o };
+          if (op.speed !== undefined) {
+            if (op.speed === null || Math.abs(op.speed - 1) < 1e-6) delete next.speed;
+            else next.speed = Math.round(op.speed * 10000) / 10000;
+          }
+          if (op.freeze !== undefined) {
+            if (op.freeze === null || op.freeze <= 0) delete next.freeze;
+            else next.freeze = Math.round(op.freeze * 1000) / 1000;
+          }
+          return next;
+        }),
+      };
+    }
     case 'set_overlay_text':
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id && o.source.type === 'text' ? { ...o, source: { type: 'text' as const, text: op.text } } : o)) };
     case 'set_overlay_motion':
@@ -548,4 +582,55 @@ export function cutEndAfter(t: Timeline, at: Seconds): Seconds {
     if (at < end - 0.02) return end;
   }
   return starts.length ? starts[starts.length - 1]! + clipDuration(t.main[t.main.length - 1]!) : at;
+}
+
+// --- Enquadramento do B-roll (CH-0003) ---------------------------------------------------------
+
+export const DEFAULT_FRAMING: import('./types.ts').OverlayFraming = { x: 0.5, y: 0.5, zoom: 1 };
+export const MAX_FRAMING_ZOOM = 4;
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+const r4 = (n: number) => Math.round(n * 10000) / 10000;
+
+export function normalizeFraming(f: Partial<import('./types.ts').OverlayFraming>): import('./types.ts').OverlayFraming {
+  const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  return { x: r4(clamp01(num(f.x, 0.5))), y: r4(clamp01(num(f.y, 0.5))), zoom: r4(Math.min(MAX_FRAMING_ZOOM, Math.max(1, num(f.zoom, 1)))) };
+}
+
+export function isDefaultFraming(f: import('./types.ts').OverlayFraming): boolean {
+  return f.x === 0.5 && f.y === 0.5 && f.zoom === 1;
+}
+
+/**
+ * Recorte de uma fonte `sw`×`sh` que preenche o quadro `W`×`H` ("cover"), com centro e zoom: frações da
+ * fonte (u0, v0 = canto superior esquerdo; kx, ky = largura e altura). O mesmo número no export (FFmpeg
+ * crop) e no preview (WebGL), para o quadro sair igual nos dois. O recorte nunca sai da fonte: centro
+ * perto da borda encosta na borda.
+ */
+export function coverCrop(sw: number, sh: number, W: number, H: number, framing?: Partial<import('./types.ts').OverlayFraming> | null): { u0: number; v0: number; kx: number; ky: number } {
+  const f = normalizeFraming(framing ?? {});
+  const ar = sw / sh;
+  const AR = W / H;
+  const kx = Math.min(1, AR / ar) / f.zoom;
+  const ky = Math.min(1, ar / AR) / f.zoom;
+  const cx = Math.min(1 - kx / 2, Math.max(kx / 2, f.x));
+  const cy = Math.min(1 - ky / 2, Math.max(ky / 2, f.y));
+  return { u0: cx - kx / 2, v0: cy - ky / 2, kx, ky };
+}
+
+// --- Velocidade e congelamento do B-roll (CH-0004) ----------------------------------------------
+
+/** Quanto da fonte o overlay toca antes de congelar (s de fonte) e por quanto tempo da timeline ele anda. */
+export function overlayPlayback(o: Pick<OverlayItem, 'duration' | 'speed' | 'freeze'>, duration = o.duration): { speed: number; moving: Seconds; frozen: Seconds; sourceSpan: Seconds } {
+  const speed = o.speed && o.speed > 0 ? o.speed : 1;
+  const frozen = Math.min(Math.max(0, o.freeze ?? 0), duration);
+  const moving = Math.max(0, duration - frozen);
+  return { speed, moving, frozen, sourceSpan: moving * speed };
+}
+
+/** Instante da fonte mostrado `local` s depois do início do overlay (com velocidade e congelamento). */
+export function overlaySourceTime(o: Pick<OverlayItem, 'duration' | 'speed' | 'freeze' | 'source'>, local: Seconds): Seconds {
+  const srcIn = o.source.type === 'media' ? o.source.in : 0;
+  const { speed, moving } = overlayPlayback(o);
+  return srcIn + Math.min(Math.max(0, local), moving) * speed;
 }

@@ -126,6 +126,8 @@ function OverlayProps({ item: o, group }: { item: OverlayItem; group: number }) 
       </Section>
       {o.source.type === 'motion' && <MotionEditor item={o} spec={o.source.motion} />}
       {(o.source.type === 'lettering' || o.source.type === 'text') && <LetteringEditor item={o} spec={o.source.type === 'lettering' ? o.source.lettering : letteringFromText(o.source.text)} />}
+      {o.role === 'broll' && o.source.type === 'media' && !assets.get(o.source.assetId)?.alpha && <FramingEditor item={o} />}
+      {o.role === 'broll' && o.source.type === 'media' && assets.get(o.source.assetId)?.kind === 'video' && <OverlaySpeedEditor item={o} sourceDuration={assets.get(o.source.assetId)?.duration ?? 0} />}
       {(o.role === 'music' || o.role === 'sfx') && <MixEditor item={o} />}
       {o.role === 'motion' && o.source.type === 'media' && (
         <Section title="Som do motion">
@@ -139,6 +141,44 @@ function OverlayProps({ item: o, group }: { item: OverlayItem; group: number }) 
       )}
       <Danger onClick={() => (sendOp({ op: { type: 'remove_overlay', id: o.id }, note: 'Removeu um overlay' }), select(null))}>Remover</Danger>
     </Panel>
+  );
+}
+
+/** Posição e zoom do B-roll que preenche o quadro (CH-0003) — a mesma conta do export. */
+function FramingEditor({ item }: { item: OverlayItem }) {
+  const sendOp = useEditor((s) => s.sendOp);
+  const f = item.framing ?? { x: 0.5, y: 0.5, zoom: 1 };
+  const set = (patch: Partial<typeof f>, note: string) => sendOp({ op: { type: 'set_overlay_framing', id: item.id, framing: patch }, note });
+  return (
+    <Section title="Enquadramento">
+      <RangeField label="Zoom" value={f.zoom} min={1} max={4} step={0.01} unit="×" resetTo={1} onCommit={(v) => set({ zoom: v }, `B-roll com zoom ${v}×`)} />
+      <RangeField label="Horizontal" value={f.x} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(v) => set({ x: v }, 'Moveu o B-roll na horizontal')} hint="0 = esquerda da imagem · 1 = direita." />
+      <RangeField label="Vertical" value={f.y} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(v) => set({ y: v }, 'Moveu o B-roll na vertical')} hint="0 = topo · 1 = base. Só anda se houver sobra (zoom ou imagem mais alta que o quadro)." />
+      {item.framing && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => sendOp({ op: { type: 'set_overlay_framing', id: item.id, framing: null }, note: 'B-roll de volta ao recorte central' })}>
+          Voltar ao centro
+        </Button>
+      )}
+    </Section>
+  );
+}
+
+/** Velocidade e congelamento do B-roll (CH-0004) — o mesmo tempo no export. */
+function OverlaySpeedEditor({ item, sourceDuration }: { item: OverlayItem; sourceDuration: number }) {
+  const sendOp = useEditor((s) => s.sendOp);
+  const srcIn = item.source.type === 'media' ? item.source.in : 0;
+  // Esticar: o que sobra da fonte cobre o evento inteiro (B-roll mais curto que o evento vira câmera lenta).
+  const fit = Math.min(4, Math.max(0.25, Math.round(((sourceDuration - srcIn) / Math.max(0.1, item.duration - (item.freeze ?? 0))) * 1000) / 1000));
+  return (
+    <Section title="Tempo do B-roll">
+      <RangeField label="Velocidade" value={item.speed ?? 1} min={0.25} max={4} step={0.05} unit="×" resetTo={1} onCommit={(v) => sendOp({ op: { type: 'set_overlay_speed', id: item.id, speed: v }, note: Math.abs(v - 1) < 0.01 ? 'B-roll na velocidade normal' : `B-roll a ${v}×` })} hint="Menor que 1 = câmera lenta. A duração na timeline não muda." />
+      <RangeField label="Congelar o fim" value={item.freeze ?? 0} min={0} max={Math.min(10, item.duration)} step={0.1} unit="s" resetTo={0} onCommit={(v) => sendOp({ op: { type: 'set_overlay_speed', id: item.id, freeze: v }, note: v ? `B-roll congela nos últimos ${v.toFixed(1)} s` : 'B-roll sem congelar' })} />
+      {sourceDuration > 0 && Math.abs(fit - (item.speed ?? 1)) > 0.01 && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => sendOp({ op: { type: 'set_overlay_speed', id: item.id, speed: fit }, note: `B-roll esticado até o fim do evento (${fit}×)` })}>
+          Esticar a fonte até o fim ({fit}×)
+        </Button>
+      )}
+    </Section>
   );
 }
 
