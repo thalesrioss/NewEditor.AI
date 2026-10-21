@@ -6,6 +6,7 @@ import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed,
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
+import { DELIVERY, deliverAudio } from './loudness.ts';
 import { atomic, run, filterGraphArgs } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
@@ -14,8 +15,11 @@ import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 const LOGO = path.join(ROOT, 'apps', 'web', 'public', 'logo-mark.png');
 /** Micro-fade em cada emenda de áudio: evita o estalo de corte seco. */
 const FADE = 0.005;
-/** Padrão de entrega para redes: −14 LUFS integrado, pico real ≤ −1 dBTP. */
-const LOUDNORM = 'loudnorm=I=-14:TP=-1:LRA=11';
+/**
+ * Padrão de entrega para redes: −14 LUFS integrado, pico real ≤ −1 dBTP. Esta é a 1ª passada (dinâmica, na mixagem);
+ * o acerto final é medido no MP4 codificado (`deliverAudio`), porque o AAC passa o pico. TP −1,5 = folga.
+ */
+const LOUDNORM = `loudnorm=I=${DELIVERY.I}:TP=${DELIVERY.TP}:LRA=${DELIVERY.LRA}`;
 const MUSIC_GAIN = 0.18;
 const DELIVERY_SHORT_SIDE = 1080;
 /** Trechos renderizados ao mesmo tempo (o decode do 4K usa a GPU; o encode, a CPU). */
@@ -245,15 +249,20 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     // Sem overlay de vídeo, a imagem já está pronta: só copia (não recodifica duas vezes).
     if (videoTouched) args.push('-map', `[${vCur}]`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(fps));
     else args.push('-map', '0:v', '-c:v', 'copy');
-    args.push('-map', '[aout]', '-c:a', 'aac', '-b:a', '256k', '-t', String(total), '-movflags', '+faststart');
-    await atomic(out, (tmp) =>
-      run('ffmpeg', [...args, tmp], {
-        onStderr: (s) => {
-          const m = /time=(\d+):(\d+):([\d.]+)/.exec(s);
-          if (m && onProgress) onProgress(0.88 + 0.12 * Math.min(1, (+m[1]! * 3600 + +m[2]! * 60 + +m[3]!) / total));
-        },
-      }),
-    );
+    // Imagem num arquivo, mixagem em WAV no outro: o AAC só é feito depois, já no alvo de loudness (`deliverAudio`).
+    const videoOnly = path.join(work, 'video.mp4');
+    const mixWav = path.join(work, 'mix.wav');
+    args.push('-an', '-t', String(total), videoOnly, '-map', '[aout]', '-c:a', 'pcm_f32le', '-t', String(total), mixWav);
+    await run('ffmpeg', args, {
+      onStderr: (s) => {
+        const m = /time=(\d+):(\d+):([\d.]+)/.exec(s);
+        if (m && onProgress) onProgress(0.88 + 0.11 * Math.min(1, (+m[1]! * 3600 + +m[2]! * 60 + +m[3]!) / total));
+      },
+    });
+    // Loudness conferido no MP4 codificado (o que o QC mede): −14 LUFS ±0,5 e ≤ −1 dBTP.
+    const loud = await atomic(out, (tmp) => deliverAudio(videoOnly, mixWav, tmp, total));
+    const fmt = (x: number) => x.toFixed(1).replace('.', ',');
+    notes.push(`áudio ${fmt(loud.after.i)} LUFS, ${fmt(loud.after.tp)} dBTP${loud.ok ? '' : ' (FORA do alvo de entrega −14 LUFS / −1 dBTP: conferir a mixagem)'}`);
     return { file: `renders/${name}`, skipped, notes };
   } finally {
     await fs.rm(work, { recursive: true, force: true });
