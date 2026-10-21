@@ -3,6 +3,7 @@
  * acessível obrigatório e um controle de valor com slider + campo numérico. Tokens em styles.css.
  */
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { blurValue } from '../lib/rangeField.ts';
 import { Loader2 } from 'lucide-react';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -91,7 +92,11 @@ export function RangeField({ label, value, min, max, step, unit = '', digits, hi
               if (e.key === 'Enter') commit(Number(text.replace(',', '.')) || 0);
               if (e.key === 'Escape') setText(v.toFixed(dec));
             }}
-            onBlur={() => commit(Number(text.replace(',', '.')) || 0)}
+            onBlur={() => {
+              // Só grava se o texto foi editado: sair do campo não corta um valor de fora da faixa (BL-0108).
+              const x = blurValue(text, v.toFixed(dec));
+              if (x !== null) commit(x);
+            }}
             className="w-14 rounded-[var(--radius-ui-sm)] border border-ink-700 bg-ink-850 px-1.5 py-0.5 text-right font-mono text-ui-xs text-ink-100 focus:border-nc-500 focus:outline-none"
           />
           {unit && <span className="font-mono text-ui-2xs text-ink-400">{unit}</span>}
