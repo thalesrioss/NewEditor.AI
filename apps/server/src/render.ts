@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, clipSpeed, FLASH_FRAMES, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type TextWord } from '@neweditor/core';
+import { buildCues, buildLut, clipPlayed, coverCrop, clipSpeed, FLASH_FRAMES, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -191,7 +191,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const idx = inputs.push(a.kind === 'image' ? { path: a.path, pre: ['-loop', '1', '-framerate', String(fps), '-t', (d + 0.1).toFixed(3)] } : a.path) - 1;
       if ((o.role === 'broll' || o.role === 'motion') && (a.kind === 'video' || a.kind === 'image')) {
         // Motion do Studio (alfa): encaixa no quadro sem cortar, fundo transparente; B-roll preenche e leva a cor.
-        const fit = a.alpha ? `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0.0,format=yuva420p` : `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}${lutFilter(a.id)}`;
+        const fit = a.alpha ? `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0.0,format=yuva420p` : `${coverFilter(a, W, H, o.framing)}${lutFilter(a.id)}`;
         parts.push(`[${idx}:v:0]trim=start=${srcIn}:end=${srcIn + d},setpts=PTS-STARTPTS+${start}/TB,${fit},setsar=1,fps=${fps}[ov${n}]`);
         parts.push(`[${vCur}][ov${n}]overlay=enable='between(t,${start},${end})':eof_action=pass[vo${n}]`);
         vCur = `vo${n}`;
@@ -327,4 +327,12 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Prom
 
 function slug(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'projeto';
+}
+
+/** B-roll que preenche o quadro: recorte central, ou o enquadramento (centro e zoom) do overlay (CH-0003). */
+export function coverFilter(a: Pick<MediaAsset, 'width' | 'height'>, W: number, H: number, framing?: Parameters<typeof coverCrop>[4]): string {
+  if (!framing || !a.width || !a.height) return `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
+  const c = coverCrop(a.width, a.height, W, H, framing);
+  const f = (n: number) => n.toFixed(5);
+  return `crop=w='iw*${f(c.kx)}':h='ih*${f(c.ky)}':x='iw*${f(c.u0)}':y='ih*${f(c.v0)}',scale=${W}:${H}`;
 }

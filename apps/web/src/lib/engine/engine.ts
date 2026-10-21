@@ -180,7 +180,7 @@ export class Engine {
       const pos = resolveOverlay(tl, o);
       if (!pos || t < pos.start || t >= pos.end) continue;
       const f = this.video(o.source.assetId)?.frameAt(o.source.in + (t - pos.start), this.playing ? 10 : 2);
-      if (f) layers.push({ frame: f, fit: 'cover', grade: gradeOf(o.source.assetId) });
+      if (f) layers.push({ frame: f, fit: 'cover', framing: o.framing, grade: gradeOf(o.source.assetId) });
       else complete = false;
     }
     if (layers.length) this.comp.draw(layers);

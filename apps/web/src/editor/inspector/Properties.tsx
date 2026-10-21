@@ -126,6 +126,7 @@ function OverlayProps({ item: o, group }: { item: OverlayItem; group: number }) 
       </Section>
       {o.source.type === 'motion' && <MotionEditor item={o} spec={o.source.motion} />}
       {(o.source.type === 'lettering' || o.source.type === 'text') && <LetteringEditor item={o} spec={o.source.type === 'lettering' ? o.source.lettering : letteringFromText(o.source.text)} />}
+      {o.role === 'broll' && o.source.type === 'media' && !assets.get(o.source.assetId)?.alpha && <FramingEditor item={o} />}
       {(o.role === 'music' || o.role === 'sfx') && <MixEditor item={o} />}
       {o.role === 'motion' && o.source.type === 'media' && (
         <Section title="Som do motion">
@@ -139,6 +140,25 @@ function OverlayProps({ item: o, group }: { item: OverlayItem; group: number }) 
       )}
       <Danger onClick={() => (sendOp({ op: { type: 'remove_overlay', id: o.id }, note: 'Removeu um overlay' }), select(null))}>Remover</Danger>
     </Panel>
+  );
+}
+
+/** Posição e zoom do B-roll que preenche o quadro (CH-0003) — a mesma conta do export. */
+function FramingEditor({ item }: { item: OverlayItem }) {
+  const sendOp = useEditor((s) => s.sendOp);
+  const f = item.framing ?? { x: 0.5, y: 0.5, zoom: 1 };
+  const set = (patch: Partial<typeof f>, note: string) => sendOp({ op: { type: 'set_overlay_framing', id: item.id, framing: patch }, note });
+  return (
+    <Section title="Enquadramento">
+      <RangeField label="Zoom" value={f.zoom} min={1} max={4} step={0.01} unit="×" resetTo={1} onCommit={(v) => set({ zoom: v }, `B-roll com zoom ${v}×`)} />
+      <RangeField label="Horizontal" value={f.x} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(v) => set({ x: v }, 'Moveu o B-roll na horizontal')} hint="0 = esquerda da imagem · 1 = direita." />
+      <RangeField label="Vertical" value={f.y} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(v) => set({ y: v }, 'Moveu o B-roll na vertical')} hint="0 = topo · 1 = base. Só anda se houver sobra (zoom ou imagem mais alta que o quadro)." />
+      {item.framing && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => sendOp({ op: { type: 'set_overlay_framing', id: item.id, framing: null }, note: 'B-roll de volta ao recorte central' })}>
+          Voltar ao centro
+        </Button>
+      )}
+    </Section>
   );
 }
 

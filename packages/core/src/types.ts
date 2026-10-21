@@ -180,6 +180,14 @@ export interface OverlayItem {
   mix?: AudioMix;
   /** SFX de um motion de mídia (render do Motion Studio): cues lidos do film.js, sintetizados aqui. */
   sfx?: import('./sfx.ts').SfxCue[];
+  /** Enquadramento do B-roll que preenche o quadro: centro do recorte (0–1 na fonte) e zoom (1 = só preencher). */
+  framing?: OverlayFraming;
+}
+
+export interface OverlayFraming {
+  x: number;
+  y: number;
+  zoom: number;
 }
 
 export interface Timeline {
@@ -395,6 +403,8 @@ export type TimelineOp =
   | { type: 'remove_overlay'; id: string }
   | { type: 'set_captions'; captions: import('./text.ts').CaptionSettings }
   | { type: 'set_overlay_mix'; id: string; mix: AudioMix; sourceIn?: Seconds }
+  /** Posição e zoom do B-roll (CH-0003); campos ausentes ficam como estão, null volta ao recorte central. */
+  | { type: 'set_overlay_framing'; id: string; framing: Partial<OverlayFraming> | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
