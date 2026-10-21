@@ -176,15 +176,6 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     }
     let duckN = 0;
     let videoTouched = !hasVideo;
-    // Flash de entrada (2 quadros invertidos, sem cor) nos clipes marcados — e o obturador no SFX.
-    const flashes = clips.flatMap((c, i) => (c.flash ? [starts[i]!] : []));
-    if (hasVideo && flashes.length) {
-      const fd = FLASH_FRAMES / fps;
-      const en = flashes.map((t) => `between(t\\,${t.toFixed(4)}\\,${(t + fd).toFixed(4)})`).join('+');
-      parts.push(`[${vCur}]negate=enable='${en}',hue=s=0:enable='${en}'[vflash]`);
-      vCur = 'vflash';
-      videoTouched = true;
-    }
     // O obturador só nos flashes com som (flashSfx false = o editor põe a amostra dele no A2).
     const flashCues: { at: number; c: SfxCue }[] = flashShutterCues(tl).map(({ at, cue }) => ({ at, c: cue }));
     // SFX dos motions do Motion Studio (cues do film.js), no tempo da timeline.
@@ -217,6 +208,16 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
         } else audio.push(`[ao${n}]`);
       }
     });
+    // Flash de entrada (2 quadros invertidos, sem cor) nos clipes marcados: depois do B-roll e do motion de
+    // arquivo (V2/V3), para não sumir sob overlay de tela cheia (CH-0011); a legenda fica fora, como no preview.
+    const flashes = clips.flatMap((c, i) => (c.flash ? [starts[i]!] : []));
+    if (hasVideo && flashes.length) {
+      const fd = FLASH_FRAMES / fps;
+      const en = flashes.map((t) => `between(t\\,${t.toFixed(4)}\\,${(t + fd).toFixed(4)})`).join('+');
+      parts.push(`[${vCur}]negate=enable='${en}',hue=s=0:enable='${en}'[vflash]`);
+      vCur = 'vflash';
+      videoTouched = true;
+    }
     // Texto por cima de tudo (legenda nunca fica escondida atrás de B-roll).
     const transcripts: Record<string, TextWord[]> = {};
     for (const a of p.assets) if (a.transcript) transcripts[a.id] = (await readTranscript(path.join(dir, a.transcript))).words;
