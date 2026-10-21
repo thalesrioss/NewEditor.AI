@@ -14,6 +14,7 @@ import { runQc } from '../qc.ts';
 import { reviewDoubts } from '../review.ts';
 import { store } from '../store.ts';
 import { cutWords, restoreWords } from '../transcript-edit.ts';
+import { importTranscript, type TranscriptInput } from '../transcript-import.ts';
 import { erro, report } from './_comum.ts';
 
 export async function rotasProjetos(app: FastifyInstance): Promise<void> {
@@ -98,6 +99,8 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
     store.removeAsset(req.params.id, req.params.assetId);
     return { ok: true };
   });
+  /** Transcrição conferida pelo editor no lugar da do ASR (CH-0002): words [{ w, start, end }] ou segments do Whisper. */
+  app.post<{ Params: { id: string; assetId: string }; Body: TranscriptInput }>('/api/projects/:id/assets/:assetId/transcript', { bodyLimit: 20 * 1024 * 1024 }, async (req) => importTranscript(req.params.id, req.params.assetId, req.body));
   app.post<{ Params: { id: string; assetId: string } }>('/api/projects/:id/assets/:assetId/rebuild', async (req) => {
     const { id, assetId } = req.params;
     void enqueue(id, 'reprocessando', () => rebuild(id, assetId)).catch((e) => report(id, 'reprocessamento', e));
