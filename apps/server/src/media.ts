@@ -58,6 +58,12 @@ export async function filterGraphArgs(file: string): Promise<string[]> {
   return (await ffmpegMajor()) >= 7 ? ['-/filter_complex', file] : ['-filter_complex_script', file];
 }
 
+/**
+ * Opções de saída que não herdam nada dos insumos: sem capítulos (o MP4 virava menu "Chapter 13/14" e trilha de texto
+ * do filme usado como B-roll) e sem metadados (título, comentário) do bruto ou do B-roll — BL-0085.
+ */
+export const NO_INPUT_META = ['-map_metadata', '-1', '-map_chapters', '-1'] as const;
+
 export function run(cmd: string, args: string[], opts: { onStderr?: (line: string) => void } = {}): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const p = spawn(BIN[cmd] ?? cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });

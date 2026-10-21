@@ -7,7 +7,7 @@ import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
 import { DELIVERY, deliverAudio } from './loudness.ts';
-import { atomic, run, filterGraphArgs } from './media.ts';
+import { atomic, run, filterGraphArgs, NO_INPUT_META } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 
@@ -115,9 +115,9 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       return f;
     };
     const mainA = path.join(work, 'main.wav');
-    await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('wav'), '-c', 'copy', mainA]);
+    await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('wav'), '-c', 'copy', ...NO_INPUT_META, mainA]);
     const mainV = path.join(work, 'main.mp4');
-    if (hasVideo) await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('mp4'), '-c', 'copy', mainV]);
+    if (hasVideo) await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('mp4'), '-c', 'copy', ...NO_INPUT_META, mainV]);
     onProgress?.(0.88);
 
     // --- 3. Passada final: overlays, mixagem, loudness ---------------------------------------
@@ -255,7 +255,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     // Imagem num arquivo, mixagem em WAV no outro: o AAC só é feito depois, já no alvo de loudness (`deliverAudio`).
     const videoOnly = path.join(work, 'video.mp4');
     const mixWav = path.join(work, 'mix.wav');
-    args.push('-an', '-t', String(total), videoOnly, '-map', '[aout]', '-c:a', 'pcm_f32le', '-t', String(total), mixWav);
+    // Só os streams mapeados e nada herdado dos insumos (capítulos e título do B-roll): vale para cada saída.
+    args.push('-an', ...NO_INPUT_META, '-t', String(total), videoOnly, '-map', '[aout]', '-c:a', 'pcm_f32le', ...NO_INPUT_META, '-t', String(total), mixWav);
     await run('ffmpeg', args, {
       onStderr: (s) => {
         const m = /time=(\d+):(\d+):([\d.]+)/.exec(s);
@@ -322,7 +323,7 @@ async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number,
   const off = cam ? (cam.syncOffset ?? 0) : 0;
   const vf = segmentVideoFilter(src, c, fps, W, H, lut, reframe);
   const limit = c.freeze ? ['-t', String(c.out - c.in + 0.05)] : [];
-  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(Math.max(1, frames)), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), out];
+  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(Math.max(1, frames)), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), ...NO_INPUT_META, out];
   try {
     await run('ffmpeg', ['-hwaccel', 'videotoolbox', ...base]);
   } catch {
@@ -346,7 +347,7 @@ async function segmentAudio(a: MediaAsset, c: Clip, out: string, clean: string |
   while (r < 0.5) ((tempo.push('atempo=0.5')), (r *= 2));
   if (Math.abs(r - 1) > 1e-6) tempo.push(`atempo=${r}`);
   const af = ['aformat=sample_rates=48000:channel_layouts=stereo', ...tempo, 'apad', `atrim=duration=${d}`, `afade=t=in:d=${FADE}`, `afade=t=out:st=${Math.max(0, played - FADE)}:d=${FADE}`].join(',');
-  await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(c.in), '-i', clean ?? a.path, '-t', String(c.out - c.in), '-vn', '-af', af, '-c:a', 'pcm_s16le', out]);
+  await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(c.in), '-i', clean ?? a.path, '-t', String(c.out - c.in), '-vn', '-af', af, '-c:a', 'pcm_s16le', ...NO_INPUT_META, out]);
 }
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {

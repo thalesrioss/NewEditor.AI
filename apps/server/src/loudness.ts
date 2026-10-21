@@ -8,7 +8,7 @@
  * AAC sobre AAC. O vídeo é copiado.
  */
 import fs from 'node:fs/promises';
-import { run } from './media.ts';
+import { NO_INPUT_META, run } from './media.ts';
 
 export const DELIVERY = { I: -14, TP: -1.5, LRA: 11, tolI: 0.5, maxTP: -1 } as const;
 
@@ -53,7 +53,7 @@ export async function deliverAudio(video: string, wav: string, out: string, dura
     const af = audible
       ? `volume=${gain.toFixed(2)}dB,aresample=192000,alimiter=limit=${(10 ** (ceiling / 20)).toFixed(4)}:attack=5:release=60:level=false,aresample=48000,apad`
       : 'apad';
-    return run('ffmpeg', ['-y', '-v', 'error', '-i', video, '-i', wav, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-af', af, ...AAC, '-t', String(duration), '-movflags', '+faststart', out]);
+    return run('ffmpeg', ['-y', '-v', 'error', '-i', video, '-i', wav, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-af', af, ...AAC, ...NO_INPUT_META, '-t', String(duration), '-movflags', '+faststart', out]);
   };
   const clamp = (g: number) => Math.max(-MAX_GAIN, Math.min(MAX_GAIN, g));
   let gain = audible ? clamp(DELIVERY.I - before.i) : 0;
