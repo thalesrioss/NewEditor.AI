@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type TextWord } from '@neweditor/core';
+import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -185,7 +185,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       vCur = 'vflash';
       videoTouched = true;
     }
-    const flashCues = flashes.map((t, i) => ({ at: t, c: { t: 0, kind: 'shutter' as const, gain: 0.9, seed: 7000 + i } }));
+    // O obturador só nos flashes com som (flashSfx false = o editor põe a amostra dele no A2).
+    const flashCues: { at: number; c: SfxCue }[] = flashShutterCues(tl).map(({ at, cue }) => ({ at, c: cue }));
     // SFX dos motions do Motion Studio (cues do film.js), no tempo da timeline.
     for (const { o, start } of placed) if (o.role === 'motion' && o.source.type === 'media' && o.sfx?.length) for (const c of o.sfx) flashCues.push({ at: start + c.t, c: { ...c, kind: c.kind as 'shutter' } });
     placed.forEach(({ o, a, srcIn, start, end }, n) => {

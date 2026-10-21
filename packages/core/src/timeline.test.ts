@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
+import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, flashShutterCues, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
 import { DEFAULT_TRACKS, type Timeline } from './types.ts';
 import { buildCues, DEFAULT_CAPTIONS } from './text.ts';
 import { gradePixel, NEUTRAL_GRADE } from './color.ts';
@@ -317,10 +317,23 @@ test('zoom animado, flash, câmera e enquadramento', () => {
   assert.equal('zoomTo' in t.main[0]!, false);
   t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true }, 'human');
   assert.equal(t.main[0]!.flash, true);
+  assert.equal(flashShutterCues(t).length, 1);
+  // CH-0010: flash só visual (sem obturador sintetizado), para a amostra do editor no A2.
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true, sfx: false }, 'human');
+  assert.equal(t.main[0]!.flash, true);
+  assert.equal(t.main[0]!.flashSfx, false);
+  assert.equal(flashShutterCues(t).length, 0);
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true }, 'human');
+  assert.equal(t.main[0]!.flashSfx, false, 'sem sfx no pedido mantém o que estava');
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true, sfx: true }, 'human');
+  assert.equal('flashSfx' in t.main[0]!, false);
+  assert.equal(flashShutterCues(t)[0]!.cue.kind, 'shutter');
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true, sfx: false }, 'human');
   // Dividir: o flash fica só no pedaço de cima, o freeze só no de baixo.
   t = applyOp({ ...t, main: [{ ...t.main[0]!, freeze: 1 }] }, { type: 'split', time: 30 }, 'human');
   assert.equal(t.main[0]!.flash, true);
   assert.equal(t.main[1]!.flash, undefined);
+  assert.equal(t.main[1]!.flashSfx, undefined);
   assert.equal(t.main[0]!.freeze, undefined);
   assert.equal(t.main[1]!.freeze, 1);
   t = applyOp(t, { type: 'set_cam', clipId: t.main[1]!.id, assetId: 'cam2' }, 'human');

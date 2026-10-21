@@ -59,6 +59,8 @@ export interface Clip {
   zoomTo?: number;
   /** Flash de 2 quadros (invertido, sem cor) na entrada do clipe, com o obturador no SFX. */
   flash?: boolean;
+  /** false = flash só visual, sem o obturador sintetizado (o editor põe a própria amostra no A2). */
+  flashSfx?: false;
   /** Velocidade (1 = normal; 0,5–2). O áudio acompanha sem mudar o tom. */
   speed?: number;
   /** Congela o último quadro por este tanto (s), em silêncio, no fim do clipe. */
@@ -396,7 +398,7 @@ export type TimelineOp =
   | { type: 'move_clip'; clipId: string; toIndex: number }
   | { type: 'split'; time: Seconds }
   | { type: 'set_zoom'; clipId: string; zoom: number; zoomTo?: number | null }
-  | { type: 'set_flash'; clipId: string; on: boolean }
+  | { type: 'set_flash'; clipId: string; on: boolean; /** false = sem o obturador; true volta o som; omitido mantém. */ sfx?: boolean }
   | { type: 'set_speed'; clipId: string; speed?: number | null; freeze?: number | null }
   | { type: 'set_cam'; clipId: string; assetId: string | null }
   /** `x`/`y` ausentes mantêm o valor; `null` tira. */

@@ -43,6 +43,16 @@ export function timelineDuration(t: Timeline): Seconds {
 }
 
 /** Início de cada clipe no tempo de saída. */
+/** Obturador de cada flash, no tempo da timeline (export e preview). Flash com `flashSfx: false` fica só visual. */
+export function flashShutterCues(t: Timeline): { clipId: string; at: Seconds; cue: { t: number; kind: 'shutter'; gain: number; seed: number } }[] {
+  const starts = clipStarts(t);
+  return t.main
+    .flatMap((c, i) => (c.flash ? [{ c, at: starts[i]! }] : []))
+    .map(({ c, at }, i) => ({ clipId: c.id, at, sfx: c.flashSfx !== false, cue: { t: 0, kind: 'shutter' as const, gain: 0.9, seed: 7000 + i } }))
+    .filter((x) => x.sfx)
+    .map(({ clipId, at, cue }) => ({ clipId, at, cue }));
+}
+
 export function clipStarts(t: Timeline): Seconds[] {
   const starts: Seconds[] = [];
   let acc = 0;
@@ -256,7 +266,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       const { index, clip, sourceTime } = loc;
       if (sourceTime - clip.in < MIN_CLIP || clip.out - sourceTime < MIN_CLIP) return t;
       const a: Clip = { ...clip, out: sourceTime, freeze: undefined };
-      const b: Clip = { ...clip, id: uid('clip'), in: sourceTime, flash: undefined };
+      const b: Clip = { ...clip, id: uid('clip'), in: sourceTime, flash: undefined, flashSfx: undefined };
       return { ...t, main: [...t.main.slice(0, index), a, b, ...t.main.slice(index + 1)] };
     }
 
@@ -284,6 +294,8 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
           const next: Clip = { ...c };
           if (op.on) next.flash = true;
           else delete next.flash;
+          if (!op.on || op.sfx === true) delete next.flashSfx;
+          else if (op.sfx === false) next.flashSfx = false;
           return next;
         }),
       };
