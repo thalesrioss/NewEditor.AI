@@ -1,7 +1,7 @@
 /**
  * Compositor WebGL2 único do preview (ADR-005): fala (com zoom), B-roll e o LUT de cor de cada arquivo num canvas
  * só, com o MESMO enquadramento do export:
- *  - fala: zoom = recorte central (crop iw/z), depois "contain" no quadro (letterbox);
+ *  - fala: zoom = recorte (crop iw/z) centrado na horizontal e ancorado na altura dos olhos (`cy`), depois "contain" no quadro (letterbox);
  *  - B-roll: "cover" (preenche e recorta).
  */
 import { buildLut, isNeutral, type ColorGrade, type CubeLut, textureOf } from '@neweditor/core';
@@ -56,6 +56,8 @@ export interface Layer {
   rotate?: 0 | 90 | 180 | 270;
   /** Reframe: centro horizontal (0–1) do recorte em volta do rosto. */
   cx?: number;
+  /** Âncora vertical (0–1) do zoom: o ponto nessa altura da fonte fica parado na tela. */
+  cy?: number;
 }
 
 export class Compositor {
@@ -172,8 +174,11 @@ export class Compositor {
       let y1 = 1;
       if (l.fit === 'contain') {
         const z = Math.max(1, l.zoom ?? 1);
-        u0 = v0 = 0.5 - 0.5 / z;
-        u1 = v1 = 0.5 + 0.5 / z;
+        const cy = Math.min(1, Math.max(0, l.cy ?? 0.5));
+        u0 = 0.5 - 0.5 / z;
+        u1 = 0.5 + 0.5 / z;
+        v0 = cy * (1 - 1 / z);
+        v1 = v0 + 1 / z;
         const s = Math.min(W / fw, H / fh);
         const sx = (fw * s) / W;
         const sy = (fh * s) / H;
@@ -188,8 +193,8 @@ export class Compositor {
         const cx = Math.min(1 - kx / 2, Math.max(kx / 2, l.cx ?? 0.5));
         u0 = cx - kx / 2;
         u1 = cx + kx / 2;
-        v0 = 0.5 - ky / 2;
-        v1 = 0.5 + ky / 2;
+        v0 = (1 - ky) * Math.min(1, Math.max(0, l.cy ?? 0.5));
+        v1 = v0 + ky;
       } else {
         // cover: recorta o excesso do lado que sobra
         const ar = fw / fh;

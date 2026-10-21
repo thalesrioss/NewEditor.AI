@@ -261,6 +261,35 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
 }
 
 /**
+ * Filtro de vídeo de um trecho (puro, testável): velocidade, reframe, zoom fixo ou animado ancorado na altura dos
+ * olhos (`framing.y`), tamanho de entrega com a cor, congelamento.
+ */
+export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c: Clip, fps: number, W: number, H: number, lut = '', reframe = false): string {
+  const sp = clipSpeed(c);
+  const framesPlayed = Math.max(1, Math.round(clipPlayed(c) * fps));
+  const z0 = c.zoom ?? 1;
+  const z1 = c.zoomTo ?? z0;
+  const parts: string[] = [];
+  if (sp !== 1) parts.push(`setpts=(PTS-STARTPTS)/${sp}`);
+  const useReframe = reframe && c.framing?.x !== undefined && !!src.width && !!src.height && src.width / src.height > W / H + 0.02;
+  if (useReframe) parts.push(`crop=w='min(iw\\,ih*${(W / H).toFixed(5)})':h=ih:x='(iw-ow)*${c.framing!.x!.toFixed(4)}':y=0`);
+  // Âncora vertical do zoom (altura dos olhos): o ponto nessa altura fica parado na tela; sem âncora, o centro.
+  const ay = (c.framing?.y ?? 0.5).toFixed(4);
+  if (z1 !== z0) {
+    // Tamanho "contido" da fonte no quadro (o zoompan entrega direto nesse tamanho).
+    const ar = useReframe ? W / H : (src.width ?? W) / (src.height ?? H);
+    const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+    const sw = even(Math.min(W, H * ar));
+    const sh = even(Math.min(H, W / ar));
+    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*${ay}':d=1:s=${sw}x${sh}:fps=${fps}`);
+  } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)/2:y=(ih-oh)*${ay}`);
+  // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
+  parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
+  if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
+  return parts.join(',');
+}
+
+/**
  * Um trecho de vídeo com número exato de quadros, já no tamanho de entrega. Aqui entram: velocidade (setpts),
  * reframe em volta do rosto, zoom fixo (crop) ou animado (zoompan, ease-out), congelamento (tpad) e a 2ª câmera
  * (mesmo trecho, deslocado pelo `syncOffset`).
@@ -268,26 +297,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
 async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset): Promise<void> {
   const src = cam ?? a;
   const off = cam ? (cam.syncOffset ?? 0) : 0;
-  const sp = clipSpeed(c);
-  const framesPlayed = Math.max(1, Math.round(clipPlayed(c) * fps));
-  const z0 = c.zoom ?? 1;
-  const z1 = c.zoomTo ?? z0;
-  const parts: string[] = [];
-  if (sp !== 1) parts.push(`setpts=(PTS-STARTPTS)/${sp}`);
-  const useReframe = reframe && !!c.framing && !!src.width && !!src.height && src.width / src.height > W / H + 0.02;
-  if (useReframe) parts.push(`crop=w='min(iw\\,ih*${(W / H).toFixed(5)})':h=ih:x='(iw-ow)*${c.framing!.x.toFixed(4)}':y=0`);
-  if (z1 !== z0) {
-    // Tamanho "contido" da fonte no quadro (o zoompan entrega direto nesse tamanho).
-    const ar = useReframe ? W / H : (src.width ?? W) / (src.height ?? H);
-    const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
-    const sw = even(Math.min(W, H * ar));
-    const sh = even(Math.min(H, W / ar));
-    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${sw}x${sh}:fps=${fps}`);
-  } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}`);
-  // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
-  parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
-  if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
-  const vf = parts.join(',');
+  const vf = segmentVideoFilter(src, c, fps, W, H, lut, reframe);
   const limit = c.freeze ? ['-t', String(c.out - c.in + 0.05)] : [];
   const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(Math.max(1, frames)), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), out];
   try {

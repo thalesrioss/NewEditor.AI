@@ -354,3 +354,21 @@ test('snapCut: estende também para a direita, e não mexe quando o resto é lon
   // Outro asset não é afetado.
   assert.deepEqual(snapCut(t, 'b', 21.1, 22), { in: 21.1, out: 22 });
 });
+
+test('set_framing com y: âncora vertical do zoom, x e y independentes (CH-0006)', () => {
+  let t = applyOp(base(), { type: 'set_framing', clipId: 'c1', y: 0.36 }, 'human');
+  assert.deepEqual(t.main[0]!.framing, { y: 0.36 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', x: 0.4 }, 'agent');
+  assert.deepEqual(t.main[0]!.framing, { x: 0.4, y: 0.36 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', y: -2 }, 'human');
+  assert.equal(t.main[0]!.framing!.y, 0);
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', x: null }, 'human');
+  assert.deepEqual(t.main[0]!.framing, { y: 0 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', y: null }, 'human');
+  assert.equal(t.main[0]!.framing, undefined);
+  assert.throws(() => applyOp(t, { type: 'set_framing', clipId: 'c1', y: Number.NaN }, 'human'), OpError);
+  // Clipes com âncoras diferentes não se juntam ao desfazer um corte.
+  let u = applyOp(base(), { type: 'split', time: 50 }, 'human');
+  u = applyOp(u, { type: 'set_framing', clipId: u.main[1]!.id, y: 0.36 }, 'human');
+  assert.equal(u.main.length, 2);
+});
