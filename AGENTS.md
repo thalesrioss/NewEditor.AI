@@ -47,6 +47,7 @@ Antes de dizer que terminou: `npm run typecheck` e `npm test` verdes, e `npm run
 - O texto da resposta do agente não prova efeito: compare a timeline antes e depois.
 - Processos lançados com `&` ou `nohup` dentro de um comando curto morrem quando ele termina; use um processo em segundo plano dedicado e encerre-o no fim. O macOS não tem `timeout`: use `perl -e 'alarm N; exec @ARGV' <cmd>`.
 - O `envelope.f32` é em dB, não amplitude.
+- Render pela API: `POST /api/projects/<id>/render` devolve `job`; acompanhe com `GET /api/projects/<id>/render/<job>` até `pronto` (arquivo inteiro, com `lufs`/`truePeak`) ou `erro`. Não espere o MP4 parar de crescer. Status em memória: some quando o servidor religa.
 
 ## Regras do escritório NewContent (agentes do OpenClaw)
 
