@@ -271,8 +271,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     }
 
     case 'set_zoom': {
-      if (op.zoom < 1 || op.zoom > 2) throw new OpError('set_zoom: zoom entre 1 e 2');
-      if (op.zoomTo !== undefined && op.zoomTo !== null && (op.zoomTo < 1 || op.zoomTo > 2)) throw new OpError('set_zoom: zoomTo entre 1 e 2');
+      // Até 4×: bruto 4K vertical numa timeline 1080 aguenta ~2× nativo; acima disso é upscale (refs da Brane a ~2,6×).
+      if (!(op.zoom >= 1 && op.zoom <= MAX_CLIP_ZOOM)) throw new OpError(`set_zoom: zoom entre 1 e ${MAX_CLIP_ZOOM}`);
+      if (op.zoomTo !== undefined && op.zoomTo !== null && !(op.zoomTo >= 1 && op.zoomTo <= MAX_CLIP_ZOOM)) throw new OpError(`set_zoom: zoomTo entre 1 e ${MAX_CLIP_ZOOM}`);
       return {
         ...t,
         main: t.main.map((c) => {
@@ -610,6 +611,8 @@ export function cutEndAfter(t: Timeline, at: Seconds): Seconds {
 
 export const DEFAULT_FRAMING: import('./types.ts').OverlayFraming = { x: 0.5, y: 0.5, zoom: 1 };
 export const MAX_FRAMING_ZOOM = 4;
+/** Teto do zoom de clipe (`set_zoom`), o mesmo do enquadramento de B-roll. */
+export const MAX_CLIP_ZOOM = MAX_FRAMING_ZOOM;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 const r4 = (n: number) => Math.round(n * 10000) / 10000;

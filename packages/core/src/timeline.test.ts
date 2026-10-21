@@ -72,6 +72,16 @@ test('split no meio do clipe e set_zoom só no pedaço', () => {
   assert.equal(t.main[1]!.zoom, 1.1);
 });
 
+test('set_zoom aceita enquadramento fechado acima de 2× (CH-0013) até 4×', () => {
+  let t = applyOp(base(), { type: 'set_zoom', clipId: 'c1', zoom: 2.6 }, 'agent');
+  assert.equal(t.main[0]!.zoom, 2.6);
+  t = applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 2.6, zoomTo: 3 }, 'agent');
+  assert.equal(t.main[0]!.zoomTo, 3);
+  assert.throws(() => applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 4.01 }, 'agent'), OpError);
+  assert.throws(() => applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 2, zoomTo: 4.5 }, 'agent'), OpError);
+  assert.throws(() => applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: Number.NaN }, 'agent'), OpError);
+});
+
 test('operação inválida lança OpError e não altera nada', () => {
   const t = base();
   assert.throws(() => applyOp(t, { type: 'restore', removalId: 'nao-existe' }, 'human'), OpError);

@@ -39,3 +39,9 @@ test('no ffmpeg, a faixa dos olhos fica parada com a âncora e sobe ~54 px sem e
   assert.ok(Math.abs(animado * 1920 - 691) <= 3, `zoompan com âncora: ${animado * 1920}`);
   assert.ok(Math.abs(sem * 1920 - (691 - 54)) <= 4, `sem âncora: ${sem * 1920}`);
 });
+
+test('zoom acima de 2× (CH-0013): bruto 4K vertical a 2,6× recorta e amplia para a entrega', () => {
+  const src4k = { width: 2160, height: 3840 };
+  assert.match(segmentVideoFilter(src4k, clip({ zoom: 2.6, framing: { y: 0.4 } }), 29.97, 1080, 1920), /crop=iw\/2\.6:ih\/2\.6:x=\(iw-ow\)\/2:y=\(ih-oh\)\*0\.4000,scale=1080:1920/);
+  assert.match(segmentVideoFilter(src4k, clip({ zoom: 2.6, zoomTo: 3 }), 29.97, 1080, 1920), /zoompan=z='2\.6\+\(0\.4000\)/);
+});
