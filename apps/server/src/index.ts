@@ -29,7 +29,7 @@ import { entregaJob, renderJob, rotasRender } from './routes/render.ts';
 import { rotasRevisao } from './routes/revisao.ts';
 import { rotasSistema } from './routes/sistema.ts';
 import { store } from './store.ts';
-import { PRODUCAO_PREFIX, PRODUTORA_DIR } from './videos.ts';
+import { PRODUCAO_PREFIX, PRODUTORA_DIR, entregaPublica } from './videos.ts';
 
 await store.load();
 
@@ -42,8 +42,8 @@ await app.register(fastifyStatic, { root: DATA_DIR, prefix: '/media/', decorateR
 // Biblioteca de referências de motion (capas e quadros).
 await fsp.mkdir(REFS_DIR, { recursive: true });
 await app.register(fastifyStatic, { root: REFS_DIR, prefix: '/refs/', decorateReply: false });
-// Vídeos editados da produtora (galeria, FB-0169): só leitura, com Range para o player.
-if (fs.existsSync(path.join(PRODUTORA_DIR, 'producao'))) await app.register(fastifyStatic, { root: path.join(PRODUTORA_DIR, 'producao'), prefix: PRODUCAO_PREFIX, decorateReply: false, cacheControl: false });
+// Vídeos editados da produtora (galeria, FB-0169): só leitura, com Range para o player, e só os de entrega/.
+if (fs.existsSync(path.join(PRODUTORA_DIR, 'producao'))) await app.register(fastifyStatic, { root: path.join(PRODUTORA_DIR, 'producao'), prefix: PRODUCAO_PREFIX, decorateReply: false, cacheControl: false, allowedPath: entregaPublica });
 const webDist = process.env.NEWEDITOR_WEB_DIST ?? path.join(ROOT, 'apps', 'web', 'dist');
 if (fs.existsSync(webDist)) await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: false });
 
