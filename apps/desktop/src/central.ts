@@ -4,14 +4,15 @@
  * sem botão de escolher origem. Só quando a central não responde o app sobe o servidor próprio (reserva),
  * e a janela diz isso no título.
  *
- *  · NEWEDITOR_CENTRAL_URL: outra central (ex.: http://127.0.0.1:5410); vazio, `off` ou `0` desliga.
+ *  · NEWEDITOR_CENTRAL_URL: outra central (ex.: http://10.0.0.5:5410); vazio, `off` ou `0` desliga.
  *  · NEWEDITOR_DEV_URL continua vencendo tudo (desenvolvimento).
  */
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
-export const CENTRAL_PADRAO = 'http://127.0.0.1:5410';
+// `localhost`, não 127.0.0.1: o Vite da central escuta só em ::1 (medido 21/10: 127.0.0.1:5410 recusa).
+export const CENTRAL_PADRAO = 'http://localhost:5410';
 /** Pasta de dados da central (só para o menu "Pasta de dados"; quem lê e grava é o servidor da central). */
 export const CENTRAL_DADOS_PADRAO = path.join(os.homedir(), 'newstudios', 'editor-brain', 'data');
 

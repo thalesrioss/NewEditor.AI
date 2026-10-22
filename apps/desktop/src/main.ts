@@ -5,7 +5,7 @@
  * não subir, o servidor roda dentro do processo principal (reserva), e o diário conta qual dos dois foi.
  *
  *  · desenvolvimento: NEWEDITOR_DEV_URL=http://localhost:5173 (Vite + servidor de `npm run dev`)
- *  · central da NewStudios (padrão, FB-0169): a janela abre direto em http://127.0.0.1:5410, a mesma fonte de projetos
+ *  · central da NewStudios (padrão, FB-0169): a janela abre direto em http://localhost:5410, a mesma fonte de projetos
  *    e vídeos dos editores agentes, sem servidor próprio e sem escolha de origem (ver central.ts)
  *  · reserva, se a central não responder: servidor em resources/app-root, dados em ~/Library/Application Support/Editor Brain/data
  */
