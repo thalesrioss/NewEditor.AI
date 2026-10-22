@@ -1,5 +1,6 @@
 /** O que todas as áreas de rotas usam: erro HTTP com código, relato de falha do agente e o portão do cérebro. */
 import { BRAIN } from '../config.ts';
+import { explicarFalha } from '../jobs.ts';
 import { apiErrorMessage, hasCredentials, RefusalError } from '../llm.ts';
 import { store } from '../store.ts';
 
@@ -13,6 +14,7 @@ export function report(projectId: string, what: string, e: unknown): void {
   let msg = e instanceof Error ? e.message : String(e);
   if (e instanceof RefusalError) msg = 'o modelo recusou este pedido';
   else msg = apiErrorMessage(e) ?? msg;
+  msg = explicarFalha(msg);
   console.error(`[${projectId}] ${what}:`, e);
   store.log(projectId, 'system', `Falha em ${what}: ${msg}`);
   store.setActivity(projectId, { state: 'idle', message: `Falhou: ${what}` });

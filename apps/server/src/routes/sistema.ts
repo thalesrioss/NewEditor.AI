@@ -4,7 +4,7 @@ import { listGabaritos } from '../benchmark.ts';
 import { cerebroGraph, cerebroNote } from '../cerebro.ts';
 import { BRAIN } from '../config.ts';
 import { createFromTask, parseTask } from '../gestor.ts';
-import { cancelJob, queueState } from '../jobs.ts';
+import { cancelJob, isBusy, lastResult, queuePosition, queueState } from '../jobs.ts';
 import { hasCredentials } from '../llm.ts';
 import { llmSettings, modelDownloaded, setLlmSettings, type LlmSettings } from '../llm-local.ts';
 import { store } from '../store.ts';
@@ -26,6 +26,12 @@ export async function rotasSistema(app: FastifyInstance): Promise<void> {
 
   // --- Fila global ---------------------------------------------------------------------------------
   app.get('/api/fila', async () => queueState());
+  // Situação de um projeto na fila, para quem acompanha por HTTP: posição (0 = rodando), o que está fazendo e como
+  // terminou o último trabalho, com o erro se falhou (CH-0019: a falha só ia pelo WebSocket e sumia no reinício).
+  app.get<{ Params: { id: string } }>('/api/projects/:id/fila', async (req) => {
+    const { id } = req.params;
+    return { posicao: queuePosition(id) ?? null, fazendo: isBusy(id) ?? null, ultimo: (await lastResult(id)) ?? null };
+  });
   app.delete<{ Params: { id: string } }>('/api/fila/:id', async (req) => ({ ok: cancelJob(req.params.id) }));
 
   // --- Gestor de Projetos: tarefa → briefing → Drive → fila -------------------------------------------
