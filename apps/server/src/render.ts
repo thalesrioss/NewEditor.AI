@@ -50,9 +50,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
   const assets = new Map(p.assets.map((a) => [a.id, a]));
   const fps = tl.fps || 30;
   // Entrega no padrão registrado no Cérebro do Editor (04_EDITOR: base 1080×1920).
-  const k = Math.min(1, DELIVERY_SHORT_SIDE / Math.min(tl.width, tl.height));
-  const W = Math.round((tl.width * k) / 2) * 2;
-  const H = Math.round((tl.height * k) / 2) * 2;
+  const { W, H } = deliverySize(tl);
   const total = timelineDuration(tl);
   const hasVideo = assets.get(clips[0]!.assetId)?.kind === 'video';
   const skipped: string[] = [];
@@ -70,25 +68,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
   if (tl.voiceDenoise && clips.some((c) => cleanMaster(p, assets.get(c.assetId)!))) notes.push(`voz limpa ${Math.round(tl.voiceDenoise * 100)}%`);
   try {
     // --- 0. Cor: um LUT por arquivo (câmera), o mesmo que o preview usa --------------------------
-    const luts = new Map<string, string>();
-    for (const [assetId, grade] of Object.entries(tl.grades ?? {})) {
-      if (isNeutral(grade)) continue;
-      const f = path.join(work, `grade-${assetId}.cube`);
-      // Look (LUT .cube do CinePRO) entra depois da conversão e das primárias — a mesma composição do preview.
-      const cube = grade.lut ? await cineproCube(grade.lut.id).catch(() => null) : null;
-      await fs.writeFile(f, lutToCube(buildLut(grade, 33, cube), 33));
-      luts.set(assetId, f);
-    }
-    // Textura (nitidez, vinheta, grão) do grade: filtros espaciais, com os mesmos valores do shader do preview.
-    const texFilter = (assetId: string) => {
-      const t = textureOf(tl.grades?.[assetId]);
-      const f: string[] = [];
-      if (t.sharpen > 0) f.push(`unsharp=5:5:${(t.sharpen * 1.6).toFixed(2)}`);
-      if (t.vignette > 0) f.push(`vignette=a=${(0.2 + t.vignette * 0.9).toFixed(3)}`);
-      if (t.grain > 0) f.push(`noise=alls=${Math.round(t.grain * 40)}:allf=t+u`);
-      return f.length ? `,${f.join(',')}` : '';
-    };
-    const lutFilter = (assetId: string) => `${luts.has(assetId) ? `,lut3d=file='${luts.get(assetId)}':interp=tetrahedral` : ''}${texFilter(assetId)}`;
+    const { luts, lutFilter } = await gradeFilters(tl.grades, work);
 
     // --- 1. Trechos ---------------------------------------------------------------------------
     const starts = clipStarts(tl);
@@ -273,6 +253,38 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
 }
 
 /**
+ * Cor do export: um LUT .cube por arquivo (câmera) em `work`, o mesmo que o preview usa, e a cadeia de filtros
+ * (lut3d + textura) por assetId. Usado pelo render e pelo quadro de conferência (CH-0018), para os dois baterem.
+ */
+export async function gradeFilters(grades: Project['timeline']['grades'], work: string): Promise<{ luts: Map<string, string>; lutFilter: (assetId: string) => string }> {
+  const luts = new Map<string, string>();
+  for (const [assetId, grade] of Object.entries(grades ?? {})) {
+    if (isNeutral(grade)) continue;
+    const f = path.join(work, `grade-${assetId}.cube`);
+    // Look (LUT .cube do CinePRO) entra depois da conversão e das primárias — a mesma composição do preview.
+    const cube = grade.lut ? await cineproCube(grade.lut.id).catch(() => null) : null;
+    await fs.writeFile(f, lutToCube(buildLut(grade, 33, cube), 33));
+    luts.set(assetId, f);
+  }
+  // Textura (nitidez, vinheta, grão) do grade: filtros espaciais, com os mesmos valores do shader do preview.
+  const texFilter = (assetId: string) => {
+    const t = textureOf(grades?.[assetId]);
+    const f: string[] = [];
+    if (t.sharpen > 0) f.push(`unsharp=5:5:${(t.sharpen * 1.6).toFixed(2)}`);
+    if (t.vignette > 0) f.push(`vignette=a=${(0.2 + t.vignette * 0.9).toFixed(3)}`);
+    if (t.grain > 0) f.push(`noise=alls=${Math.round(t.grain * 40)}:allf=t+u`);
+    return f.length ? `,${f.join(',')}` : '';
+  };
+  return { luts, lutFilter: (assetId) => `${luts.has(assetId) ? `,lut3d=file='${luts.get(assetId)}':interp=tetrahedral` : ''}${texFilter(assetId)}` };
+}
+
+/** Tamanho de entrega do export (lado curto 1080), o mesmo para o render e para o quadro de conferência. */
+export function deliverySize(tl: Pick<Project['timeline'], 'width' | 'height'>): { W: number; H: number } {
+  const k = Math.min(1, DELIVERY_SHORT_SIDE / Math.min(tl.width, tl.height));
+  return { W: Math.round((tl.width * k) / 2) * 2, H: Math.round((tl.height * k) / 2) * 2 };
+}
+
+/**
  * Filtro de vídeo de um trecho (puro, testável): velocidade, reframe, zoom fixo ou animado ancorado na altura dos
  * olhos (`framing.y`), tamanho de entrega com a cor, congelamento.
  */
@@ -326,7 +338,7 @@ export function overlayFrames(start: number, end: number, fps: number): { f0: nu
  * reframe em volta do rosto, zoom fixo (crop) ou animado (zoompan, ease-out), congelamento (tpad) e a 2ª câmera
  * (mesmo trecho, deslocado pelo `syncOffset`).
  */
-async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset): Promise<void> {
+export async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset): Promise<void> {
   const src = cam ?? a;
   const off = cam ? (cam.syncOffset ?? 0) : 0;
   const vf = segmentVideoFilter(src, c, fps, W, H, lut, reframe);
