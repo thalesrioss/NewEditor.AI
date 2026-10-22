@@ -287,6 +287,8 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
   for (const c of cues) {
     c.key = cueKey(c.words[0]!);
     const e = editOf(c.words[0]);
+    // "Forçar" numa palavra vale para o bloco que a contém (a quebra muda com o corte e com as camadas; CH-0016).
+    const forced = c.words.some((w) => editOf(w)?.force);
     if (e?.text !== undefined) {
       c.original = c.words.map((w) => w.text).join(' ');
       const toks = e.text.split(/\s+/).filter(Boolean);
@@ -302,19 +304,25 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
       c.edited = true;
     }
     if (e?.hidden) c.hidden = true;
-    if (e?.force) c.forced = true;
+    if (forced) c.forced = true;
     // Altura própria: o ajuste do bloco vence o do trecho (`until`) que o contém.
     const src = c.words[0]!.src;
     const zone = src && edits.find((z) => z.position !== undefined && z.until !== undefined && z.assetId === src.assetId && src.at >= z.at - 0.02 && src.at <= z.until + 0.02);
     const position = e?.position ?? zone?.position;
     if (position !== undefined) c.position = position;
   }
-  // Coberta por camada: lettering, motion ou B-roll em cima de mais de 1/3 da legenda (ou do seu começo).
+  // Coberta por camada: lettering, motion ou B-roll em cima de mais de 1/3 da legenda (ou do seu começo). Camada que
+  // só passa até 2 quadros do começo da legenda não a esconde (CH-0016): a legenda começa quando a camada sai.
+  const grace = 2 / (tl.fps || 30) + 1e-3;
   for (const c of cues) {
-    const hit = layers.find(({ pos }) => {
+    const tail = layers.filter(({ pos }) => pos.start <= c.start + 0.05 && pos.end > c.start && pos.end - c.start <= grace && pos.end < c.end);
+    const hit = layers.find((l) => {
+      if (tail.includes(l)) return false;
+      const { pos } = l;
       const ov = Math.min(c.end, pos.end) - Math.max(c.start, pos.start);
       return ov > 0 && (ov >= (c.end - c.start) / 3 || (pos.start <= c.start + 0.05 && pos.end > c.start));
     });
+    if (!hit && tail.length) c.start = tail.reduce((m, { pos }) => Math.max(m, pos.end), c.start);
     if (hit) c.coveredBy = hit.role;
     // A legenda fica até a próxima começar, então pode atravessar o corte; camada que entra no meio dela a encerra
     // ali (CH-0014: B-roll no 1º quadro do clipe mostrava a legenda do clipe anterior por cima).
