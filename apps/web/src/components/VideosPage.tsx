@@ -13,6 +13,7 @@ interface GrupoCard {
   trello?: string;
   drive?: string;
   projectId?: string;
+  emEdicaoPor?: string;
   data: string;
   versoes: VideoEditado[];
 }
@@ -48,7 +49,7 @@ export function VideosPage() {
   const grupos = useMemo(() => {
     const m = new Map<string, GrupoCard>();
     for (const v of videos) {
-      const g = m.get(v.card) ?? { card: v.card, cliente: v.cliente, titulo: v.titulo, etapa: v.etapa, editor: v.editor, trello: v.trello, drive: v.drive, projectId: v.projectId, data: v.data, versoes: [] };
+      const g = m.get(v.card) ?? { card: v.card, cliente: v.cliente, titulo: v.titulo, etapa: v.etapa, editor: v.editor, trello: v.trello, drive: v.drive, projectId: v.projectId, emEdicaoPor: v.emEdicaoPor, data: v.data, versoes: [] };
       g.versoes.push(v);
       if (v.data > g.data) g.data = v.data;
       m.set(v.card, g);
@@ -114,6 +115,11 @@ export function VideosPage() {
               <div className="text-sm font-semibold text-white">{g.titulo}</div>
               {g.etapa && <span className="rounded-full bg-ink-750 px-2 py-0.5 text-ui-xs text-ink-200">{g.etapa}</span>}
               {g.editor && <span className="text-ui-xs text-ink-400">editor: {nomeEditor(g.editor)}</span>}
+              {g.emEdicaoPor && (
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-ui-xs font-semibold text-amber-200" title="O editor agente deste card não é redisparado até devolver a edição">
+                  Em edição por {g.emEdicaoPor}
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-2 text-ui-sm">
                 {g.trello && (
                   <a href={g.trello} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-ink-300 hover:text-white">

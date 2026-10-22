@@ -27,10 +27,24 @@ export interface VideoEditado {
   trello?: string;
   drive?: string;
   projectId?: string;
+  /** Humano que assumiu a edição do card (BL-0122). */
+  emEdicaoPor?: string;
+}
+
+/** Trava do humano no card da produtora (BL-0122). */
+export interface TravaCard {
+  card: string;
+  projectId: string;
+  quem: string;
+  desde: string;
+  estadoAntes: string;
 }
 
 export const api = {
   videos: () => req<{ produtora: string; videos: VideoEditado[] }>('GET', '/api/videos'),
+  trava: (id: string) => req<{ card: string | null; trava: TravaCard | null }>('GET', `/api/projects/${id}/trava`),
+  assumir: (id: string) => req<{ card: string; trava: TravaCard }>('POST', `/api/projects/${id}/assumir`, {}),
+  devolver: (id: string) => req<{ card: string; trava: null; estado: string; passos: string[] }>('POST', `/api/projects/${id}/devolver`, {}),
   health: () => req<{ ok: boolean; brain: 'local' | 'claude'; ready: boolean }>('GET', '/api/health'),
   projects: () => req<(Project & { pendentes?: number; estimativa?: number })[]>('GET', '/api/projects'),
   // Perfis de edição por cliente
