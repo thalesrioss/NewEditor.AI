@@ -74,3 +74,44 @@ test('lista as versões de producao/<cliente>/<card>/entrega com o projeto que e
 test('sem pasta da produtora: lista vazia, sem erro', async () => {
   assert.deepEqual(await listVideos('/tmp/nao-existe-produtora-xyz'), []);
 });
+
+test('/producao/ serve só os vídeos de entrega/: bruto, PROJETO.md e QC.md da entrega ficam fora (BL-0119)', async () => {
+  const { default: Fastify } = await import('fastify');
+  const { default: fastifyStatic } = await import('@fastify/static');
+  const { PRODUCAO_PREFIX, entregaPublica } = await import('./videos.ts');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'producao-'));
+  const card = path.join(root, 'brane', '6ad8c0b9-reels');
+  await fs.mkdir(path.join(card, 'entrega'), { recursive: true });
+  await fs.mkdir(path.join(card, 'bruto'), { recursive: true });
+  await fs.writeFile(path.join(card, 'entrega', 'reels_v2.mp4'), Buffer.alloc(200, 1));
+  await fs.writeFile(path.join(card, 'entrega', 'reels_v3.MOV'), Buffer.alloc(200, 2));
+  await fs.writeFile(path.join(card, 'entrega', 'QC.md'), 'qc');
+  await fs.writeFile(path.join(card, 'bruto', 'C3822.MP4'), Buffer.alloc(200, 3));
+  await fs.writeFile(path.join(card, 'PROJETO.md'), 'segredo do cliente');
+  const app = Fastify();
+  await app.register(fastifyStatic, { root, prefix: PRODUCAO_PREFIX, decorateReply: false, cacheControl: false, allowedPath: entregaPublica });
+  try {
+    const get = (url: string, headers: Record<string, string> = {}) => app.inject({ method: 'GET', url, headers });
+    const inteiro = await get('/producao/brane/6ad8c0b9-reels/entrega/reels_v2.mp4');
+    assert.equal(inteiro.statusCode, 200);
+    assert.equal(inteiro.rawPayload.length, 200);
+    const trecho = await get('/producao/brane/6ad8c0b9-reels/entrega/reels_v2.mp4', { range: 'bytes=0-99' });
+    assert.equal(trecho.statusCode, 206);
+    assert.equal(trecho.rawPayload.length, 100);
+    assert.equal((await get('/producao/brane/6ad8c0b9-reels/entrega/reels_v3.MOV')).statusCode, 200);
+    for (const fora of [
+      '/producao/brane/6ad8c0b9-reels/bruto/C3822.MP4',
+      '/producao/brane/6ad8c0b9-reels/PROJETO.md',
+      '/producao/brane/6ad8c0b9-reels/entrega/QC.md',
+      '/producao/brane/6ad8c0b9-reels/entrega/../bruto/C3822.MP4',
+      '/producao/brane/6ad8c0b9-reels/entrega/..%2Fbruto%2FC3822.MP4',
+      '/producao/brane/6ad8c0b9-reels/entrega/',
+    ]) {
+      const r = await get(fora, { range: 'bytes=0-99' });
+      assert.ok(r.statusCode === 403 || r.statusCode === 404, `${fora} saiu com ${r.statusCode}`);
+    }
+  } finally {
+    await app.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

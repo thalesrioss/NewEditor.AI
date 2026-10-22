@@ -12,6 +12,11 @@ import type { Project } from '@neweditor/core';
 export const PRODUTORA_DIR = process.env.NEWEDITOR_PRODUTORA ?? path.join(os.homedir(), 'newstudios');
 /** Prefixo HTTP dos arquivos de `producao/` (servidos com Range, como os renders). */
 export const PRODUCAO_PREFIX = '/producao/';
+/**
+ * Só os vídeos de `entrega/` saem por `/producao/` (BL-0119, revisão do lead): bruto, PROJETO.md, brief, EDL e o
+ * QC.md da entrega ficam fora. `p` é o caminho já sem o prefixo, como o @fastify/static entrega ao `allowedPath`.
+ */
+export const entregaPublica = (p: string): boolean => /^\/[^/]+\/[^/]+\/entrega\/[^/]+\.(mp4|mov)$/i.test(p);
 
 export interface CardFila {
   card: string;
