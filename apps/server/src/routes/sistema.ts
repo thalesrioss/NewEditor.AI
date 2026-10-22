@@ -7,6 +7,8 @@ import { createFromTask, parseTask } from '../gestor.ts';
 import { cancelJob, queueState } from '../jobs.ts';
 import { hasCredentials } from '../llm.ts';
 import { llmSettings, modelDownloaded, setLlmSettings, type LlmSettings } from '../llm-local.ts';
+import { store } from '../store.ts';
+import { listVideos, PRODUTORA_DIR } from '../videos.ts';
 import { erro } from './_comum.ts';
 
 export async function rotasSistema(app: FastifyInstance): Promise<void> {
@@ -18,6 +20,9 @@ export async function rotasSistema(app: FastifyInstance): Promise<void> {
     if (!req.query.path) throw erro('path obrigatório');
     return cerebroNote(req.query.vault ?? 'editor', req.query.path);
   });
+
+  // --- Galeria: todos os vídeos editados da produtora (FB-0169) -----------------------------------------
+  app.get('/api/videos', async () => ({ produtora: PRODUTORA_DIR, videos: await listVideos(PRODUTORA_DIR, store.list()) }));
 
   // --- Fila global ---------------------------------------------------------------------------------
   app.get('/api/fila', async () => queueState());
