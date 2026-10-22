@@ -266,6 +266,8 @@ async function createWindow(url: string): Promise<void> {
     webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   buildMenu(win);
+  // Fora da central, o título avisa (a página não pode trocá-lo por "NewEditor.AI · Editor Brain").
+  if (origem === 'local') win.on('page-title-updated', (e) => e.preventDefault());
   if (!HIDDEN) win.once('ready-to-show', () => win.show());
   // Links externos abrem no navegador do sistema; a janela só navega dentro do app.
   win.webContents.setWindowOpenHandler(({ url: u }) => (void shell.openExternal(u), { action: 'deny' }));
