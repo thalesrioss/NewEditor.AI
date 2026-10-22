@@ -45,3 +45,25 @@ test('zoom acima de 2× (CH-0013): bruto 4K vertical a 2,6× recorta e amplia pa
   assert.match(segmentVideoFilter(src4k, clip({ zoom: 2.6, framing: { y: 0.4 } }), 29.97, 1080, 1920), /crop=iw\/2\.6:ih\/2\.6:x=\(iw-ow\)\/2:y=\(ih-oh\)\*0\.4000,scale=1080:1920/);
   assert.match(segmentVideoFilter(src4k, clip({ zoom: 2.6, zoomTo: 3 }), 29.97, 1080, 1920), /zoompan=z='2\.6\+\(0\.4000\)/);
 });
+
+test('zoom animado reamostra a fonte ao fps da timeline antes do zoompan (CH-0017)', () => {
+  assert.match(segmentVideoFilter(src, clip({ zoom: 1.18, zoomTo: 1.3 }), 29.97, 1080, 1920), /fps=29\.97,zoompan=/);
+});
+
+/** Brilho médio (0–255) do último quadro de um trecho de `frames` quadros com a fonte em `srcFps`. */
+function lastFrameLuma(vf: string, srcFps: string, frames: number): number {
+  // Fonte que clareia com o tempo: luma = 40 + 40·t (t em segundos), então o brilho diz o instante mostrado.
+  const r = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', `color=black:s=270x480:d=4:r=${srcFps},format=yuv420p,geq=lum='40+40*T':cb=128:cr=128`, '-vf', `${vf},scale=8:8,format=gray`, '-frames:v', String(frames), '-f', 'rawvideo', '-'], { maxBuffer: 1 << 24 });
+  assert.equal(r.status, 0, String(r.stderr));
+  const px = (r.stdout as Buffer).subarray(-64);
+  return px.reduce((a, b) => a + b, 0) / px.length;
+}
+
+test('no ffmpeg, zoom animado em bruto 23,976 fica no tempo do áudio numa timeline 29,97 (CH-0017)', { skip: spawnSync('ffmpeg', ['-version']).status !== 0 }, () => {
+  // 2 s de clipe = 60 quadros a 29,97: o último quadro tem de mostrar a fonte em ~2 s (luma ~120), não em 2,5 s (~140).
+  const c = clip({ in: 0, out: 2, zoom: 1.18, zoomTo: 1.3 });
+  const animado = lastFrameLuma(segmentVideoFilter({ width: 270, height: 480 }, c, 29.97, 270, 480), '24000/1001', 60);
+  const fixo = lastFrameLuma(segmentVideoFilter({ width: 270, height: 480 }, clip({ in: 0, out: 2, zoom: 1.18 }), 29.97, 270, 480), '24000/1001', 60);
+  assert.ok(Math.abs(animado - fixo) <= 3, `animado ${animado} x fixo ${fixo}`);
+  assert.ok(Math.abs(animado - 119) <= 4, `último quadro do animado: luma ${animado}`);
+});

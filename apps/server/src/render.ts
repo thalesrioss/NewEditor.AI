@@ -293,6 +293,9 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
     const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
     const sw = even(Math.min(W, H * ar));
     const sh = even(Math.min(H, W / ar));
+    // O zoompan (d=1) entrega 1 quadro por quadro de entrada: a fonte entra já no fps da timeline, senão um bruto
+    // 23,976 numa timeline 29,97 sai 1,25× mais rápido que o áudio (CH-0017).
+    parts.push(`fps=${fps}`);
     parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*${ay}':d=1:s=${sw}x${sh}:fps=${fps}`);
   } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)/2:y=(ih-oh)*${ay}`);
   // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
