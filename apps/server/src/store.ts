@@ -178,6 +178,11 @@ class Store {
     return { canUndo: h.undo.length > 0, canRedo: h.redo.length > 0, undoLabel: h.undo.at(-1)?.label, redoLabel: h.redo.at(-1)?.label, undoId: h.undo.at(-1)?.id };
   }
 
+  /** Rótulos dos passos de desfazer, do mais antigo ao mais recente ("Devolver ao agente" lista os do humano, BL-0122). */
+  undoLabels(id: string): string[] {
+    return this.hist(id).undo.map((s) => s.label);
+  }
+
   private pushStep(id: string, label: string, timeline: Timeline, stepId?: string): void {
     const h = this.hist(id);
     h.undo.push({ ...(stepId && { id: stepId }), label, timeline });
