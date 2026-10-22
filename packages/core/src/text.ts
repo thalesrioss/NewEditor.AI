@@ -261,7 +261,8 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
     // Ajuste manual "dividir": uma legenda nova começa nesta palavra.
     if (cur.length && editOf(w)?.split) flush();
     // Camada entrando: a legenda não junta palavras de antes e de depois dela (CH-0014; senão some inteira sob o B-roll).
-    if (cur.length && layers.some(({ pos }) => cur[0]!.start < pos.start && w.start >= pos.start - 1e-6)) flush();
+    // O "juntar" do editor na palavra vence (CH-0021: o artigo que começa junto com o lettering fica na legenda anterior).
+    if (cur.length && !editOf(w)?.join && layers.some(({ pos }) => cur[0]!.start < pos.start && w.start >= pos.start - 1e-6)) flush();
     // Limite de caracteres: fecha o bloco antes de a palavra estourar.
     if (cur.length && chars([...cur, w]) > maxChars) flush();
     cur.push(w);
