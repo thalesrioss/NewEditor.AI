@@ -225,7 +225,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     const textMov = await renderTextLayer({ W, H, fps, total, cues, captions: tl.captions, letterings, motions }, work, (x) => onProgress?.(0.88 + 0.04 * x));
     if (textMov) {
       const t = inputs.push(textMov) - 1;
-      parts.push(`[${vCur}][${t}:v]overlay=0:0:format=auto:eof_action=pass[vtext]`);
+      parts.push(`[${vCur}][${t}:v]${TEXT_OVERLAY}[vtext]`);
       vCur = 'vtext';
       videoTouched = true;
     }
@@ -303,6 +303,12 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
   if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
   return parts.join(',');
 }
+
+/**
+ * Camada de texto (ARGB) sobre o vídeo. Em YUV 4:4:4: com `format=auto` o overlay levava o quadro inteiro para RGBA e
+ * de volta, e toda a imagem embaixo (bruto, B-roll, motion) saía com o verde +2 e o azul −1 (CH-0015).
+ */
+export const TEXT_OVERLAY = 'overlay=0:0:format=yuv444:eof_action=pass';
 
 /**
  * Janela de um overlay de imagem no grid de quadros da timeline (CH-0008): do quadro round(início·fps) até o quadro
