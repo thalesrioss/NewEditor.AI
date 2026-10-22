@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
         '/api': target,
         '/media': target,
         '/refs': target,
+        '/producao': target,
         '/ws': { target, ws: true },
       },
     },

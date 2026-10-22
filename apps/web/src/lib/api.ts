@@ -11,7 +11,26 @@ async function req<T>(method: string, url: string, body?: unknown, extraHeaders?
   return data;
 }
 
+/** Uma versão entregue pela produtora (`GET /api/videos`, FB-0169). */
+export interface VideoEditado {
+  id: string;
+  url: string;
+  arquivo: string;
+  versao: number | null;
+  cliente: string;
+  card: string;
+  titulo: string;
+  etapa: string;
+  editor: string;
+  data: string;
+  bytes: number;
+  trello?: string;
+  drive?: string;
+  projectId?: string;
+}
+
 export const api = {
+  videos: () => req<{ produtora: string; videos: VideoEditado[] }>('GET', '/api/videos'),
   health: () => req<{ ok: boolean; brain: 'local' | 'claude'; ready: boolean }>('GET', '/api/health'),
   projects: () => req<(Project & { pendentes?: number; estimativa?: number })[]>('GET', '/api/projects'),
   // Perfis de edição por cliente
