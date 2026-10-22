@@ -19,6 +19,7 @@ import { finalize } from './finalize.ts';
 import { backfill } from './ingest.ts';
 import { registerJob, resumeJobs } from './jobs.ts';
 import { REFS_DIR } from './motion/refs.ts';
+import { origemAceita, origensPermitidas, protegerOrigem } from './origens.ts';
 import { report } from './routes/_comum.ts';
 import { rotasAgente } from './routes/agente.ts';
 import { rotasBibliotecas } from './routes/bibliotecas.ts';
@@ -33,7 +34,10 @@ import { store } from './store.ts';
 await store.load();
 
 const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 10 * 1024 * 1024 });
-await app.register(cors, { origin: true });
+// Só a própria tela fala com o servidor pelo navegador (BL-0123); curl e agentes (sem Origin) continuam passando.
+const origens = origensPermitidas(PORT, process.env.NEWEDITOR_ALLOWED_ORIGINS);
+await app.register(cors, { origin: (origem, cb) => cb(null, origemAceita(origem, origens)) });
+protegerOrigem(app, origens);
 await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 * 1024 } });
 await app.register(websocket);
 // Mídia do projeto (proxies, envelopes, renders) com suporte a Range — o player faz seek direto.
