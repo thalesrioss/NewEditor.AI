@@ -10,11 +10,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { overlayFrames } from './render.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-ovq-'));
 process.env.NEWEDITOR_DATA = path.join(tmp, 'data');
 process.env.NEWEDITOR_LLM = 'off';
+// Import dinâmico: um import estático do render.ts carregaria o config.ts antes da linha acima e o projeto de teste
+// iria para a pasta de dados real (na bancada, ferramentas/editor-brain/data, um "CH-0008" a cada instalação).
+const { overlayFrames } = await import('./render.ts');
 
 const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { stdio: ['ignore', 'ignore', 'inherit'] });
 const fala = path.join(tmp, 'fala.mp4');
