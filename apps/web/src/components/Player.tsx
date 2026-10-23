@@ -333,8 +333,8 @@ export function LegacyPlayer() {
             near.map(({ o, start, end }) => {
               const a = o.source.type === 'media' ? assets.get(o.source.assetId) : undefined;
               const on = playhead >= start && playhead < end;
-              if ((o.role === 'broll' || o.role === 'motion') && a?.proxy && o.source.type === 'media' && a.kind === 'image') return <img key={o.id} src={mediaUrl(project.id, a.proxy)} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ objectFit: a.alpha ? 'contain' : 'cover', opacity: on ? 1 : 0 }} />;
-              if ((o.role === 'broll' || o.role === 'motion') && a?.proxy && o.source.type === 'media') return <OverlayMedia key={o.id} kind="video" url={mediaUrl(project.id, a.proxy)} srcIn={o.source.in} start={start} visible={on} playing={playing} playhead={playhead} speed={overlayPlayback(o).speed} moving={overlayPlayback(o).moving} />;
+              if ((o.role === 'broll' || o.role === 'motion' || o.role === 'lettering') && a?.proxy && o.source.type === 'media' && a.kind === 'image') return <img key={o.id} src={mediaUrl(project.id, a.proxy)} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ objectFit: a.alpha ? 'contain' : 'cover', opacity: on ? 1 : 0 }} />;
+              if ((o.role === 'broll' || o.role === 'motion' || o.role === 'lettering') && a?.proxy && o.source.type === 'media') return <OverlayMedia key={o.id} kind="video" url={mediaUrl(project.id, a.proxy)} srcIn={o.source.in} start={start} visible={on} playing={playing} playhead={playhead} speed={overlayPlayback(o).speed} moving={overlayPlayback(o).moving} />;
               if ((o.role === 'sfx' || o.role === 'music') && a?.proxy && o.source.type === 'media') {
                 // Mesma mixagem do export: dB, fades e ducking (abaixa ~10 dB quando tem fala).
                 const m = o.mix;

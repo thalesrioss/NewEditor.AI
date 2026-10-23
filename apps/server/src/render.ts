@@ -168,7 +168,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       if (d <= 0.02) return;
       // Imagem (frame, PNG com alfa, GIF): entra como stream em loop pela duração da camada.
       const idx = inputs.push(a.kind === 'image' ? { path: a.path, pre: ['-loop', '1', '-framerate', String(fps), '-t', (d + 0.1).toFixed(3)] } : a.path) - 1;
-      if ((o.role === 'broll' || o.role === 'motion') && (a.kind === 'video' || a.kind === 'image')) {
+      if ((o.role === 'broll' || o.role === 'motion' || o.role === 'lettering') && (a.kind === 'video' || a.kind === 'image')) {
+        // Motion do Studio e lettering de arquivo (alfa): encaixa no quadro sem cortar, fundo transparente; B-roll preenche e leva a cor.
         const fit = overlayFit(a, W, H, o.framing, lutFilter);
         const w = overlayFrames(start, end, fps);
         parts.push(`[${idx}:v:0]${overlayTiming(o, srcIn, w.at, d)},${fit},setsar=1,fps=${fps},tpad=stop_mode=clone:stop_duration=${(2 / fps).toFixed(4)}[ov${n}]`);

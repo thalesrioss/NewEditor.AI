@@ -1,6 +1,7 @@
 import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { normalizeGradeLut } from './color.ts';
+import { DEFAULT_CAPTIONS } from './text.ts';
 
 /** Menor duração de clipe que mantemos; abaixo disso é resíduo de corte. */
 export const MIN_CLIP: Seconds = 0.04;
@@ -411,8 +412,15 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       return { ...t, grades };
     }
 
-    case 'set_captions':
-      return { ...t, captions: op.captions };
+    case 'set_captions': {
+      // Troca o objeto inteiro, mas o que é obrigatório e faltou (JSON da API) vem do padrão: `{ font }` sozinho deixava
+      // `position` indefinida e a legenda ia para o topo (BL-0100).
+      const c = { ...op.captions };
+      for (const k of ['enabled', 'uppercase', 'highlight'] as const) if (typeof c[k] !== 'boolean') c[k] = DEFAULT_CAPTIONS[k];
+      if (c.style !== 'reels' && c.style !== 'frase') c.style = DEFAULT_CAPTIONS.style;
+      if (typeof c.position !== 'number' || !Number.isFinite(c.position)) c.position = DEFAULT_CAPTIONS.position;
+      return { ...t, captions: c };
+    }
 
     case 'set_overlay_framing': {
       const o0 = t.overlays.find((o) => o.id === op.id);

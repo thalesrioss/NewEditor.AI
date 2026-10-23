@@ -69,12 +69,15 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
 
   // --- Arquivos do projeto ---------------------------------------------------------------------------
   /** Importa por caminho local (validação local: o arquivo fica onde está). */
-  app.post<{ Params: { id: string }; Body: { path: string } }>('/api/projects/:id/assets', async (req) => {
+  app.post<{ Params: { id: string }; Body: { path: string; role?: 'fala' | 'broll' | 'motion' } }>('/api/projects/:id/assets', async (req) => {
     const { id } = req.params;
     const file = req.body.path?.trim();
     if (!file || !path.isAbsolute(file)) throw erro('informe o caminho absoluto do arquivo');
+    // Papel opcional: o render do Motion Studio entra já como motion (BL-0100); sem papel, o ingest decide como antes.
+    const role = req.body.role;
+    if (role !== undefined && role !== 'fala' && role !== 'broll' && role !== 'motion') throw erro('role deve ser fala, broll ou motion');
     await fsp.access(file);
-    void enqueue(id, 'importando', () => ingest(id, file)).catch((e) => report(id, 'importação', e));
+    void enqueue(id, 'importando', () => ingest(id, file, role)).catch((e) => report(id, 'importação', e));
     return { queued: true };
   });
   /** Importa por upload (arrastar arquivo para o Editor Brain). */
