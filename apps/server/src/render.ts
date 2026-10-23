@@ -347,11 +347,33 @@ export async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: 
   const off = cam ? (cam.syncOffset ?? 0) : 0;
   const vf = segmentVideoFilter(src, c, fps, W, H, lut, reframe);
   const limit = c.freeze ? ['-t', String(c.out - c.in + 0.05)] : [];
-  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(Math.max(1, frames)), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), out];
-  try {
-    await run('ffmpeg', ['-hwaccel', 'videotoolbox', ...base]);
-  } catch {
-    await run('ffmpeg', base);
+  const want = Math.max(1, frames);
+  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(want), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), out];
+  await encodeExactFrames([['-hwaccel', 'videotoolbox', ...base], base], out, want);
+}
+
+/** Quadros de vídeo gravados no cabeçalho do arquivo (sem decodificar). */
+export async function countFrames(file: string): Promise<number> {
+  const raw = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=nb_frames', '-of', 'csv=p=0', file]);
+  return Number.parseInt(raw.toString().trim(), 10) || 0;
+}
+
+/**
+ * Tenta cada linha de argumentos do ffmpeg até uma sair sem erro E com os `frames` quadros pedidos. O decodificador de
+ * hardware (videotoolbox) às vezes falha em alguns quadros de um bruto, descarta-os e mesmo assim sai com código 0: o
+ * trecho ficava mais curto e a faixa de vídeo inteira terminava antes do áudio (CH-0027, 7 quadros a menos no C3030).
+ * A última tentativa vale como está.
+ */
+export async function encodeExactFrames(attempts: string[][], out: string, frames: number, exec: (cmd: string, args: string[]) => Promise<unknown> = run, count: (file: string) => Promise<number> = countFrames): Promise<void> {
+  for (let i = 0; i < attempts.length; i++) {
+    const last = i === attempts.length - 1;
+    try {
+      await exec('ffmpeg', attempts[i]!);
+    } catch (e) {
+      if (last) throw e;
+      continue;
+    }
+    if (last || (await count(out).catch(() => 0)) >= frames) return;
   }
 }
 
