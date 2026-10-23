@@ -72,6 +72,11 @@ export interface LetteringSpec {
   align?: 'left' | 'center' | 'right';
   /** Centro horizontal livre (0–1), quando o editor arrasta o lettering no player; vale com `align` centro. */
   x?: number;
+  /**
+   * Lettering em escada (BL-0102): borda esquerda de cada linha (0–1 da largura do quadro), na ordem das linhas na
+   * tela. `null` ou sem valor = a linha segue `align`. Com alguma linha em escada, `x` não desloca o bloco.
+   */
+  lineX?: (number | null)[];
   /** Só no estilo `cliente`. */
   template?: LetteringTemplate;
 }
@@ -143,6 +148,34 @@ const shown = (w: LetteringWord, f: Face) => {
   return f.upper ? t.toLocaleUpperCase('pt-BR') : t;
 };
 
+/** Borda esquerda conferida de cada uma das `n` linhas (BL-0102); `undefined` = a linha segue o alinhamento. */
+export function letteringLineX(spec: LetteringSpec, n: number): (number | undefined)[] {
+  return Array.from({ length: n }, (_, i) => {
+    const v = Array.isArray(spec.lineX) ? spec.lineX[i] : undefined;
+    return typeof v === 'number' && Number.isFinite(v) ? r(c01(v), 4) : undefined;
+  });
+}
+
+/**
+ * Posição horizontal do bloco e de cada linha. Sem escada, o de sempre (`align` + `x`). Com escada, o bloco ocupa a
+ * largura do quadro (o % do recuo vale sobre ela) e cada linha leva o seu `padding-left`; as outras seguem `align`.
+ */
+function horizontal(spec: LetteringSpec, n: number) {
+  const al = spec.align ?? 'center';
+  const xs = letteringLineX(spec, n);
+  if (xs.every((x) => x === undefined)) {
+    const side = al === 'center' ? '' : al === 'left' ? 'left:7%;right:auto;text-align:left;' : 'right:7%;left:auto;text-align:right;';
+    const shift = spec.x !== undefined && al === 'center' ? `translateX(${r((spec.x - 0.5) * 100, 2)}%) ` : '';
+    return { side, shift, xs, line: (_i: number) => '' };
+  }
+  const rest = al === 'left' ? 'padding-left:7%;' : al === 'right' ? 'padding-right:7%;' : '';
+  const line = (i: number) => (xs[i] === undefined ? rest : `text-align:left;padding-left:${r(xs[i]! * 100, 2)}%;`);
+  return { side: al === 'center' ? '' : `text-align:${al};`, shift: '', xs, line };
+}
+
+/** Largura útil da linha `i` em `--u`: a linha em escada vai do recuo até perto da borda direita. */
+const roomOf = (xs: (number | undefined)[], i: number, wu: number, frac: number) => (xs[i] === undefined ? wu * frac : wu * Math.max(0.1, 0.97 - xs[i]!));
+
 export function letteringAccent(spec: LetteringSpec): string {
   return spec.accent ?? LETTERING_STYLES[spec.estilo]?.accent ?? '#FFFFFF';
 }
@@ -164,8 +197,8 @@ export function letteringFrameHtml(spec: LetteringSpec, t: number, dur: number, 
       const f = w.destaque ? typo.destaque : typo.apoio;
       return a + (shown(w, f).length + 0.6) * f.cw * f.size;
     }, 0);
-  const maxW = Math.max(...lines.map(widthOf));
-  const k = Math.min(1, (wu * 0.86) / Math.max(1, maxW));
+  const hz = horizontal(spec, lines.length);
+  const k = Math.min(1, ...lines.map((ws, i) => roomOf(hz.xs, i, wu, 0.86) / Math.max(1, widthOf(ws))));
 
   const ex = c01((t - (dur - OUT)) / OUT);
   const shadow = `0 0.05em 0.3em rgba(0,0,0,.62),0 0 0.9em rgba(0,0,0,.32)`;
@@ -265,12 +298,10 @@ export function letteringFrameHtml(spec: LetteringSpec, t: number, dur: number, 
           i++;
         }
       }
-      return `<div style="${faceCss(f, k)}line-height:${big ? 1 : 1.1};white-space:nowrap;${overlap}">${parts.join(' ')}</div>`;
+      return `<div style="${faceCss(f, k)}line-height:${big ? 1 : 1.1};white-space:nowrap;${overlap}${hz.line(li)}">${parts.join(' ')}</div>`;
     })
     .join('');
-  const al = spec.align ?? 'center';
-  const side = al === 'center' ? '' : al === 'left' ? 'left:7%;right:auto;text-align:left;' : 'right:7%;left:auto;text-align:right;';
-  const shift = spec.x !== undefined && al === 'center' ? `translateX(${r((spec.x - 0.5) * 100, 2)}%) ` : '';
+  const { side, shift } = hz;
   return `<div class="ne-lt" style="top:${r((spec.y ?? position) * 100, 2)}%;${side}text-shadow:${shadow}${haze};opacity:${r(1 - ex)};filter:blur(${r(ex * 0.25)}em);transform:${shift}translateY(calc(-50% - ${r(ex * 0.4)}em))">${html}</div>`;
 }
 
@@ -305,14 +336,12 @@ function clienteHtml(spec: LetteringSpec, wu: number, position: number): string 
   };
   // Cabe na largura (mesma estimativa dos outros estilos; Helvetica Bold ≈ 0,7 em por letra em caixa alta, 0,58 em mista).
   const cw = Math.max(0.2, (tp.upper ? 0.7 : 0.58) + tp.tracking);
-  const maxW = Math.max(...lines.map((ws) => ws.reduce((a, w) => a + (txt(w).length + 0.3) * cw * tp.size, 0)));
-  const k = Math.min(1, (wu * 0.9) / Math.max(1, maxW));
+  const hz = horizontal(spec, lines.length);
+  const k = Math.min(1, ...lines.map((ws, i) => roomOf(hz.xs, i, wu, 0.9) / Math.max(1, ws.reduce((a, w) => a + (txt(w).length + 0.3) * cw * tp.size, 0))));
   const html = lines
-    .map((ws) => `<div>${ws.map((w) => (w.destaque && spec.accent && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(spec.accent) ? `<span style="color:${spec.accent}">${esc(txt(w))}</span>` : esc(txt(w)))).join(' ')}</div>`)
+    .map((ws, li) => `<div${hz.line(li) ? ` style="${hz.line(li)}"` : ''}>${ws.map((w) => (w.destaque && spec.accent && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(spec.accent) ? `<span style="color:${spec.accent}">${esc(txt(w))}</span>` : esc(txt(w)))).join(' ')}</div>`)
     .join('');
-  const al = spec.align ?? 'center';
-  const side = al === 'center' ? '' : al === 'left' ? 'left:7%;right:auto;text-align:left;' : 'right:7%;left:auto;text-align:right;';
-  const shift = spec.x !== undefined && al === 'center' ? `translateX(${r((spec.x - 0.5) * 100, 2)}%) ` : '';
+  const { side, shift } = hz;
   const face = `font-family:${tp.family};font-weight:${tp.weight};${tp.italic ? 'font-style:italic;' : ''}font-size:calc(var(--u)*${r(tp.size * k, 2)});letter-spacing:${tp.tracking}em;line-height:1.05;white-space:nowrap;color:${tp.color};`;
   const shadow = tp.shadow ? 'text-shadow:0 0.05em 0.3em rgba(0,0,0,.62);' : 'text-shadow:none;';
   return `<div class="ne-lt" style="top:${r((spec.y ?? position) * 100, 2)}%;${side}${face}${shadow}transform:${shift}translateY(-50%)">${html}</div>`;
