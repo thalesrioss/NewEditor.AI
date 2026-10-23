@@ -459,6 +459,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_overlay_sfx':
       if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id ? { ...o, sfx: op.sfx } : o)) };
+    case 'set_overlay_keep_captions':
+      if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
+      return { ...t, overlays: t.overlays.map((o) => (o.id !== op.id ? o : op.keep ? { ...o, keepCaptions: true } : (({ keepCaptions: _k, ...rest }) => rest)(o))) };
     case 'set_lettering_ref': {
       const { letteringRef: _drop, ...rest } = t;
       return op.refId ? { ...rest, letteringRef: op.refId } : rest;

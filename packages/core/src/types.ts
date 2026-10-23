@@ -191,6 +191,8 @@ export interface OverlayItem {
   speed?: number;
   /** Congela o quadro nos últimos `freeze` s do overlay (a duração na timeline não muda). */
   freeze?: Seconds;
+  /** Camada que convive com a legenda (CH-0022: título fixo do cliente no topo): não esconde nem quebra a legenda. */
+  keepCaptions?: boolean;
 }
 
 export interface OverlayFraming {
@@ -433,6 +435,8 @@ export type TimelineOp =
   | { type: 'set_voice_chain'; on: boolean }
   | { type: 'set_overlay_lettering'; id: string; lettering: import('./lettering.ts').LetteringSpec }
   | { type: 'set_overlay_sfx'; id: string; sfx: import('./sfx.ts').SfxCue[] }
+  /** Liga/desliga a convivência com a legenda (título fixo; CH-0022). */
+  | { type: 'set_overlay_keep_captions'; id: string; keep: boolean }
   | { type: 'set_lettering_ref'; refId: string | null }
   /** Corrige a grafia de palavras (texto vazio desfaz a correção). */
   | { type: 'fix_words'; fixes: WordFix[] }

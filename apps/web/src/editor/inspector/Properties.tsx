@@ -561,6 +561,7 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
         </label>
         <ApplyToAll spec={spec} id={item.id} />
         <Toggle label="SFX" hint={`${cues.length} efeitos`} on={spec.sfx !== false} onChange={(v) => commit({ ...spec, sfx: v ? undefined : false }, v ? 'Ligou o som do lettering' : 'Silenciou o lettering')} />
+        <Toggle label="Título fixo (mantém a legenda)" hint="não esconde a legenda por baixo; para título de cliente no topo o vídeo inteiro" on={!!item.keepCaptions} onChange={(v) => sendOp({ op: { type: 'set_overlay_keep_captions', id: item.id, keep: v }, note: v ? 'Lettering como título fixo (legenda continua)' : 'Lettering volta a esconder a legenda' })} />
         {spec.refName && <p className="text-ui-xs text-ink-400">Referência: {spec.refName}</p>}
       </Section>
     </>

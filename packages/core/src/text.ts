@@ -246,9 +246,9 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
   const chars = (ws: CueWord[]) => ws.reduce((n, w) => n + w.text.length + 1, -1);
   const minDur = s.style === 'reels' ? 0.35 : 0.8;
   const breakPause = s.style === 'reels' ? 0.3 : 0.4;
-  // Camadas que escondem a legenda (lettering, motion, B-roll), no tempo da timeline.
+  // Camadas que escondem a legenda (lettering, motion, B-roll), no tempo da timeline. Título fixo (`keepCaptions`) convive.
   const layers = tl.overlays
-    .filter((o) => o.role === 'lettering' || o.role === 'motion' || o.role === 'broll')
+    .filter((o) => (o.role === 'lettering' || o.role === 'motion' || o.role === 'broll') && !o.keepCaptions)
     .map((o) => ({ role: o.role as 'lettering' | 'motion' | 'broll', pos: resolveOverlay(tl, o) }))
     .filter((x): x is { role: 'lettering' | 'motion' | 'broll'; pos: { start: number; end: number } } => !!x.pos);
   const cues: Cue[] = [];
