@@ -3,13 +3,15 @@
  * zoom, LUT da grade e o encode do trecho (libx264 yuv420p, que herda o range do bruto) — sem render completo.
  * Devolve o PNG e a medida do signalstats no arquivo codificado, na mesma escala do render (full range num bruto pc:
  * preto = 0; limitado: preto = 16). Aceita grade de teste por arquivo, sem salvar no projeto.
- * Só a faixa principal (V1): B-roll, motion, lettering e legenda ficam fora.
+ * Por padrão só a faixa principal (V1). Com `camadas` (CH-0028), o B-roll e o motion de arquivo (V2/V3) ativos no
+ * quadro entram por cima, com o mesmo enquadramento, grade e ordem de trilha do render; lettering, motion desenhado
+ * e legenda continuam fora.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { clipDuration, clipStarts, normalizeGradeLut, type ColorGrade, type Project } from '@neweditor/core';
+import { clipDuration, clipStarts, normalizeGradeLut, overlayActive, overlaySourceTime, overlaysInDrawOrder, resolveOverlay, type ColorGrade, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
-import { deliverySize, gradeFilters, segmentVideo } from './render.ts';
+import { deliverySize, gradeFilters, overlayFit, overlayFrames, segmentVideo } from './render.ts';
 
 export interface QuadroSinal {
   ylow: number;
@@ -28,6 +30,26 @@ export interface QuadroResult {
   /** Range do quadro codificado, como sai no render: 'pc' (full, preto 0) ou 'tv' (limitado, preto 16). */
   range: string;
   sinal: QuadroSinal;
+  /** Camadas desenhadas por cima da V1 (só com `camadas`), na ordem de desenho: id, papel e o instante da fonte. */
+  camadas?: { id: string; role: string; trackId: string; assetId: string; fonte: number }[];
+}
+
+/**
+ * B-roll e motion de arquivo visíveis no quadro `f` da timeline, na ordem de desenho do render (V2 embaixo, V3 em
+ * cima), com o instante da fonte que o render mostra nesse quadro (velocidade e congelamento incluídos).
+ */
+export function camadasNoQuadro(tl: Project['timeline'], assets: Map<string, MediaAsset>, f: number): { o: OverlayItem; a: MediaAsset; fonte: number }[] {
+  const fps = tl.fps || 30;
+  return overlaysInDrawOrder(tl.overlays).flatMap((o) => {
+    if (!overlayActive(tl, o) || o.source.type !== 'media' || (o.role !== 'broll' && o.role !== 'motion')) return [];
+    const a = assets.get(o.source.assetId);
+    if (!a || (a.kind !== 'video' && a.kind !== 'image')) return [];
+    const pos = resolveOverlay(tl, o);
+    if (!pos || pos.end - pos.start <= 0.02) return [];
+    const w = overlayFrames(pos.start, pos.end, fps);
+    if (f < w.f0 || f >= w.f1) return [];
+    return [{ o, a, fonte: a.kind === 'image' ? 0 : overlaySourceTime(o, f / fps - w.at) }];
+  });
 }
 
 /** Clipe da V1 no tempo `t` da timeline e o índice do quadro dentro dele (no grid de quadros do render). */
@@ -71,7 +93,7 @@ export async function limparQuadros(outDir: string, agora = Date.now()): Promise
   }
 }
 
-export async function renderQuadro(p: Project, dir: string, t: number, grades?: Record<string, Partial<ColorGrade>>): Promise<QuadroResult> {
+export async function renderQuadro(p: Project, dir: string, t: number, grades?: Record<string, Partial<ColorGrade>>, camadas = false): Promise<QuadroResult> {
   const tl = p.timeline;
   if (!tl.main.length) throw Object.assign(new Error('timeline vazia'), { statusCode: 400 });
   if (!Number.isFinite(t) || t < 0) throw Object.assign(new Error('t (segundos da timeline) precisa ser um número >= 0'), { statusCode: 400 });
@@ -106,10 +128,30 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
     const name = `q_${Math.round(t * 1000)}_${Date.now().toString(36)}.png`;
     const png = path.join(outDir, name);
     const probe = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=color_range', '-of', 'default=nw=1:nk=1', seg])).toString().trim();
-    // Último quadro do trecho: medido em YUV como está no arquivo (escala do render) e salvo em PNG.
-    const out = await run('ffmpeg', ['-v', 'error', '-i', seg, '-vf', `select='eq(n\\,${hit.frame})',signalstats,metadata=print:file=-`, '-frames:v', '1', '-update', '1', '-y', png]);
+    const base = `select='eq(n\\,${hit.frame})'`;
+    const medir = 'signalstats,metadata=print:file=-';
+    const sobre = camadas ? camadasNoQuadro(tl, assets, Math.round(clipStarts(tl)[hit.i]! * fps) + hit.frame) : [];
+    let out: Buffer;
+    if (!sobre.length) {
+      // Último quadro do trecho: medido em YUV como está no arquivo (escala do render) e salvo em PNG.
+      out = await run('ffmpeg', ['-v', 'error', '-i', seg, '-vf', `${base},${medir}`, '-frames:v', '1', '-update', '1', '-y', png]);
+    } else {
+      // Camadas por cima: o quadro de cada fonte no instante que o render mostra, com o encaixe do render (CH-0028).
+      const args = ['-v', 'error', '-i', seg];
+      const parts = [`[0:v]${base},setpts=0[b0]`];
+      sobre.forEach(({ o, a: oa, fonte }, k) => {
+        args.push(...(oa.kind === 'image' ? [] : ['-ss', fonte.toFixed(4)]), '-i', oa.path);
+        parts.push(`[${k + 1}:v:0]trim=end_frame=1,setpts=0,${overlayFit(oa, W, H, o.framing, lutFilter)},setsar=1[o${k}]`);
+        parts.push(`[b${k}][o${k}]overlay=eof_action=repeat[b${k + 1}]`);
+      });
+      parts.push(`[b${sobre.length}]${medir}[q]`);
+      out = await run('ffmpeg', [...args, '-filter_complex', parts.join(';'), '-map', '[q]', '-frames:v', '1', '-update', '1', '-y', png]);
+    }
     const sinal = lerSinal(out.toString());
-    return { file: `quadros/${name}`, t, clipId: c.id, assetId: a.id, range: probe === 'pc' ? 'pc' : 'tv', sinal };
+    return {
+      file: `quadros/${name}`, t, clipId: c.id, assetId: a.id, range: probe === 'pc' ? 'pc' : 'tv', sinal,
+      ...(camadas ? { camadas: sobre.map(({ o, a: oa, fonte }) => ({ id: o.id, role: o.role, trackId: o.trackId, assetId: oa.id, fonte: Math.round(fonte * 1000) / 1000 })) } : {}),
+    };
   } finally {
     await fs.rm(work, { recursive: true, force: true });
   }

@@ -40,9 +40,10 @@ export async function rotasRender(app: FastifyInstance): Promise<void> {
     return { queued: true, posicao: queuePosition(id) };
   });
   // Quadro de conferência (CH-0018): 1 quadro pelo caminho do render, com grade de teste opcional, sem render completo.
-  app.post<{ Params: { id: string }; Body: { t: number; grades?: Record<string, Partial<ColorGrade>> } }>('/api/projects/:id/quadro', async (req) => {
+  // camadas: true põe por cima o B-roll e o motion de arquivo daquele quadro (CH-0028).
+  app.post<{ Params: { id: string }; Body: { t: number; grades?: Record<string, Partial<ColorGrade>>; camadas?: boolean } }>('/api/projects/:id/quadro', async (req) => {
     const { id } = req.params;
-    const r = await renderQuadro(store.get(id), store.dir(id), Number(req.body?.t), req.body?.grades);
+    const r = await renderQuadro(store.get(id), store.dir(id), Number(req.body?.t), req.body?.grades, req.body?.camadas === true);
     return { ...r, url: `/media/${id}/${r.file}` };
   });
   app.get('/api/entrega/presets', async () => ({ presets: Object.entries(PRESETS).map(([id, p]) => ({ id, ...p })), pasta: ENTREGAS_DIR }));
