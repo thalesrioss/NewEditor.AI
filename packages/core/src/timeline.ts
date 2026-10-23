@@ -597,6 +597,23 @@ export function overlayActive(t: Timeline, o: OverlayItem): boolean {
   return audio ? !st.muted : !st.hidden;
 }
 
+/**
+ * Altura da camada de imagem do overlay: V3 fica acima de V2, como no DaVinci (CH-0024). Trilha `V<n>` usa o n;
+ * trilha sem número cai no papel (B-roll = 2, lettering e motion = 3); som = 0.
+ */
+export function overlayLayer(o: OverlayItem): number {
+  const m = /^V(\d+)$/i.exec(o.trackId);
+  if (m) return Number(m[1]);
+  if (o.role === 'broll') return 2;
+  if (o.role === 'lettering' || o.role === 'motion') return 3;
+  return 0;
+}
+
+/** Overlays na ordem de desenho: de baixo para cima por trilha; dentro da trilha, a ordem de inserção (estável). */
+export function overlaysInDrawOrder<T extends OverlayItem>(overlays: readonly T[]): T[] {
+  return overlays.map((o, i) => ({ o, i, z: overlayLayer(o) })).sort((a, b) => a.z - b.z || a.i - b.i).map((x) => x.o);
+}
+
 export function trackFlag(t: Timeline, trackId: string, flag: 'hidden' | 'muted' | 'locked'): boolean {
   return !!t.trackState?.[trackId]?.[flag];
 }
