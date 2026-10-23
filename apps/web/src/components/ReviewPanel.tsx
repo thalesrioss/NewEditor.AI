@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Loader2, Pause, Play, RotateCcw, SpellCheck, Wand2 } from 'lucide-react';
-import { formatTime } from '@neweditor/core';
+import { formatTime, passaDoAlvo, textoPassaDoAlvo } from '@neweditor/core';
 import { api, mediaUrl, type ReviewDoubt } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { Button, ConfirmButton } from './ui.tsx';
@@ -49,6 +49,8 @@ export function ReviewPanel() {
 
   const high = useMemo(() => (doubts ?? []).filter((d) => d.prioridade === 'alta'), [doubts]);
   const low = useMemo(() => (doubts ?? []).filter((d) => d.prioridade === 'baixa'), [doubts]);
+  // BL-0024: peça acima da duração-alvo do briefing não é "nada pendente".
+  const acima = passaDoAlvo(project);
 
   /** Ouve o trecho no BRUTO (o que foi cortado não está mais na timeline). */
   const listen = (d: ReviewDoubt) => {
@@ -95,7 +97,7 @@ export function ReviewPanel() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {focus && status === 'revisao' && <ReviewFocus doubts={high} playing={playing} onListen={listen} onResolve={resolve} onClose={() => setFocus(false)} onApprove={() => void approve()} />}
+      {focus && status === 'revisao' && <ReviewFocus doubts={high} acima={acima} playing={playing} onListen={listen} onResolve={resolve} onClose={() => setFocus(false)} onApprove={() => void approve()} />}
       <audio ref={audio} onTimeUpdate={(e) => e.currentTarget.currentTime >= stopAt.current && (e.currentTarget.pause(), setPlaying(null))} onEnded={() => setPlaying(null)} />
       <div className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {status === 'revisao' ? (
@@ -127,7 +129,8 @@ export function ReviewPanel() {
                 </Button>
               )}
             </div>
-            {high.length === 0 && <p className="px-1 text-ui-xs text-emerald-300">Nada pendente — pode aprovar.</p>}
+            {acima && <p className="px-1 text-ui-xs text-amber-300" data-testid="duracao-briefing">{textoPassaDoAlvo(acima)}. Corte trechos na aba Transcrição antes de aprovar.</p>}
+            {high.length === 0 && !acima && <p className="px-1 text-ui-xs text-emerald-300">Nada pendente — pode aprovar.</p>}
             {high.map((d) => (
               <DoubtCard key={d.id} d={d} playing={playing === d.id} onListen={() => listen(d)} onResolve={() => resolve(d)} />
             ))}

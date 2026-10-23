@@ -106,3 +106,25 @@ describe('parseTask com LLM simulado', async () => {
     assert.equal((await parseTask(TAREFA_DAVI, { hoje: HOJE, ask: async () => null as unknown as Record<string, unknown> })).cliente, 'Davi Lo');
   });
 });
+
+describe('duração-alvo: drawer do Gestor e QC leem o mesmo número (BL-0024)', async () => {
+  const { parseTaskRules } = await import('./gestor.ts');
+  const { duracaoMaxDoTexto } = await import('@neweditor/core');
+  const FRASES: [string, number][] = [
+    ['Reels até 60s, gancho de 3 a 5 segundos', 60],
+    ['Gancho forte até 3 s, vídeo de até 60s', 60],
+    ['Vídeo de até 1:30 para o feed', 90],
+    ['Até 2 min, tom leve', 120],
+    ['Shorts de 30 a 45 s', 45],
+  ];
+  for (const [frase, max] of FRASES) {
+    test(`"${frase}" → ${max} s nos dois`, () => {
+      assert.equal(parseTaskRules(frase, HOJE).duracaoAlvoS?.[1], max);
+      assert.equal(duracaoMaxDoTexto(frase), max);
+    });
+  }
+  test('faixa vira [min, max]; "o bruto tem 20 min" não vira alvo (fica o do formato)', () => {
+    assert.deepEqual(parseTaskRules('Shorts de 30 a 45 s', HOJE).duracaoAlvoS, [30, 45]);
+    assert.deepEqual(parseTaskRules('Reels. O bruto tem 20 min.', HOJE).duracaoAlvoS, [30, 90]);
+  });
+});

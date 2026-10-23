@@ -80,6 +80,20 @@ describe('perfil e QC', () => {
     assert.ok(regras.includes('tarja'), `esperava tarja em ${regras.join(',')}`);
     assert.ok(!regras.includes('formato'), 'o perfil Personalizado tem o formato da própria peça');
   });
+  test('QC avisa peça acima da duração-alvo do briefing, com as duas durações (BL-0024)', async () => {
+    const { store } = await import('./store.ts');
+    const { runQc } = await import('./qc.ts');
+    store.update(projectId, { brief: 'Reels 9:16 até 1s, tom direto.' }); // a timeline tem 2 s
+    const qc = await runQc(projectId);
+    const d = qc.issues.find((i) => i.regra === 'duracao-briefing');
+    assert.ok(d, `esperava duracao-briefing em ${qc.issues.map((i) => i.regra).join(',')}`);
+    assert.equal(d.severidade, 'avisa');
+    assert.match(d.texto, /Peça com 0:02; o briefing pede até 0:01/);
+    store.update(projectId, { brief: 'Reels 9:16 até 3 segundos.' });
+    assert.ok(!(await runQc(projectId)).issues.some((i) => i.regra === 'duracao-briefing'), 'dentro do alvo não avisa');
+    store.update(projectId, { brief: 'projeto de teste' });
+    assert.ok(!(await runQc(projectId)).issues.some((i) => i.regra === 'duracao-briefing'), 'sem alvo no briefing não avisa');
+  });
 });
 
 describe('render', () => {

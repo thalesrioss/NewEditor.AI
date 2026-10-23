@@ -11,7 +11,7 @@
  *  - render: loudness −14 LUFS / −1 dBTP e quadros pretos.
  */
 import path from 'node:path';
-import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA, profileLabel } from '@neweditor/core';
+import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA, profileLabel, passaDoAlvo, textoPassaDoAlvo } from '@neweditor/core';
 import { DELIVERY } from './loudness.ts';
 import { readTranscript } from './asr.ts';
 import { run } from './media.ts';
@@ -88,6 +88,9 @@ export async function runQc(projectId: string): Promise<QcReport> {
   if (total && (total < prof.peca.duracaoMin * 0.8 || total > prof.peca.duracaoMax * 1.25)) {
     push({ severidade: 'avisa', regra: 'duracao', texto: `Peça com ${fmt(total)}; o perfil "${profileLabel(prof)}" espera ${prof.peca.duracaoMin}–${prof.peca.duracaoMax} s` });
   }
+  // BL-0024: o alvo escrito no briefing do cliente vale mais que a faixa do perfil.
+  const acima = passaDoAlvo(p);
+  if (acima) push({ severidade: 'avisa', regra: 'duracao-briefing', texto: textoPassaDoAlvo(acima) });
 
   // --- Overlays: motion seco, lettering linhas, sobreposição, SFX por 3 s -----------------------------
   const placed = tl.overlays.flatMap((o) => {
