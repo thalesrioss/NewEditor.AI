@@ -6,6 +6,7 @@ import { stepEnd } from '../estimate.ts';
 import { approveDecupagem } from '../finalize.ts';
 import { enqueueJob, queuePosition } from '../jobs.ts';
 import { listNotifications, markRead } from '../notify.ts';
+import { addTermoAoPerfil } from '../profiles.ts';
 import { reviewDoubts } from '../review.ts';
 import { store } from '../store.ts';
 import { erro, report } from './_comum.ts';
@@ -20,6 +21,15 @@ export async function rotasRevisao(app: FastifyInstance): Promise<void> {
     const resolvidas = [...new Set([...(p.review?.resolvidas ?? []), req.body.doubtId])];
     store.update(p.id, { review: { ...p.review, resolvidas } });
     return { ok: true };
+  });
+  /** "Guardar no perfil do cliente" (BL-0081): a grafia conferida entra no glossário do perfil do projeto. */
+  app.post<{ Params: { id: string }; Body: { termo: unknown } }>('/api/projects/:id/glossario', async (req) => {
+    const termo = req.body?.termo;
+    if (typeof termo !== 'string' || !termo.trim()) throw erro('termo precisa ser um texto');
+    const prof = await addTermoAoPerfil(store.get(req.params.id), termo);
+    const gravado = prof.glossario?.[0] ?? termo.trim();
+    store.log(req.params.id, 'human', `Guardou "${gravado}" no glossário de ${prof.nome}`);
+    return { perfil: prof.id, nome: prof.nome, termo: gravado, glossario: prof.glossario ?? [] };
   });
   /** Trocar a tomada: volta a descartada e corta a que o agente tinha deixado — um passo de desfazer. */
   app.post<{ Params: { id: string }; Body: { doubtId: string } }>('/api/projects/:id/review/swap', async (req) => {

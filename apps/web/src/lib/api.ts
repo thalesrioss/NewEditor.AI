@@ -132,6 +132,7 @@ export const api = {
   alteracoes: (id: string) => req<{ queued: boolean }>('POST', `/api/projects/${id}/alteracoes`),
   versoesDiff: (id: string, a?: number, b?: number) => req<{ a: number; b: number | string; diff: { duracao: [number, number]; cortesNovos: number; cortesDesfeitos: number; overlaysNovos: string[]; overlaysRemovidos: string[]; zooms: number } }>('GET', `/api/projects/${id}/versoes/diff${a ? `?a=${a}${b ? `&b=${b}` : ''}` : ''}`),
   review: (id: string) => req<{ status: ProjectStatus; review: { decupadaEm?: string; aprovadaEm?: string }; doubts: ReviewDoubt[] }>('GET', `/api/projects/${id}/review`),
+  guardarNoGlossario: (id: string, termo: string) => req<{ perfil: string; nome: string; glossario: string[] }>('POST', `/api/projects/${id}/glossario`, { termo }),
   resolveDoubt: (id: string, doubtId: string) => req<{ ok: boolean }>('POST', `/api/projects/${id}/review/resolve`, { doubtId }),
   swapTake: (id: string, doubtId: string) => req<{ ok: boolean }>('POST', `/api/projects/${id}/review/swap`, { doubtId }),
   approve: (id: string) => req<{ queued: boolean; pendentes: number }>('POST', `/api/projects/${id}/approve`),

@@ -4,8 +4,8 @@
  * Embaixo: o Cérebro (LLM local com portão) e os gabaritos do benchmark.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BrainCircuit, Download, Plus, RefreshCw, Save } from 'lucide-react';
-import { formatoLabel, type ClientProfile, type Evidence } from '@neweditor/core';
+import { ArrowLeft, BrainCircuit, Download, Plus, RefreshCw, Save, X } from 'lucide-react';
+import { addGlossario, formatoLabel, GLOSSARIO_MAX, type ClientProfile, type Evidence } from '@neweditor/core';
 import { api, type LlmSettings } from '../lib/api.ts';
 import { Button, RangeField } from './ui.tsx';
 
@@ -45,7 +45,10 @@ export function ProfilesPage() {
     if (!draft) return;
     setBusy(true);
     try {
-      const saved = await api.patchPerfil(draft.id, draft);
+      // Glossário só vai quando foi editado aqui: um "Guardar no perfil" feito na revisão com esta tela aberta não some.
+      const { glossario, ...resto } = draft;
+      const editouGlossario = JSON.stringify(glossario ?? []) !== JSON.stringify(cur?.glossario ?? []);
+      const saved = await api.patchPerfil(draft.id, editouGlossario ? draft : resto);
       setList((l) => l.map((p) => (p.id === saved.id ? saved : p)));
       setMsg(`Perfil "${saved.nome}" salvo.`);
     } catch (e) {
@@ -227,6 +230,8 @@ export function ProfilesPage() {
                 <Check label="Cobertura cobre a frase inteira (do corte ao fim dela)" on={draft.broll.coberturaFraseInteira} onChange={(v) => set('broll', { coberturaFraseInteira: v })} />
               </Section>
 
+              <Glossario termos={draft.glossario ?? []} onChange={(glossario) => setDraft((d) => (d ? { ...d, glossario } : d))} />
+
               {draft.notas.length > 0 && (
                 <Section title={`Regras do padrão que ainda não viraram campo (${draft.notas.length})`}>
                   <ul className="list-disc space-y-1 pl-4 text-ui-xs leading-snug text-ink-300">
@@ -241,6 +246,46 @@ export function ProfilesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** BL-0081: nomes e marcas do cliente com a grafia certa (entram na transcrição e não viram dúvida na revisão). */
+function Glossario({ termos, onChange }: { termos: string[]; onChange: (t: string[]) => void }) {
+  const [novo, setNovo] = useState('');
+  const add = () => {
+    if (!novo.trim()) return;
+    onChange(addGlossario(termos, novo));
+    setNovo('');
+  };
+  return (
+    <Section title={`Glossário do cliente (${termos.length}/${GLOSSARIO_MAX})`}>
+      <p className="text-ui-xs leading-snug text-ink-400">Nomes e marcas com a grafia certa. A transcrição já ouve assim, e a revisão não pergunta de novo. O mais recente fica primeiro; passando de {GLOSSARIO_MAX}, sai o mais antigo.</p>
+      <div className="flex gap-2">
+        <input
+          value={novo}
+          onChange={(e) => setNovo(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())}
+          placeholder="Ex.: Eustocina, Daniel Sun"
+          aria-label="Novo termo do glossário"
+          className="input flex-1 py-1 text-ui-sm"
+        />
+        <Button size="sm" icon={<Plus size={13} />} onClick={add} disabled={!novo.trim()}>
+          Adicionar
+        </Button>
+      </div>
+      {termos.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Termos do glossário">
+          {termos.map((t) => (
+            <li key={t} className="flex items-center gap-1 rounded-full bg-ink-750 py-0.5 pr-1 pl-2.5 text-ui-xs text-ink-100">
+              {t}
+              <button onClick={() => onChange(termos.filter((x) => x !== t))} aria-label={`Tirar ${t} do glossário`} className="rounded-full p-0.5 text-ink-400 hover:bg-ink-700 hover:text-ink-100">
+                <X size={11} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
 

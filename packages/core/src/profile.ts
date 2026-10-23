@@ -134,6 +134,11 @@ export interface ClientProfile {
   };
   /** Regras em texto que o compilador não estruturou (continuam valendo para quem lê). */
   notas: string[];
+  /**
+   * Glossário do cliente (BL-0081): nomes e marcas com a grafia certa. Entram no prompt da transcrição e não viram
+   * dúvida de grafia na revisão. O mais recente primeiro, no máximo GLOSSARIO_MAX, sem repetir (ignorando caixa).
+   */
+  glossario?: string[];
   evidencia: Partial<Record<string, Evidence>>;
 }
 
@@ -174,8 +179,54 @@ export function fillProfile(p: Partial<ClientProfile> & Pick<ClientProfile, 'id'
     cor: { ...d.cor, ...p.cor },
     broll: { ...d.broll, ...p.broll },
     notas: p.notas ?? [],
+    ...(p.glossario ? { glossario: normGlossario(p.glossario) } : {}),
     evidencia: { ...(p.evidencia ?? {}) },
   };
+}
+
+export const GLOSSARIO_MAX = 30;
+
+/** Chave de comparação do glossário: sem caixa e sem acento. */
+export const glossarioKey = (t: string): string => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** Glossário limpo: termos aparados, sem vazio, sem repetir (ignorando caixa e acento; fica a 1ª), no máximo 30. */
+export function normGlossario(termos: readonly string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of termos ?? []) {
+    const t = raw.replace(/\s+/g, ' ').trim().slice(0, 60);
+    const k = glossarioKey(t);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+    if (out.length >= GLOSSARIO_MAX) break;
+  }
+  return out;
+}
+
+/** Acrescenta um termo no topo (o mais recente primeiro); se já existe, sobe para o topo com a grafia nova. */
+export const addGlossario = (termos: readonly string[] | undefined, termo: string): string[] => normGlossario([termo, ...(termos ?? []).filter((t) => glossarioKey(t) !== glossarioKey(termo))]);
+
+/**
+ * Palavras do glossário (termos de várias palavras contam palavra a palavra), na chave de comparação. Pedaços com
+ * menos de 3 letras ("do" de "Banco do Brasil") ficam de fora para não calar dúvida em qualquer contexto.
+ */
+export function glossarioWords(termos: readonly string[] | undefined): Set<string> {
+  const out = new Set<string>();
+  for (const t of termos ?? []) for (const w of t.split(/[\s\-–—/]+/)) {
+    const k = glossarioKey(w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''));
+    if (k.length >= 3) out.add(k);
+  }
+  return out;
+}
+
+/**
+ * Argumentos extras do ASR (`services/asr/transcribe.py --glossario`): os termos do glossário, que o script junta ao
+ * `initial_prompt`. Glossário vazio = nenhum argumento (a transcrição sai igual à de antes).
+ */
+export function asrGlossarioArgs(termos: readonly string[] | undefined): string[] {
+  const g = normGlossario(termos);
+  return g.length ? ['--glossario', g.join(', ')] : [];
 }
 
 export const HOUSE_PROFILE: ClientProfile = fillProfile({ id: 'casa', nome: 'Padrão da casa (NewContent)', atualizadoEm: '2026-10-10T00:00:00.000Z' });
