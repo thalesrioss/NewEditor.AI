@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, SkipBack } from 'lucide-react';
-import { buildCues, clipStarts, cueHtml, DEFAULT_CAPTIONS, formatTime, isNeutral, letteringFrameHtml, letteringFromText, locate, motionHtml, placeWords, resolveOverlay, timelineDuration, type Clip, type MediaAsset, overlayActive, overlayPlayback, trackFlag, zoomAt, clipSpeed } from '@neweditor/core';
+import { buildCues, clipStarts, cueHtml, DEFAULT_CAPTIONS, formatTime, isNeutral, letteringFrameHtml, letteringFromText, locate, motionHtml, placeWords, resolveOverlay, timelineDuration, type Clip, type MediaAsset, overlayActive, overlaysInDrawOrder, overlayPlayback, trackFlag, zoomAt, clipSpeed } from '@neweditor/core';
 import { mediaUrl, proxyOf } from '../lib/api.ts';
 import { GradeCanvas } from './GradeCanvas.tsx';
 import { AudioCard, EmptyPlayer, TextLayer } from './PlayerParts.tsx';
@@ -304,7 +304,8 @@ export function LegacyPlayer() {
   // Overlays ativos no cursor (com folga para pré-carregar o próximo).
   const near = useMemo(() => {
     if (!timeline) return [];
-    return timeline.overlays.flatMap((o) => {
+    // Mesma ordem de desenho do export: V2 embaixo, V3 em cima (CH-0024).
+    return overlaysInDrawOrder(timeline.overlays).flatMap((o) => {
       if (!overlayActive(timeline, o)) return [];
       const pos = resolveOverlay(timeline, o);
       return pos && pos.end > playhead - 0.5 && pos.start < playhead + 1.5 ? [{ o, ...pos }] : [];

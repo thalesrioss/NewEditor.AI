@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildCues, captionDefaults, captionInlineStyle, clipStarts, cueCaptions, cueHtml, cueVisible, DEFAULT_CAPTIONS, FLASH_FRAMES, letteringFrameHtml, letteringFromText, motionHtml, overlayActive, resolveOverlay, type LetteringSpec, type MediaAsset } from '@neweditor/core';
+import { buildCues, captionDefaults, captionInlineStyle, clipStarts, cueCaptions, cueHtml, cueVisible, DEFAULT_CAPTIONS, FLASH_FRAMES, letteringFrameHtml, letteringFromText, motionHtml, overlayActive, overlaysInDrawOrder, resolveOverlay, type LetteringSpec, type MediaAsset } from '@neweditor/core';
 import { captionActions, cueText } from '../lib/captions.tsx';
 import { webcodecsAvailable } from '../lib/engine/media.ts';
 import { useEditor } from '../lib/store.ts';
@@ -255,7 +255,8 @@ export function MediaMotionLayer() {
   const playing = useEditor((s) => s.playing);
   const items = useMemo(() => {
     if (!timeline || !project) return [];
-    return timeline.overlays.flatMap((o) => {
+    // V2 embaixo, V3 em cima, como no export (CH-0024); o B-roll de vídeo já vai no canvas, abaixo desta camada.
+    return overlaysInDrawOrder(timeline.overlays).flatMap((o) => {
       if (o.source.type !== 'media' || !overlayActive(timeline, o)) return [];
       const src = o.source;
       const a = project.assets.find((x) => x.id === src.assetId);

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
+import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -103,7 +103,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     // --- 3. Passada final: overlays, mixagem, loudness ---------------------------------------
     const letterings: { start: number; end: number; spec: LetteringSpec }[] = [];
     const motions: { start: number; end: number; spec: MotionSpec }[] = [];
-    const placed = tl.overlays.flatMap((o) => {
+    // Ordem de desenho por trilha (V2 embaixo, V3 em cima), não pela ordem de inserção (CH-0024).
+    const placed = overlaysInDrawOrder(tl.overlays).flatMap((o) => {
       // Trilha oculta (imagem) ou muda (som): fora do export, como no preview.
       if (!overlayActive(tl, o)) return [];
       const pos = resolveOverlay(tl, o);
