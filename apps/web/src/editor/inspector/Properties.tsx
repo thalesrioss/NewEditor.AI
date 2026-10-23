@@ -10,6 +10,7 @@ import {
   letteringAccent,
   letteringCues,
   letteringFromText,
+  letteringLineX,
   templateCliente,
   MOTION_TEMPLATES,
   motionCues,
@@ -544,6 +545,7 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
             </button>
           ))}
         </div>
+        <Escada spec={spec} commit={commit} />
       </Section>
       <Section title="Estilo">
         <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Estilo do lettering">
@@ -564,6 +566,32 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
         <Toggle label="Título fixo (mantém a legenda)" hint="não esconde a legenda por baixo; para título de cliente no topo o vídeo inteiro" on={!!item.keepCaptions} onChange={(v) => sendOp({ op: { type: 'set_overlay_keep_captions', id: item.id, keep: v }, note: v ? 'Lettering como título fixo (legenda continua)' : 'Lettering volta a esconder a legenda' })} />
         {spec.refName && <p className="text-ui-xs text-ink-400">Referência: {spec.refName}</p>}
       </Section>
+    </>
+  );
+}
+
+/** Lettering em escada (BL-0102): recuo da borda esquerda de cada linha, em % da largura do quadro. */
+function Escada({ spec, commit }: { spec: LetteringSpec; commit: (next: LetteringSpec, note: string) => void }) {
+  const n = new Set(spec.words.map((w) => w.line)).size;
+  if (n < 2) return null;
+  const xs = letteringLineX(spec, n);
+  const on = xs.some((x) => x !== undefined);
+  const setLine = (i: number, v: number) => commit({ ...spec, lineX: xs.map((x, j) => (j === i ? v / 100 : (x ?? null))) }, `Linha ${i + 1} do lettering a ${v}% da esquerda`);
+  return (
+    <>
+      <Toggle
+        label="Em escada"
+        hint="cada linha com o seu recuo"
+        on={on}
+        onChange={(v) => {
+          if (v) commit({ ...spec, lineX: xs.map((_, i) => Math.round((0.1 + 0.1 * i) * 100) / 100) }, 'Lettering em escada');
+          else {
+            const { lineX: _drop, ...rest } = spec;
+            commit(rest, 'Lettering sem escada');
+          }
+        }}
+      />
+      {on && xs.map((x, i) => <RangeField key={i} label={`Linha ${i + 1}`} value={Math.round((x ?? 0.1) * 100)} min={0} max={90} step={1} unit="%" resetTo={Math.round((0.1 + 0.1 * i) * 100)} onCommit={(v) => setLine(i, v)} />)}
     </>
   );
 }
