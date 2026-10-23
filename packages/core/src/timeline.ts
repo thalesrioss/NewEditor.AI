@@ -517,6 +517,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       return op.refId ? { ...rest, motionRef: op.refId } : rest;
     }
   }
+  // Tipo que esta versão não conhece (ex.: op de uma versão mais nova, CH-0025): recusa sem tocar na
+  // timeline. Antes o switch caía no fim, devolvia undefined e o projeto ficava sem timeline.
+  throw new OpError(`operação desconhecida: ${String((op as { type?: unknown }).type)}`);
 }
 
 /** Junta clipes vizinhos que são continuação exata um do outro na fonte. */

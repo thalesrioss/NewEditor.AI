@@ -118,7 +118,13 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
       const lut = normalizeGradeLut(op.grade).lut!;
       if (lut.path) await cineproCube(lut.id);
     }
-    store.apply(req.params.id, { by: req.body.by ?? 'human', op: req.body.op, note: req.body.note });
+    // Op inválida ou de tipo desconhecido = 400 com o motivo; a timeline fica como estava (CH-0025).
+    try {
+      store.apply(req.params.id, { by: req.body.by ?? 'human', op: req.body.op, note: req.body.note });
+    } catch (e) {
+      if (e instanceof OpError) throw erro(e.message);
+      throw e;
+    }
     return { ok: true };
   });
   app.post<{ Params: { id: string } }>('/api/projects/:id/undo', async (req) => ({ ok: store.undo(req.params.id) }));
