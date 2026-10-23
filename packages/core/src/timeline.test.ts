@@ -395,3 +395,14 @@ test('set_framing com y: âncora vertical do zoom, x e y independentes (CH-0006)
   u = applyOp(u, { type: 'set_framing', clipId: u.main[1]!.id, y: 0.36 }, 'human');
   assert.equal(u.main.length, 2);
 });
+
+test('frameCenter: o quadro decide pelo meio dele, no grid round(t·fps) do export (BL-0101)', async () => {
+  const { frameCenter } = await import('./timeline.ts');
+  // Camada em 2,74 s a 30 fps (82,2) entra no quadro 82; em 2,76 s (82,8) no 83.
+  assert.ok(frameCenter(82 / 30, 30) >= 2.74);
+  assert.ok(frameCenter(81 / 30, 30) < 2.74);
+  assert.ok(frameCenter(82 / 30, 30) < 2.76 && frameCenter(83 / 30, 30) >= 2.76);
+  // Qualquer instante dentro do quadro dá o mesmo meio; fps 0 cai em 30.
+  assert.equal(frameCenter(2.7334, 30), frameCenter(2.7666, 30));
+  assert.equal(frameCenter(1, 0), 1.5 / 30 + 29 / 30);
+});

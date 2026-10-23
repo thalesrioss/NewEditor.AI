@@ -88,16 +88,28 @@ export async function renderTextLayer(inp: TextLayerInput, work: string, onProgr
     return parts.join('');
   };
 
+  // Mesmo grid de quadros do resto do render (cortes da faixa principal e `overlayFrames`): cada mudança entra no
+  // quadro round(t·fps), e o quadro n mostra o estado do meio dele, (n + 0,5)/fps (BL-0101). Assim legenda e
+  // lettering (ou B-roll, motion de arquivo) trocam no mesmo quadro, sem um quadro com os dois.
+  const fps = inp.fps;
+  const lastFrame = Math.round(inp.total * fps);
+  const frames = [...new Set(times.map((t) => Math.min(lastFrame, Math.max(0, Math.round(t * fps)))))].sort((a, b) => a - b);
+  if (frames[0] !== 0) frames.unshift(0);
+  if (frames[frames.length - 1] !== lastFrame) frames.push(lastFrame);
+  // A troca vai 1/4 de quadro antes do quadro n: o filtro fps pega o estado certo qualquer que seja o arredondamento
+  // dele e a soma das durações no concat.
+  const edge = (n: number) => (n === 0 ? 0 : (n - 0.25) / fps);
   // Intervalos com o mesmo estado são fundidos; estados iguais reaproveitam o mesmo PNG.
   const intervals: { dur: number; html: string }[] = [];
-  for (let i = 0; i < times.length - 1; i++) {
-    const a = times[i]!;
-    const b = times[i + 1]!;
-    if (b - a < 1e-4) continue;
-    const html = stateAt((a + b) / 2);
+  for (let i = 0; i < frames.length - 1; i++) {
+    const a = frames[i]!;
+    const b = frames[i + 1]!;
+    if (b <= a) continue;
+    const html = stateAt((a + 0.5) / fps);
+    const dur = (i === frames.length - 2 ? inp.total : edge(b)) - edge(a);
     const last = intervals[intervals.length - 1];
-    if (last && last.html === html) last.dur += b - a;
-    else intervals.push({ dur: b - a, html });
+    if (last && last.html === html) last.dur += dur;
+    else intervals.push({ dur, html });
   }
   const unique = [...new Set(intervals.map((x) => x.html))];
 
