@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { MediaAsset, Project } from '@neweditor/core';
@@ -38,22 +39,42 @@ export function voiceAssets(p: Project): MediaAsset[] {
 }
 
 const inflight = new Map<string, Promise<void>>();
+/** Último job de cada arquivo: os jobs do MESMO arquivo rodam um de cada vez (CH-0026). */
+const fila = new Map<string, Promise<void>>();
 
-/** Gera a voz limpa do asset na intensidade `mix` (uma vez; chamadas repetidas esperam a mesma). */
+/**
+ * Gera a voz limpa do asset na intensidade `mix` (uma vez; chamadas repetidas esperam a mesma).
+ * Jobs de intensidades diferentes do mesmo arquivo entram em fila: a limpeza do fim de um job apaga os clean-* que
+ * não são dele, e em paralelo apagava o master que o job seguinte acabara de gravar (CH-0026).
+ */
 export function cleanVoice(projectId: string, assetId: string, mix: number, chain = false): Promise<void> {
   const key = `${projectId}/${assetId}/${mix}/${chain ? 'c' : ''}`;
   let job = inflight.get(key);
   if (!job) {
-    job = make(projectId, assetId, mix, chain).finally(() => inflight.delete(key));
+    const fk = `${projectId}/${assetId}`;
+    const antes = fila.get(fk) ?? Promise.resolve();
+    job = antes.catch(() => undefined).then(() => make(projectId, assetId, mix, chain)).finally(() => {
+      inflight.delete(key);
+      if (fila.get(fk) === job) fila.delete(fk);
+    });
     inflight.set(key, job);
+    fila.set(fk, job);
   }
   return job;
+}
+
+/** A voz limpa registrada no asset bate com (mix, chain) E o master está no disco. */
+function cleanOk(projectId: string, a: MediaAsset, mix: number, chain: boolean): boolean {
+  return !!a.clean && a.clean.mix === mix && !!a.clean.chain === chain && existsSync(path.join(store.dir(projectId), a.clean.master));
 }
 
 async function make(projectId: string, assetId: string, mix: number, chain: boolean): Promise<void> {
   const find = () => store.get(projectId).assets.find((a) => a.id === assetId);
   const asset = find();
-  if (!asset || (asset.clean?.mix === mix && !!asset.clean.chain === chain)) return;
+  if (!asset || cleanOk(projectId, asset, mix, chain)) return;
+  // Pedido velho (a timeline já mudou de novo enquanto esperava na fila): o job da intensidade atual vem depois.
+  const tl = store.get(projectId).timeline;
+  if ((tl.voiceDenoise ?? 0) !== mix || !!tl.voiceChain !== chain) return;
   const root = store.dir(projectId);
   const dir = path.join(root, asset.id);
   const tag = `${Math.round(mix * 100)}${chain ? 'c' : ''}`;
@@ -90,7 +111,8 @@ export async function syncVoiceClean(projectId: string): Promise<void> {
   const mix = p.timeline.voiceDenoise ?? 0;
   const chain = !!p.timeline.voiceChain;
   if (!mix && !chain) return;
-  const todo = voiceAssets(p).filter((a) => a.clean?.mix !== mix || !!a.clean?.chain !== chain);
+  // Master ausente no disco (apagado, disco trocado) também refaz: só o asset.clean bater não basta (CH-0026).
+  const todo = voiceAssets(p).filter((a) => !cleanOk(projectId, a, mix, chain));
   if (!todo.length) return;
   const t0 = Date.now();
   for (const a of todo) await cleanVoice(projectId, a.id, mix, chain);

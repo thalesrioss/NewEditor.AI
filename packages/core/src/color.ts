@@ -34,12 +34,32 @@ export interface ColorGrade {
   hsl?: { h: number; s: number; l: number }[];
   /** Curvas (luma, R, G, B): 5 pontos de controle em x = 0, ¼, ½, ¾, 1 com o valor de saída 0..1 (identidade = [0, .25, .5, .75, 1]). */
   curves?: { luma: number[]; r: number[]; g: number[]; b: number[] };
-  /** Look (LUT .cube) aplicado DEPOIS da conversão e das primárias, com força 0–1 (CinePRO Looks ou importado). */
-  lut?: { id: string; nome: string; strength: number };
+  /**
+   * Look (LUT .cube) aplicado DEPOIS da conversão e das primárias, com força 0–1 (CinePRO Looks ou importado).
+   * `id` do catálogo CinePRO, ou um .cube do disco: `path` absoluto, que vira `id` = `local:<path>` (ver `localLutId`).
+   */
+  lut?: { id: string; nome: string; strength: number; path?: string };
   /** Textura, aplicada no quadro (não cabe na LUT): nitidez 0..1, vinheta 0..1, grão 0..1. Igual no WebGL e no FFmpeg. */
   sharpen?: number;
   vignette?: number;
   grain?: number;
+}
+
+/** Look de um .cube do disco (fora do catálogo CinePRO): o id carrega o caminho absoluto. */
+export const LOCAL_LUT_PREFIX = 'local:';
+export const localLutId = (file: string): string => `${LOCAL_LUT_PREFIX}${file}`;
+/** O caminho do .cube de um look local, ou null se o look é do catálogo. */
+export const localLutPath = (id: string | undefined): string | null => (id?.startsWith(LOCAL_LUT_PREFIX) ? id.slice(LOCAL_LUT_PREFIX.length) : null);
+
+/** `lut: { path }` (sem id) vira um look local com id e nome; o resto passa igual. */
+export function normalizeGradeLut(g: ColorGrade): ColorGrade {
+  const l = g.lut as (Partial<NonNullable<ColorGrade['lut']>> & { path?: string }) | undefined;
+  if (!l) return g;
+  const file = l.path ?? localLutPath(l.id) ?? undefined;
+  if (!file) return g;
+  const strength = Number.isFinite(l.strength) ? Math.max(0, Math.min(1, Number(l.strength))) : 1;
+  const nome = l.nome || file.split('/').pop()!.replace(/\.cube$/i, '');
+  return { ...g, lut: { id: localLutId(file), nome, strength, path: file } };
 }
 
 export const NEUTRAL_GRADE: ColorGrade = { input: 'rec709', exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0, temperature: 0, tint: 0, saturation: 1, vibrance: 0 };

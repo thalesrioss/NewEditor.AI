@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { clipStarts, letteringCues, MOTION_SFX_TRACK, motionCues, overlayActive, resolveOverlay, trackFlag, sfxBusDb, SFX_RATE, shapeSfxSample, speechLevelDb, synthSfx, type SfxCue, type Timeline } from '@neweditor/core';
+import { flashShutterCues, letteringCues, MOTION_SFX_TRACK, motionCues, overlayActive, resolveOverlay, trackFlag, sfxBusDb, SFX_RATE, shapeSfxSample, speechLevelDb, synthSfx, type SfxCue, type Timeline } from '@neweditor/core';
 import { cineproFileUrl } from './api.ts';
 
 /** Amostras reais do CinePRO (banco 'cinepro'): escolhidas pelo servidor (mesma semente do export), decodificadas uma vez. */
@@ -30,8 +30,7 @@ import { useEditor } from './store.ts';
 /** Todos os SFX dos motions no tempo da timeline (mesma função que o export usa). */
 export function timelineCues(tl: Timeline): { key: string; at: number; cue: SfxCue }[] {
   if (trackFlag(tl, MOTION_SFX_TRACK, 'muted')) return [];
-  const starts = clipStarts(tl);
-  const flashes = tl.main.flatMap((c, i) => (c.flash ? [{ key: `flash:${c.id}`, at: starts[i]!, cue: { t: 0, kind: 'shutter' as const, gain: 0.9, seed: 7000 + i } }] : []));
+  const flashes = flashShutterCues(tl).map(({ clipId, at, cue }) => ({ key: `flash:${clipId}`, at, cue }));
   return [...flashes, ...tl.overlays
     .flatMap((o) => {
       if (!overlayActive(tl, o)) return [];

@@ -5,7 +5,9 @@
  * não subir, o servidor roda dentro do processo principal (reserva), e o diário conta qual dos dois foi.
  *
  *  · desenvolvimento: NEWEDITOR_DEV_URL=http://localhost:5173 (Vite + servidor de `npm run dev`)
- *  · empacotado: servidor em resources/app-root, dados em ~/Library/Application Support/Editor Brain/data
+ *  · central da NewStudios (padrão, FB-0169): a janela abre direto em http://localhost:5410, a mesma fonte de projetos
+ *    e vídeos dos editores agentes, sem servidor próprio e sem escolha de origem (ver central.ts)
+ *  · reserva, se a central não responder: servidor em resources/app-root, dados em ~/Library/Application Support/Editor Brain/data
  */
 import { app, BrowserWindow, dialog, Menu, nativeTheme, shell, utilityProcess, type MenuItemConstructorOptions, type UtilityProcess } from 'electron';
 import fs from 'node:fs';
@@ -13,9 +15,12 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CENTRAL_DADOS_PADRAO, escolherOrigem } from './central';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const DEV_URL = process.env.NEWEDITOR_DEV_URL;
+/** Commit do build, gravado pelo esbuild.mjs (aparece em "Sobre o Editor Brain"). */
+declare const __NEWEDITOR_COMMIT__: string;
+const COMMIT = typeof __NEWEDITOR_COMMIT__ === 'string' ? __NEWEDITOR_COMMIT__ : 'dev';
 const isMac = process.platform === 'darwin';
 /**
  * Modo oculto, para automação (agente testador, CI): `--hidden`, NEWEDITOR_HIDDEN=1 ou, por padrão, quando o app é
@@ -155,9 +160,22 @@ app.on('before-quit', () => {
   serverProc?.kill();
 });
 
-/** Sobe o servidor (auxiliar; reserva no processo principal) e devolve a URL da interface. */
+/** De onde a janela abriu: a central da NewStudios, o Vite de desenvolvimento ou o servidor próprio do app. */
+let origem: 'central' | 'dev' | 'local' = 'local';
+
+/**
+ * Devolve a URL da interface: a central da NewStudios se ela responder (sem subir nada); senão
+ * o servidor próprio (auxiliar; reserva no processo principal).
+ */
 async function startServer(): Promise<string> {
-  if (DEV_URL) return DEV_URL;
+  const o = await escolherOrigem(process.env);
+  if (o.tipo !== 'local') {
+    origem = o.tipo;
+    if (o.tipo === 'central') process.env.NEWEDITOR_DATA = process.env.NEWEDITOR_CENTRAL_DATA ?? CENTRAL_DADOS_PADRAO;
+    log('origem', o);
+    return o.url;
+  }
+  log('origem', o, '(servidor próprio do app)');
   const packaged = app.isPackaged;
   // Raiz do produto: no repositório é a raiz do monorepo; empacotado, a cópia em resources/app-root.
   const root = packaged ? path.join(process.resourcesPath, 'app-root') : path.resolve(here, '../../..');
@@ -195,6 +213,7 @@ function buildMenu(win: BrowserWindow): void {
     {
       label: 'Arquivo',
       submenu: [
+        { label: 'Vídeos editados', accelerator: 'CmdOrCtrl+Shift+V', click: go('#/videos') },
         { label: 'Projetos (Kanban)', accelerator: 'CmdOrCtrl+Shift+P', click: go('#/') },
         { label: 'Cérebro do Editor', click: go('#/cerebro') },
         { label: 'Perfis de edição', click: go('#/perfis') },
@@ -240,13 +259,15 @@ async function createWindow(url: string): Promise<void> {
     minWidth: 1100,
     minHeight: 680,
     backgroundColor: '#0b0d12',
-    title: 'Editor Brain',
+    title: origem === 'local' ? 'Editor Brain · só neste Mac (central da NewStudios fora do ar)' : 'Editor Brain',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 14, y: 14 },
     show: false,
     webPreferences: { contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   buildMenu(win);
+  // Fora da central, o título avisa (a página não pode trocá-lo por "NewEditor.AI · Editor Brain").
+  if (origem === 'local') win.on('page-title-updated', (e) => e.preventDefault());
   if (!HIDDEN) win.once('ready-to-show', () => win.show());
   // Links externos abrem no navegador do sistema; a janela só navega dentro do app.
   win.webContents.setWindowOpenHandler(({ url: u }) => (void shell.openExternal(u), { action: 'deny' }));
@@ -257,8 +278,9 @@ async function createWindow(url: string): Promise<void> {
 }
 
 if (HIDDEN && isMac) app.dock?.hide();
+app.setAboutPanelOptions({ applicationName: 'Editor Brain', applicationVersion: app.getVersion(), version: COMMIT, copyright: 'NewContent' });
 app.whenReady().then(async () => {
-  log('ready', HIDDEN ? '(modo oculto)' : '');
+  log('ready', HIDDEN ? '(modo oculto)' : '', { versao: app.getVersion(), commit: COMMIT });
   fixPath();
   resolveTools();
   try {

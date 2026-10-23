@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { rangeMax } from '../../lib/rangeField.ts';
 import { AlertTriangle, BookMarked, CheckCircle2, ChevronDown, ChevronRight, Palette, Trash2 } from 'lucide-react';
 import {
   clipDuration,
@@ -9,6 +10,7 @@ import {
   letteringAccent,
   letteringCues,
   letteringFromText,
+  templateCliente,
   MOTION_TEMPLATES,
   motionCues,
   NARRATIVE_FUNCTIONS,
@@ -24,6 +26,7 @@ import {
   profileValue,
   type ClientProfile,
   type LetteringSpec,
+  type LetteringTemplate,
   type LetteringStyleId,
   type MotionSpec,
   type MotionTemplateId,
@@ -82,9 +85,11 @@ function ClipProps({ clip: c, index: i, group }: { clip: Clip; index: number; gr
         {c.reason && <Row k="Por quê" v={c.reason} />}
       </Section>
       <Section title="Zoom">
-        <RangeField label="Cut zoom" value={c.zoom ?? 1} min={1} max={1.3} step={0.01} unit="×" resetTo={1} onCommit={(z) => sendOp({ op: { type: 'set_zoom', clipId: c.id, zoom: z }, note: z === 1 ? 'Tirou o zoom' : `Zoom ${z}×` })} hint="Referência da casa: 1,06–1,14 na fala, sem repetir o valor em clipes seguidos." />
-        <RangeField label="Zoom animado até" value={c.zoomTo ?? c.zoom ?? 1} min={1} max={1.5} step={0.01} unit="×" resetTo={c.zoom ?? 1} onCommit={(z) => sendOp({ op: { type: 'set_zoom', clipId: c.id, zoom: c.zoom ?? 1, zoomTo: Math.abs(z - (c.zoom ?? 1)) < 0.005 ? null : z }, note: Math.abs(z - (c.zoom ?? 1)) < 0.005 ? 'Tirou o zoom animado' : `Zoom animado até ${z}×` })} hint="Punch-in: vai do zoom fixo até aqui ao longo do clipe, com ease-out." />
+        <RangeField label="Cut zoom" value={c.zoom ?? 1} min={1} max={rangeMax(1.3, c.zoom ?? 1)} step={0.01} unit="×" resetTo={1} onCommit={(z) => sendOp({ op: { type: 'set_zoom', clipId: c.id, zoom: z }, note: z === 1 ? 'Tirou o zoom' : `Zoom ${z}×` })} hint="Referência da casa: 1,06–1,14 na fala, sem repetir o valor em clipes seguidos." />
+        <RangeField label="Zoom animado até" value={c.zoomTo ?? c.zoom ?? 1} min={1} max={rangeMax(1.5, c.zoomTo ?? c.zoom ?? 1)} step={0.01} unit="×" resetTo={c.zoom ?? 1} onCommit={(z) => sendOp({ op: { type: 'set_zoom', clipId: c.id, zoom: c.zoom ?? 1, zoomTo: Math.abs(z - (c.zoom ?? 1)) < 0.005 ? null : z }, note: Math.abs(z - (c.zoom ?? 1)) < 0.005 ? 'Tirou o zoom animado' : `Zoom animado até ${z}×` })} hint="Punch-in: vai do zoom fixo até aqui ao longo do clipe, com ease-out." />
+        {((c.zoom ?? 1) > 1 || (c.zoomTo ?? 1) > 1) && <RangeField label="Altura dos olhos" value={c.framing?.y ?? 0.5} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(y) => sendOp({ op: { type: 'set_framing', clipId: c.id, y: Math.abs(y - 0.5) < 0.005 ? null : y }, note: Math.abs(y - 0.5) < 0.005 ? 'Zoom pelo centro' : `Zoom ancorado nos olhos (${y.toFixed(2)})` })} hint="0 = topo da imagem · 1 = base. O zoom amplia em volta dessa altura, sem os olhos subirem; 0,5 = centro." />}
         <Toggle label="Flash na entrada" hint="2 quadros invertidos + obturador no SFX" on={!!c.flash} onChange={(v) => sendOp({ op: { type: 'set_flash', clipId: c.id, on: v }, note: v ? `Flash em ${formatTime(start)}` : 'Tirou o flash' })} />
+        {c.flash && <Toggle label="Obturador no SFX" hint="Desligue para pôr a sua amostra no A2 (o flash visual fica)" on={c.flashSfx !== false} onChange={(v) => sendOp({ op: { type: 'set_flash', clipId: c.id, on: true, sfx: v }, note: v ? 'Flash com obturador' : 'Flash sem obturador' })} />}
       </Section>
       <Section title="Velocidade">
         <RangeField label="Velocidade" value={c.speed ?? 1} min={0.5} max={2} step={0.05} unit="×" resetTo={1} onCommit={(v) => sendOp({ op: { type: 'set_speed', clipId: c.id, speed: v }, note: Math.abs(v - 1) < 0.01 ? 'Velocidade normal' : `Velocidade ${v}×` })} hint="O áudio acompanha sem mudar o tom; a legenda acompanha." />
@@ -126,6 +131,8 @@ function OverlayProps({ item: o, group }: { item: OverlayItem; group: number }) 
       </Section>
       {o.source.type === 'motion' && <MotionEditor item={o} spec={o.source.motion} />}
       {(o.source.type === 'lettering' || o.source.type === 'text') && <LetteringEditor item={o} spec={o.source.type === 'lettering' ? o.source.lettering : letteringFromText(o.source.text)} />}
+      {o.role === 'broll' && o.source.type === 'media' && !assets.get(o.source.assetId)?.alpha && <FramingEditor item={o} />}
+      {o.role === 'broll' && o.source.type === 'media' && assets.get(o.source.assetId)?.kind === 'video' && <OverlaySpeedEditor item={o} sourceDuration={assets.get(o.source.assetId)?.duration ?? 0} />}
       {(o.role === 'music' || o.role === 'sfx') && <MixEditor item={o} />}
       {o.role === 'motion' && o.source.type === 'media' && (
         <Section title="Som do motion">
@@ -139,6 +146,44 @@ function OverlayProps({ item: o, group }: { item: OverlayItem; group: number }) 
       )}
       <Danger onClick={() => (sendOp({ op: { type: 'remove_overlay', id: o.id }, note: 'Removeu um overlay' }), select(null))}>Remover</Danger>
     </Panel>
+  );
+}
+
+/** Posição e zoom do B-roll que preenche o quadro (CH-0003) — a mesma conta do export. */
+function FramingEditor({ item }: { item: OverlayItem }) {
+  const sendOp = useEditor((s) => s.sendOp);
+  const f = item.framing ?? { x: 0.5, y: 0.5, zoom: 1 };
+  const set = (patch: Partial<typeof f>, note: string) => sendOp({ op: { type: 'set_overlay_framing', id: item.id, framing: patch }, note });
+  return (
+    <Section title="Enquadramento">
+      <RangeField label="Zoom" value={f.zoom} min={1} max={4} step={0.01} unit="×" resetTo={1} onCommit={(v) => set({ zoom: v }, `B-roll com zoom ${v}×`)} />
+      <RangeField label="Horizontal" value={f.x} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(v) => set({ x: v }, 'Moveu o B-roll na horizontal')} hint="0 = esquerda da imagem · 1 = direita." />
+      <RangeField label="Vertical" value={f.y} min={0} max={1} step={0.01} resetTo={0.5} onCommit={(v) => set({ y: v }, 'Moveu o B-roll na vertical')} hint="0 = topo · 1 = base. Só anda se houver sobra (zoom ou imagem mais alta que o quadro)." />
+      {item.framing && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => sendOp({ op: { type: 'set_overlay_framing', id: item.id, framing: null }, note: 'B-roll de volta ao recorte central' })}>
+          Voltar ao centro
+        </Button>
+      )}
+    </Section>
+  );
+}
+
+/** Velocidade e congelamento do B-roll (CH-0004) — o mesmo tempo no export. */
+function OverlaySpeedEditor({ item, sourceDuration }: { item: OverlayItem; sourceDuration: number }) {
+  const sendOp = useEditor((s) => s.sendOp);
+  const srcIn = item.source.type === 'media' ? item.source.in : 0;
+  // Esticar: o que sobra da fonte cobre o evento inteiro (B-roll mais curto que o evento vira câmera lenta).
+  const fit = Math.min(4, Math.max(0.25, Math.round(((sourceDuration - srcIn) / Math.max(0.1, item.duration - (item.freeze ?? 0))) * 1000) / 1000));
+  return (
+    <Section title="Tempo do B-roll">
+      <RangeField label="Velocidade" value={item.speed ?? 1} min={0.25} max={4} step={0.05} unit="×" resetTo={1} onCommit={(v) => sendOp({ op: { type: 'set_overlay_speed', id: item.id, speed: v }, note: Math.abs(v - 1) < 0.01 ? 'B-roll na velocidade normal' : `B-roll a ${v}×` })} hint="Menor que 1 = câmera lenta. A duração na timeline não muda." />
+      <RangeField label="Congelar o fim" value={item.freeze ?? 0} min={0} max={Math.min(10, item.duration)} step={0.1} unit="s" resetTo={0} onCommit={(v) => sendOp({ op: { type: 'set_overlay_speed', id: item.id, freeze: v }, note: v ? `B-roll congela nos últimos ${v.toFixed(1)} s` : 'B-roll sem congelar' })} />
+      {sourceDuration > 0 && Math.abs(fit - (item.speed ?? 1)) > 0.01 && (
+        <Button size="sm" variant="ghost" className="w-full" onClick={() => sendOp({ op: { type: 'set_overlay_speed', id: item.id, speed: fit }, note: `B-roll esticado até o fim do evento (${fit}×)` })}>
+          Esticar a fonte até o fim ({fit}×)
+        </Button>
+      )}
+    </Section>
   );
 }
 
@@ -453,10 +498,10 @@ const letteringText = (sp: LetteringSpec) => {
 function ApplyToAll({ spec, id }: { spec: LetteringSpec; id: string }) {
   const overlays = useEditor((s) => s.project?.timeline.overlays ?? []);
   const sendOp = useEditor((s) => s.sendOp);
-  const others = overlays.filter((o) => o.id !== id && o.source.type === 'lettering' && (o.source.lettering.estilo !== spec.estilo || o.source.lettering.accent !== spec.accent));
+  const others = overlays.filter((o) => o.id !== id && o.source.type === 'lettering' && (o.source.lettering.estilo !== spec.estilo || o.source.lettering.accent !== spec.accent || JSON.stringify(o.source.lettering.template) !== JSON.stringify(spec.template)));
   if (!others.length) return null;
   return (
-    <Button size="sm" variant="ghost" className="w-full" onClick={() => others.forEach((o) => o.source.type === 'lettering' && sendOp({ op: { type: 'set_overlay_lettering', id: o.id, lettering: { ...o.source.lettering, estilo: spec.estilo, accent: spec.accent } }, note: `Estilo ${LETTERING_STYLES[spec.estilo].label} em todos os letterings` }))}>
+    <Button size="sm" variant="ghost" className="w-full" onClick={() => others.forEach((o) => o.source.type === 'lettering' && sendOp({ op: { type: 'set_overlay_lettering', id: o.id, lettering: { ...o.source.lettering, estilo: spec.estilo, accent: spec.accent, template: spec.template } }, note: `Estilo ${LETTERING_STYLES[spec.estilo].label} em todos os letterings` }))}>
       Aplicar a todos os letterings ({others.length})
     </Button>
   );
@@ -509,15 +554,51 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
             </button>
           ))}
         </div>
+        {spec.estilo === 'cliente' && <TemplateCliente spec={spec} commit={commit} />}
         <label className="flex items-center justify-between text-ui-xs text-ink-300">
           Cor de acento
           <input type="color" value={letteringAccent(spec)} onChange={(e) => commit({ ...spec, accent: e.target.value }, 'Mudou a cor do lettering')} className="h-6 w-8 cursor-pointer rounded border border-ink-600 bg-transparent" />
         </label>
         <ApplyToAll spec={spec} id={item.id} />
         <Toggle label="SFX" hint={`${cues.length} efeitos`} on={spec.sfx !== false} onChange={(v) => commit({ ...spec, sfx: v ? undefined : false }, v ? 'Ligou o som do lettering' : 'Silenciou o lettering')} />
+        <Toggle label="Título fixo (mantém a legenda)" hint="não esconde a legenda por baixo; para título de cliente no topo o vídeo inteiro" on={!!item.keepCaptions} onChange={(v) => sendOp({ op: { type: 'set_overlay_keep_captions', id: item.id, keep: v }, note: v ? 'Lettering como título fixo (legenda continua)' : 'Lettering volta a esconder a legenda' })} />
         {spec.refName && <p className="text-ui-xs text-ink-400">Referência: {spec.refName}</p>}
       </Section>
     </>
+  );
+}
+
+/** Template do cliente (CH-0012): fonte instalada no Mac, peso, cor, tracking, caixa alta, tamanho; sem animação. */
+function TemplateCliente({ spec, commit }: { spec: LetteringSpec; commit: (next: LetteringSpec, note: string) => void }) {
+  const tp = templateCliente(spec.template);
+  const set = (p: Partial<LetteringTemplate>, note: string) => commit({ ...spec, template: { ...spec.template, ...p } }, note);
+  const [font, setFont] = useState(spec.template?.font ?? 'Helvetica Neue');
+  useEffect(() => setFont(spec.template?.font ?? 'Helvetica Neue'), [spec.template?.font]);
+  return (
+    <div className="space-y-2 rounded-[var(--radius-ui-md)] border border-ink-700 p-2">
+      <label className="block space-y-1 text-ui-xs text-ink-300">
+        Fonte (nome instalado no Mac)
+        <input value={font} onChange={(e) => setFont(e.target.value)} onBlur={() => font.trim() !== (spec.template?.font ?? '') && set({ font: font.trim() || undefined }, `Lettering em ${font.trim() || 'Helvetica Neue'}`)} onKeyDown={(e) => e.stopPropagation()} className="input py-1 text-ui-xs" aria-label="Fonte do template do cliente" />
+      </label>
+      <label className="flex items-center justify-between text-ui-xs text-ink-300">
+        Peso
+        <select value={tp.weight} onChange={(e) => set({ weight: Number(e.target.value) }, `Peso ${e.target.value} no lettering`)} className="input w-24 py-1 text-ui-xs">
+          {[300, 400, 500, 600, 700, 800, 900].map((w) => (
+            <option key={w} value={w}>
+              {w}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center justify-between text-ui-xs text-ink-300">
+        Cor do texto
+        <input type="color" value={tp.color.length === 4 ? `#${[...tp.color.slice(1)].map((c) => c + c).join('')}` : tp.color} onChange={(e) => set({ color: e.target.value.toUpperCase() }, 'Mudou a cor do template')} className="h-6 w-8 cursor-pointer rounded border border-ink-600 bg-transparent" />
+      </label>
+      <RangeField label="Espaço entre letras" value={tp.tracking} min={-0.2} max={0.3} step={0.01} unit=" em" resetTo={0} onCommit={(v) => set({ tracking: v }, `Tracking ${v} em no lettering`)} />
+      <RangeField label="Tamanho" value={tp.size} min={2} max={16} step={0.1} unit="%" resetTo={6} onCommit={(v) => set({ size: v }, `Lettering em ${v}% da altura`)} />
+      <Toggle label="Caixa alta" on={tp.upper} onChange={(v) => set({ upper: v }, v ? 'Lettering em caixa alta' : 'Lettering em caixa mista')} />
+      <Toggle label="Sombra" on={tp.shadow} onChange={(v) => set({ shadow: v }, v ? 'Sombra no lettering' : 'Lettering sem sombra')} />
+    </div>
   );
 }
 

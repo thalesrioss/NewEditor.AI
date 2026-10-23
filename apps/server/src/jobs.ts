@@ -27,11 +27,58 @@ export interface Job {
 type Handler = (projectId: string, payload: Record<string, unknown>, job: Job) => Promise<unknown>;
 
 const FILE = path.join(path.dirname(DATA_DIR), 'fila.json');
+/** Como terminou o último trabalho nomeado de cada projeto (CH-0019): sobrevive a reinício, para quem pergunta por HTTP. */
+const RESULTS_FILE = path.join(path.dirname(DATA_DIR), 'fila-resultados.json');
 const handlers = new Map<JobKind, Handler>();
 const queue: (Job & { run: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void })[] = [];
 let running: (typeof queue)[number] | null = null;
 const cancelled = new Set<string>();
 let seq = 0;
+
+export interface JobResult {
+  jobId: string;
+  kind: JobKind;
+  label: string;
+  estado: 'ok' | 'falhou';
+  at: string;
+  erro?: string;
+}
+let results: Record<string, JobResult> | null = null;
+
+async function loadResults(): Promise<Record<string, JobResult>> {
+  if (!results) {
+    try {
+      results = JSON.parse(await fs.readFile(RESULTS_FILE, 'utf8')) as Record<string, JobResult>;
+    } catch {
+      results = {};
+    }
+  }
+  return results;
+}
+
+async function recordResult(job: Job, e?: unknown): Promise<void> {
+  if (job.kind === 'avulso') return;
+  const r = await loadResults();
+  r[job.projectId] = { jobId: job.id, kind: job.kind, label: job.label, estado: e === undefined ? 'ok' : 'falhou', at: new Date().toISOString(), ...(e !== undefined && { erro: explicarFalha(e instanceof Error ? e.message : String(e)) }) };
+  await fs.writeFile(RESULTS_FILE, JSON.stringify(r, null, 1)).catch(() => undefined);
+}
+
+/** Último trabalho nomeado do projeto que terminou (ok ou falhou). */
+export async function lastResult(projectId: string): Promise<JobResult | undefined> {
+  return (await loadResults())[projectId];
+}
+
+/**
+ * Erro do ffmpeg num arquivo de disco externo (/Volumes/...) quase sempre é o disco que dormiu ou desconectou:
+ * diz isso ao editor em vez de só "moov atom not found" (CH-0019).
+ */
+export function explicarFalha(msg: string): string {
+  const vol = /\/Volumes\/([^/]+)\//.exec(msg)?.[1];
+  if (vol && /moov atom not found|Invalid data found|No such file|Input\/output error|Operation not permitted/i.test(msg)) {
+    return `${msg.trim()}\nO arquivo está no disco externo "${vol}": confira se ele está conectado e peça o trabalho de novo.`;
+  }
+  return msg;
+}
 
 export function registerJob(kind: JobKind, handler: Handler): void {
   handlers.set(kind, handler);
@@ -104,8 +151,11 @@ async function pump(): Promise<void> {
   running.state = 'rodando';
   await persist();
   try {
-    running.resolve(await running.run());
+    const v = await running.run();
+    await recordResult(running);
+    running.resolve(v);
   } catch (e) {
+    await recordResult(running, e);
     running.reject(e);
   } finally {
     cancelled.delete(running.id);

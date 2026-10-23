@@ -1,6 +1,6 @@
-/** Looks (.cube) do CinePRO no preview: baixa o texto uma vez, lê com o mesmo parseCube do export. */
+/** Looks (.cube) no preview (CinePRO ou `local:<caminho>` do disco): baixa o texto uma vez, lê com o mesmo parseCube do export. */
 import { useEffect, useState } from 'react';
-import { parseCube, type CubeLut } from '@neweditor/core';
+import { localLutPath, parseCube, type CubeLut } from '@neweditor/core';
 
 const cubes = new Map<string, CubeLut>();
 const pending = new Map<string, Promise<CubeLut>>();
@@ -10,7 +10,7 @@ export function loadCube(id: string): Promise<CubeLut> {
   if (hit) return Promise.resolve(hit);
   let p = pending.get(id);
   if (!p) {
-    p = fetch(`/api/cinepro/lut/${id}`)
+    p = fetch(localLutPath(id) ? `/api/cinepro/lut-local?id=${encodeURIComponent(id)}` : `/api/cinepro/lut/${id}`)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`look ${r.status}`))))
       .then((t) => {
         const c = parseCube(t);

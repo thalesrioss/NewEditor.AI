@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, SkipBack } from 'lucide-react';
-import { buildCues, clipStarts, cueHtml, DEFAULT_CAPTIONS, formatTime, isNeutral, letteringFrameHtml, letteringFromText, locate, motionHtml, placeWords, resolveOverlay, timelineDuration, type Clip, type MediaAsset, overlayActive, trackFlag, zoomAt, clipSpeed } from '@neweditor/core';
+import { buildCues, clipStarts, cueHtml, DEFAULT_CAPTIONS, formatTime, isNeutral, letteringFrameHtml, letteringFromText, locate, motionHtml, placeWords, resolveOverlay, timelineDuration, type Clip, type MediaAsset, overlayActive, overlaysInDrawOrder, overlayPlayback, trackFlag, zoomAt, clipSpeed } from '@neweditor/core';
 import { mediaUrl, proxyOf } from '../lib/api.ts';
 import { GradeCanvas } from './GradeCanvas.tsx';
 import { AudioCard, EmptyPlayer, TextLayer } from './PlayerParts.tsx';
@@ -304,7 +304,8 @@ export function LegacyPlayer() {
   // Overlays ativos no cursor (com folga para pré-carregar o próximo).
   const near = useMemo(() => {
     if (!timeline) return [];
-    return timeline.overlays.flatMap((o) => {
+    // Mesma ordem de desenho do export: V2 embaixo, V3 em cima (CH-0024).
+    return overlaysInDrawOrder(timeline.overlays).flatMap((o) => {
       if (!overlayActive(timeline, o)) return [];
       const pos = resolveOverlay(timeline, o);
       return pos && pos.end > playhead - 0.5 && pos.start < playhead + 1.5 ? [{ o, ...pos }] : [];
@@ -333,7 +334,7 @@ export function LegacyPlayer() {
               const a = o.source.type === 'media' ? assets.get(o.source.assetId) : undefined;
               const on = playhead >= start && playhead < end;
               if ((o.role === 'broll' || o.role === 'motion') && a?.proxy && o.source.type === 'media' && a.kind === 'image') return <img key={o.id} src={mediaUrl(project.id, a.proxy)} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ objectFit: a.alpha ? 'contain' : 'cover', opacity: on ? 1 : 0 }} />;
-              if ((o.role === 'broll' || o.role === 'motion') && a?.proxy && o.source.type === 'media') return <OverlayMedia key={o.id} kind="video" url={mediaUrl(project.id, a.proxy)} srcIn={o.source.in} start={start} visible={on} playing={playing} playhead={playhead} />;
+              if ((o.role === 'broll' || o.role === 'motion') && a?.proxy && o.source.type === 'media') return <OverlayMedia key={o.id} kind="video" url={mediaUrl(project.id, a.proxy)} srcIn={o.source.in} start={start} visible={on} playing={playing} playhead={playhead} speed={overlayPlayback(o).speed} moving={overlayPlayback(o).moving} />;
               if ((o.role === 'sfx' || o.role === 'music') && a?.proxy && o.source.type === 'media') {
                 // Mesma mixagem do export: dB, fades e ducking (abaixa ~10 dB quando tem fala).
                 const m = o.mix;
@@ -354,15 +355,19 @@ export function LegacyPlayer() {
 }
 
 /** B-roll / SFX / trilha sincronizados ao cursor da timeline. */
-function OverlayMedia(props: { kind: 'video' | 'audio'; url: string; srcIn: number; start: number; visible: boolean; playing: boolean; playhead: number; volume?: number }) {
-  const { kind, url, srcIn, start, visible, playing, playhead, volume = 1 } = props;
+function OverlayMedia(props: { kind: 'video' | 'audio'; url: string; srcIn: number; start: number; visible: boolean; playing: boolean; playhead: number; volume?: number; speed?: number; moving?: number }) {
+  const { kind, url, srcIn, start, visible, playing, playhead, volume = 1, speed = 1, moving = Infinity } = props;
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null);
-  const want = srcIn + Math.max(0, playhead - start);
+  // Velocidade e congelamento do B-roll (CH-0004): depois de `moving` s o quadro fica parado.
+  const local = Math.max(0, playhead - start);
+  const frozen = local >= moving;
+  const want = srcIn + Math.min(local, moving) * speed;
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.volume = volume;
-    if (visible && playing) {
+    if (el.playbackRate !== speed) el.playbackRate = speed;
+    if (visible && playing && !frozen) {
       if (Math.abs(el.currentTime - want) > 0.15) el.currentTime = want;
       if (el.paused) void el.play().catch(() => undefined);
     } else {

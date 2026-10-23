@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, BrainCircuit, Info, ListChecks, Plus, SlidersHorizontal, Trash2, User } from 'lucide-react';
+import { Bot, BrainCircuit, Film, Info, ListChecks, Plus, SlidersHorizontal, Trash2, User } from 'lucide-react';
 import { ProjectDrawer } from './ProjectDrawer.tsx';
 import { diasAtePrazo, seloPrazo, FORMAT_PRESETS, formatSize, formatTime, profileOptions, profileValue, PROJECT_STATUSES, timelineDuration, type ClientProfile, type Project, type ProjectStatus, type ProjectTask } from '@neweditor/core';
 import { api, mediaUrl } from '../lib/api.ts';
@@ -91,6 +91,9 @@ export function Home() {
           {waiting > 0 && <span className="rounded-full bg-amber-400 px-1.5 text-ui-2xs font-bold text-ink-950">{waiting}</span>}
         </button>
         <div className="ml-auto flex items-center gap-2">
+          <a href="#/videos" className="flex items-center gap-1.5 rounded-full border border-ink-700 px-3 py-1 text-ui-sm text-ink-300 hover:border-ink-500 hover:text-white" title="Todos os vídeos editados da produtora">
+            <Film size={13} /> Vídeos
+          </a>
           <a href="#/cerebro" className="flex items-center gap-1.5 rounded-full border border-ink-700 px-3 py-1 text-ui-sm text-ink-300 hover:border-ink-500 hover:text-white" title="O conhecimento e as notas conectadas, em 3D">
             <BrainCircuit size={13} /> Cérebro
           </a>

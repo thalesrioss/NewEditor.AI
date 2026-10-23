@@ -9,7 +9,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
-import { captionInlineStyle, cueHtml, cueVisible, DEFAULT_CAPTIONS, FONT_FILES, FONT_PRELOADS, fontFaceCss, letteringFrameHtml, LETTERING_CSS, motionHtml, MOTION_CSS, TEXT_CSS, type CaptionSettings, type Cue, type LetteringSpec, type MotionSpec } from '@neweditor/core';
+import { captionInlineStyle, cueCaptions, cueHtml, cueVisible, DEFAULT_CAPTIONS, FONT_FILES, FONT_PRELOADS, fontFaceCss, letteringFrameHtml, LETTERING_CSS, motionHtml, MOTION_CSS, TEXT_CSS, type CaptionSettings, type Cue, type LetteringSpec, type MotionSpec } from '@neweditor/core';
 import { ROOT } from './config.ts';
 import { run } from './media.ts';
 
@@ -81,7 +81,7 @@ export async function renderTextLayer(inp: TextLayerInput, work: string, onProgr
       parts.push(motionHtml(motion.spec, lt, motion.end - motion.start, wu));
     }
     const cue = cues.find((c) => t >= c.start && t < c.end && cueVisible(c));
-    if (cue && caps) parts.push(`<div class="ne-caption ${caps.style}${caps.box ? ' boxed' : ''}" style="${captionInlineStyle(caps, { t, start: cue.start, end: cue.end })}"><span>${cueHtml(cue, caps, t)}</span></div>`);
+    if (cue && caps) parts.push(`<div class="ne-caption ${caps.style}${caps.box ? ' boxed' : ''}" style="${captionInlineStyle(cueCaptions(caps, cue), { t, start: cue.start, end: cue.end })}"><span>${cueHtml(cue, caps, t)}</span></div>`);
     const position = (inp.captions ?? DEFAULT_CAPTIONS).position;
     for (const l of inp.letterings)
       if (t >= l.start && t < l.end) parts.push(letteringFrameHtml(l.spec, Math.floor((t - l.start) * inp.fps + 1e-6) / inp.fps, l.end - l.start, wu, position));

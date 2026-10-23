@@ -1,5 +1,6 @@
 import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
+import { normalizeGradeLut } from './color.ts';
 
 /** Menor duração de clipe que mantemos; abaixo disso é resíduo de corte. */
 export const MIN_CLIP: Seconds = 0.04;
@@ -42,6 +43,16 @@ export function timelineDuration(t: Timeline): Seconds {
 }
 
 /** Início de cada clipe no tempo de saída. */
+/** Obturador de cada flash, no tempo da timeline (export e preview). Flash com `flashSfx: false` fica só visual. */
+export function flashShutterCues(t: Timeline): { clipId: string; at: Seconds; cue: { t: number; kind: 'shutter'; gain: number; seed: number } }[] {
+  const starts = clipStarts(t);
+  return t.main
+    .flatMap((c, i) => (c.flash ? [{ c, at: starts[i]! }] : []))
+    .map(({ c, at }, i) => ({ clipId: c.id, at, sfx: c.flashSfx !== false, cue: { t: 0, kind: 'shutter' as const, gain: 0.9, seed: 7000 + i } }))
+    .filter((x) => x.sfx)
+    .map(({ clipId, at, cue }) => ({ clipId, at, cue }));
+}
+
 export function clipStarts(t: Timeline): Seconds[] {
   const starts: Seconds[] = [];
   let acc = 0;
@@ -255,13 +266,14 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       const { index, clip, sourceTime } = loc;
       if (sourceTime - clip.in < MIN_CLIP || clip.out - sourceTime < MIN_CLIP) return t;
       const a: Clip = { ...clip, out: sourceTime, freeze: undefined };
-      const b: Clip = { ...clip, id: uid('clip'), in: sourceTime, flash: undefined };
+      const b: Clip = { ...clip, id: uid('clip'), in: sourceTime, flash: undefined, flashSfx: undefined };
       return { ...t, main: [...t.main.slice(0, index), a, b, ...t.main.slice(index + 1)] };
     }
 
     case 'set_zoom': {
-      if (op.zoom < 1 || op.zoom > 2) throw new OpError('set_zoom: zoom entre 1 e 2');
-      if (op.zoomTo !== undefined && op.zoomTo !== null && (op.zoomTo < 1 || op.zoomTo > 2)) throw new OpError('set_zoom: zoomTo entre 1 e 2');
+      // Até 4×: bruto 4K vertical numa timeline 1080 aguenta ~2× nativo; acima disso é upscale (refs da Brane a ~2,6×).
+      if (!(op.zoom >= 1 && op.zoom <= MAX_CLIP_ZOOM)) throw new OpError(`set_zoom: zoom entre 1 e ${MAX_CLIP_ZOOM}`);
+      if (op.zoomTo !== undefined && op.zoomTo !== null && !(op.zoomTo >= 1 && op.zoomTo <= MAX_CLIP_ZOOM)) throw new OpError(`set_zoom: zoomTo entre 1 e ${MAX_CLIP_ZOOM}`);
       return {
         ...t,
         main: t.main.map((c) => {
@@ -283,6 +295,8 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
           const next: Clip = { ...c };
           if (op.on) next.flash = true;
           else delete next.flash;
+          if (!op.on || op.sfx === true) delete next.flashSfx;
+          else if (op.sfx === false) next.flashSfx = false;
           return next;
         }),
       };
@@ -323,8 +337,17 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
         main: t.main.map((c) => {
           if (c.id !== op.clipId) return c;
           const next: Clip = { ...c };
-          if (op.x === null) delete next.framing;
-          else next.framing = { x: Math.min(1, Math.max(0, op.x)) };
+          const framing = { ...c.framing };
+          for (const k of ['x', 'y'] as const) {
+            const v = op[k];
+            if (v === null) delete framing[k];
+            else if (v !== undefined) {
+              if (!Number.isFinite(v)) throw new OpError(`set_framing: ${k} entre 0 e 1`);
+              framing[k] = Math.min(1, Math.max(0, v));
+            }
+          }
+          if (framing.x === undefined && framing.y === undefined) delete next.framing;
+          else next.framing = framing;
           return next;
         }),
       };
@@ -383,7 +406,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
 
     case 'set_grade': {
       const grades = { ...(t.grades ?? {}) };
-      if (op.grade) grades[op.assetId] = op.grade;
+      if (op.grade) grades[op.assetId] = normalizeGradeLut(op.grade);
       else delete grades[op.assetId];
       return { ...t, grades };
     }
@@ -391,6 +414,40 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_captions':
       return { ...t, captions: op.captions };
 
+    case 'set_overlay_framing': {
+      const o0 = t.overlays.find((o) => o.id === op.id);
+      if (!o0 || o0.source.type !== 'media') throw new OpError('set_overlay_framing: overlay de mídia não encontrado');
+      const f = op.framing === null ? null : normalizeFraming({ ...(o0.framing ?? DEFAULT_FRAMING), ...op.framing });
+      return {
+        ...t,
+        overlays: t.overlays.map((o) => {
+          if (o.id !== op.id) return o;
+          const { framing: _drop, ...rest } = o;
+          return f && !isDefaultFraming(f) ? { ...rest, framing: f } : rest;
+        }),
+      };
+    }
+    case 'set_overlay_speed': {
+      if (op.speed !== undefined && op.speed !== null && !(op.speed >= 0.25 && op.speed <= 4)) throw new OpError('set_overlay_speed: velocidade entre 0,25 e 4');
+      if (op.freeze !== undefined && op.freeze !== null && !(op.freeze >= 0 && op.freeze <= 10)) throw new OpError('set_overlay_speed: congelamento entre 0 e 10 s');
+      if (!t.overlays.some((o) => o.id === op.id && o.source.type === 'media')) throw new OpError('set_overlay_speed: overlay de mídia não encontrado');
+      return {
+        ...t,
+        overlays: t.overlays.map((o) => {
+          if (o.id !== op.id) return o;
+          const next: OverlayItem = { ...o };
+          if (op.speed !== undefined) {
+            if (op.speed === null || Math.abs(op.speed - 1) < 1e-6) delete next.speed;
+            else next.speed = Math.round(op.speed * 10000) / 10000;
+          }
+          if (op.freeze !== undefined) {
+            if (op.freeze === null || op.freeze <= 0) delete next.freeze;
+            else next.freeze = Math.round(op.freeze * 1000) / 1000;
+          }
+          return next;
+        }),
+      };
+    }
     case 'set_overlay_text':
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id && o.source.type === 'text' ? { ...o, source: { type: 'text' as const, text: op.text } } : o)) };
     case 'set_overlay_motion':
@@ -402,6 +459,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_overlay_sfx':
       if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id ? { ...o, sfx: op.sfx } : o)) };
+    case 'set_overlay_keep_captions':
+      if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
+      return { ...t, overlays: t.overlays.map((o) => (o.id !== op.id ? o : op.keep ? { ...o, keepCaptions: true } : (({ keepCaptions: _k, ...rest }) => rest)(o))) };
     case 'set_lettering_ref': {
       const { letteringRef: _drop, ...rest } = t;
       return op.refId ? { ...rest, letteringRef: op.refId } : rest;
@@ -423,8 +483,12 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
         if (!ed.patch) continue;
         const merged: Record<string, unknown> = { ...prev, ...ed.patch, assetId: ed.assetId, at: prev?.at ?? ed.at };
         // Campo zerado (null/false) sai; ajuste sem nada vira automático de novo.
-        for (const k of ['text', 'hidden', 'force', 'split', 'join']) if (merged[k] === undefined || merged[k] === null || merged[k] === false) delete merged[k];
-        if (merged.text !== undefined || merged.hidden || merged.force || merged.split || merged.join) list.push(merged as unknown as CaptionEdit);
+        for (const k of ['text', 'hidden', 'force', 'split', 'join', 'position', 'until']) if (merged[k] === undefined || merged[k] === null || merged[k] === false) delete merged[k];
+        // Posição por legenda: dentro da área segura; trecho (`until`) só faz sentido com posição e depois de `at`.
+        if (typeof merged.position === 'number' && Number.isFinite(merged.position)) merged.position = Math.round(Math.max(0.06, Math.min(0.94, merged.position)) * 1000) / 1000;
+        else delete merged.position;
+        if (merged.position === undefined || typeof merged.until !== 'number' || !(merged.until > (merged.at as number))) delete merged.until;
+        if (merged.text !== undefined || merged.hidden || merged.force || merged.split || merged.join || merged.position !== undefined) list.push(merged as unknown as CaptionEdit);
       }
       return { ...t, captionEdits: list };
     }
@@ -453,6 +517,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       return op.refId ? { ...rest, motionRef: op.refId } : rest;
     }
   }
+  // Tipo que esta versão não conhece (ex.: op de uma versão mais nova, CH-0025): recusa sem tocar na
+  // timeline. Antes o switch caía no fim, devolvia undefined e o projeto ficava sem timeline.
+  throw new OpError(`operação desconhecida: ${String((op as { type?: unknown }).type)}`);
 }
 
 /** Junta clipes vizinhos que são continuação exata um do outro na fonte. */
@@ -460,7 +527,7 @@ export function coalesce(main: Clip[]): Clip[] {
   const out: Clip[] = [];
   for (const c of main) {
     const prev = out[out.length - 1];
-    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x;
+    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y;
     if (prev && prev.assetId === c.assetId && Math.abs(prev.out - c.in) < 1e-3 && same(prev, c)) {
       out[out.length - 1] = { ...prev, out: c.out };
     } else out.push(c);
@@ -533,6 +600,23 @@ export function overlayActive(t: Timeline, o: OverlayItem): boolean {
   return audio ? !st.muted : !st.hidden;
 }
 
+/**
+ * Altura da camada de imagem do overlay: V3 fica acima de V2, como no DaVinci (CH-0024). Trilha `V<n>` usa o n;
+ * trilha sem número cai no papel (B-roll = 2, lettering e motion = 3); som = 0.
+ */
+export function overlayLayer(o: OverlayItem): number {
+  const m = /^V(\d+)$/i.exec(o.trackId);
+  if (m) return Number(m[1]);
+  if (o.role === 'broll') return 2;
+  if (o.role === 'lettering' || o.role === 'motion') return 3;
+  return 0;
+}
+
+/** Overlays na ordem de desenho: de baixo para cima por trilha; dentro da trilha, a ordem de inserção (estável). */
+export function overlaysInDrawOrder<T extends OverlayItem>(overlays: readonly T[]): T[] {
+  return overlays.map((o, i) => ({ o, i, z: overlayLayer(o) })).sort((a, b) => a.z - b.z || a.i - b.i).map((x) => x.o);
+}
+
 export function trackFlag(t: Timeline, trackId: string, flag: 'hidden' | 'muted' | 'locked'): boolean {
   return !!t.trackState?.[trackId]?.[flag];
 }
@@ -548,4 +632,57 @@ export function cutEndAfter(t: Timeline, at: Seconds): Seconds {
     if (at < end - 0.02) return end;
   }
   return starts.length ? starts[starts.length - 1]! + clipDuration(t.main[t.main.length - 1]!) : at;
+}
+
+// --- Enquadramento do B-roll (CH-0003) ---------------------------------------------------------
+
+export const DEFAULT_FRAMING: import('./types.ts').OverlayFraming = { x: 0.5, y: 0.5, zoom: 1 };
+export const MAX_FRAMING_ZOOM = 4;
+/** Teto do zoom de clipe (`set_zoom`), o mesmo do enquadramento de B-roll. */
+export const MAX_CLIP_ZOOM = MAX_FRAMING_ZOOM;
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+const r4 = (n: number) => Math.round(n * 10000) / 10000;
+
+export function normalizeFraming(f: Partial<import('./types.ts').OverlayFraming>): import('./types.ts').OverlayFraming {
+  const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  return { x: r4(clamp01(num(f.x, 0.5))), y: r4(clamp01(num(f.y, 0.5))), zoom: r4(Math.min(MAX_FRAMING_ZOOM, Math.max(1, num(f.zoom, 1)))) };
+}
+
+export function isDefaultFraming(f: import('./types.ts').OverlayFraming): boolean {
+  return f.x === 0.5 && f.y === 0.5 && f.zoom === 1;
+}
+
+/**
+ * Recorte de uma fonte `sw`×`sh` que preenche o quadro `W`×`H` ("cover"), com centro e zoom: frações da
+ * fonte (u0, v0 = canto superior esquerdo; kx, ky = largura e altura). O mesmo número no export (FFmpeg
+ * crop) e no preview (WebGL), para o quadro sair igual nos dois. O recorte nunca sai da fonte: centro
+ * perto da borda encosta na borda.
+ */
+export function coverCrop(sw: number, sh: number, W: number, H: number, framing?: Partial<import('./types.ts').OverlayFraming> | null): { u0: number; v0: number; kx: number; ky: number } {
+  const f = normalizeFraming(framing ?? {});
+  const ar = sw / sh;
+  const AR = W / H;
+  const kx = Math.min(1, AR / ar) / f.zoom;
+  const ky = Math.min(1, ar / AR) / f.zoom;
+  const cx = Math.min(1 - kx / 2, Math.max(kx / 2, f.x));
+  const cy = Math.min(1 - ky / 2, Math.max(ky / 2, f.y));
+  return { u0: cx - kx / 2, v0: cy - ky / 2, kx, ky };
+}
+
+// --- Velocidade e congelamento do B-roll (CH-0004) ----------------------------------------------
+
+/** Quanto da fonte o overlay toca antes de congelar (s de fonte) e por quanto tempo da timeline ele anda. */
+export function overlayPlayback(o: Pick<OverlayItem, 'duration' | 'speed' | 'freeze'>, duration = o.duration): { speed: number; moving: Seconds; frozen: Seconds; sourceSpan: Seconds } {
+  const speed = o.speed && o.speed > 0 ? o.speed : 1;
+  const frozen = Math.min(Math.max(0, o.freeze ?? 0), duration);
+  const moving = Math.max(0, duration - frozen);
+  return { speed, moving, frozen, sourceSpan: moving * speed };
+}
+
+/** Instante da fonte mostrado `local` s depois do início do overlay (com velocidade e congelamento). */
+export function overlaySourceTime(o: Pick<OverlayItem, 'duration' | 'speed' | 'freeze' | 'source'>, local: Seconds): Seconds {
+  const srcIn = o.source.type === 'media' ? o.source.in : 0;
+  const { speed, moving } = overlayPlayback(o);
+  return srcIn + Math.min(Math.max(0, local), moving) * speed;
 }

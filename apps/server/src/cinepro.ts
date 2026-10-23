@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { anchorAt, cutEndAfter, parseCube, SFX_CONCEPTS, timelineDuration, type CubeLut, type SfxKind } from '@neweditor/core';
+import { anchorAt, cutEndAfter, localLutPath, parseCube, SFX_CONCEPTS, timelineDuration, type CubeLut, type SfxKind } from '@neweditor/core';
 import { DATA_ROOT } from './config.ts';
 import { ingest } from './ingest.ts';
 import { run } from './media.ts';
@@ -37,6 +37,16 @@ export const CINEPRO_TIPOS: Record<CineproTipo, string> = { sfx: 'SFX', musica: 
 /** Que abas mostram cada tipo: CinePRO = som; Efeitos = visual; Cor = looks. */
 export type CineproModo = 'som' | 'visual' | 'lut';
 const MODO_TIPOS: Record<CineproModo, CineproTipo[]> = { som: ['sfx', 'musica'], visual: ['overlay', 'transicao', 'flare', 'frame', 'gif', 'lowerthird', 'preset'], lut: ['lut'] };
+/** Nomes que o editor usa para cada aba ("cor" é o nome da aba dos looks na interface; CH-0001). */
+const MODO_ALIAS: Record<string, CineproModo> = { som: 'som', sons: 'som', audio: 'som', sfx: 'som', visual: 'visual', efeitos: 'visual', lut: 'lut', luts: 'lut', cor: 'lut', look: 'lut', looks: 'lut' };
+
+/** Modo da query (com apelidos); desconhecido vira erro 400 com os valores aceitos, nunca 500. */
+export function cineproModo(raw?: string): CineproModo {
+  if (raw === undefined || raw === '') return 'som';
+  const modo = MODO_ALIAS[norm(raw.trim())];
+  if (!modo) throw Object.assign(new Error(`modo "${raw}" desconhecido: use som, visual ou lut (looks / cor)`), { statusCode: 400 });
+  return modo;
+}
 
 export interface CineproItem {
   id: string;
@@ -142,7 +152,8 @@ export async function cineproCatalogo(force = false) {
   return cache;
 }
 
-export async function cineproResumo(modo: CineproModo = 'som') {
+export async function cineproResumo(modoRaw?: string) {
+  const modo = cineproModo(modoRaw);
   const c = await cineproCatalogo();
   const lista = c.itens.filter((i) => MODO_TIPOS[modo].includes(i.tipo));
   const porTipo: Record<string, number> = {};
@@ -153,9 +164,9 @@ export async function cineproResumo(modo: CineproModo = 'som') {
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 /** Busca com filtros: modo (aba), pasta (prefixo da árvore), tipo e texto (nome, pasta, tags); paginada. */
-export async function cineproItens(q: { modo?: CineproModo; pasta?: string; tipo?: string; busca?: string; offset?: number; limit?: number }): Promise<{ total: number; itens: CineproItem[] }> {
+export async function cineproItens(q: { modo?: string; pasta?: string; tipo?: string; busca?: string; offset?: number; limit?: number }): Promise<{ total: number; itens: CineproItem[] }> {
+  const modo = cineproModo(q.modo);
   const c = await cineproCatalogo();
-  const modo = q.modo ?? 'som';
   const terms = norm(q.busca ?? '').split(/\s+/).filter(Boolean);
   const list = c.itens.filter((it) => {
     if (!MODO_TIPOS[modo].includes(it.tipo)) return false;
@@ -253,9 +264,32 @@ export function mime(file: string): string {
   );
 }
 
+/**
+ * Um .cube do disco (look fora do catálogo, ex. a pasta "Luts Marcelo S'antana" do pack — CH-0009): caminho
+ * absoluto, extensão .cube, arquivo que existe e que o parseCube lê. Erro 400 com a mensagem para o editor.
+ */
+export async function localCubeFile(file: string): Promise<string> {
+  const bad = (m: string) => Object.assign(new Error(m), { statusCode: 400 });
+  if (!path.isAbsolute(file)) throw bad(`lut.path precisa ser caminho absoluto (veio "${file}")`);
+  if (path.extname(file).toLowerCase() !== '.cube') throw bad('lut.path precisa ser um arquivo .cube');
+  const st = await fsp.stat(file).catch(() => null);
+  if (!st?.isFile()) throw bad(`não achei o .cube em "${file}"`);
+  return file;
+}
+
 const cubes = new Map<string, CubeLut>();
-/** Um look do CinePRO (.cube) lido e em memória — o export e o preview usam o mesmo. */
+/** Um look (.cube) lido e em memória — do CinePRO pelo id, ou do disco (`local:<caminho>`); o export e o preview usam o mesmo. */
 export async function cineproCube(id: string): Promise<CubeLut> {
+  const local = localLutPath(id);
+  if (local) {
+    const file = await localCubeFile(local);
+    const key = `${id}@${(await fsp.stat(file)).mtimeMs}`;
+    const hit = cubes.get(key);
+    if (hit) return hit;
+    const cube = parseCube(await fsp.readFile(file, 'utf8'));
+    cubes.set(key, cube);
+    return cube;
+  }
   const hit = cubes.get(id);
   if (hit) return hit;
   const { item, file } = await cineproFile(id);

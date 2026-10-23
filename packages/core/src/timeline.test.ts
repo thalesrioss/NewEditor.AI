@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
+import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, flashShutterCues, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
 import { DEFAULT_TRACKS, type Timeline } from './types.ts';
 import { buildCues, DEFAULT_CAPTIONS } from './text.ts';
 import { gradePixel, NEUTRAL_GRADE } from './color.ts';
@@ -70,6 +70,16 @@ test('split no meio do clipe e set_zoom só no pedaço', () => {
   t = applyOp(t, { type: 'set_zoom', clipId: t.main[1]!.id, zoom: 1.1 }, 'agent');
   assert.equal(t.main[0]!.zoom, undefined);
   assert.equal(t.main[1]!.zoom, 1.1);
+});
+
+test('set_zoom aceita enquadramento fechado acima de 2× (CH-0013) até 4×', () => {
+  let t = applyOp(base(), { type: 'set_zoom', clipId: 'c1', zoom: 2.6 }, 'agent');
+  assert.equal(t.main[0]!.zoom, 2.6);
+  t = applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 2.6, zoomTo: 3 }, 'agent');
+  assert.equal(t.main[0]!.zoomTo, 3);
+  assert.throws(() => applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 4.01 }, 'agent'), OpError);
+  assert.throws(() => applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 2, zoomTo: 4.5 }, 'agent'), OpError);
+  assert.throws(() => applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: Number.NaN }, 'agent'), OpError);
 });
 
 test('operação inválida lança OpError e não altera nada', () => {
@@ -317,10 +327,23 @@ test('zoom animado, flash, câmera e enquadramento', () => {
   assert.equal('zoomTo' in t.main[0]!, false);
   t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true }, 'human');
   assert.equal(t.main[0]!.flash, true);
+  assert.equal(flashShutterCues(t).length, 1);
+  // CH-0010: flash só visual (sem obturador sintetizado), para a amostra do editor no A2.
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true, sfx: false }, 'human');
+  assert.equal(t.main[0]!.flash, true);
+  assert.equal(t.main[0]!.flashSfx, false);
+  assert.equal(flashShutterCues(t).length, 0);
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true }, 'human');
+  assert.equal(t.main[0]!.flashSfx, false, 'sem sfx no pedido mantém o que estava');
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true, sfx: true }, 'human');
+  assert.equal('flashSfx' in t.main[0]!, false);
+  assert.equal(flashShutterCues(t)[0]!.cue.kind, 'shutter');
+  t = applyOp(t, { type: 'set_flash', clipId: 'c1', on: true, sfx: false }, 'human');
   // Dividir: o flash fica só no pedaço de cima, o freeze só no de baixo.
   t = applyOp({ ...t, main: [{ ...t.main[0]!, freeze: 1 }] }, { type: 'split', time: 30 }, 'human');
   assert.equal(t.main[0]!.flash, true);
   assert.equal(t.main[1]!.flash, undefined);
+  assert.equal(t.main[1]!.flashSfx, undefined);
   assert.equal(t.main[0]!.freeze, undefined);
   assert.equal(t.main[1]!.freeze, 1);
   t = applyOp(t, { type: 'set_cam', clipId: t.main[1]!.id, assetId: 'cam2' }, 'human');
@@ -353,4 +376,22 @@ test('snapCut: estende também para a direita, e não mexe quando o resto é lon
   assert.deepEqual(snapCut(t, 'a', 0.1, 2), { in: 0.1, out: 2 });
   // Outro asset não é afetado.
   assert.deepEqual(snapCut(t, 'b', 21.1, 22), { in: 21.1, out: 22 });
+});
+
+test('set_framing com y: âncora vertical do zoom, x e y independentes (CH-0006)', () => {
+  let t = applyOp(base(), { type: 'set_framing', clipId: 'c1', y: 0.36 }, 'human');
+  assert.deepEqual(t.main[0]!.framing, { y: 0.36 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', x: 0.4 }, 'agent');
+  assert.deepEqual(t.main[0]!.framing, { x: 0.4, y: 0.36 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', y: -2 }, 'human');
+  assert.equal(t.main[0]!.framing!.y, 0);
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', x: null }, 'human');
+  assert.deepEqual(t.main[0]!.framing, { y: 0 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', y: null }, 'human');
+  assert.equal(t.main[0]!.framing, undefined);
+  assert.throws(() => applyOp(t, { type: 'set_framing', clipId: 'c1', y: Number.NaN }, 'human'), OpError);
+  // Clipes com âncoras diferentes não se juntam ao desfazer um corte.
+  let u = applyOp(base(), { type: 'split', time: 50 }, 'human');
+  u = applyOp(u, { type: 'set_framing', clipId: u.main[1]!.id, y: 0.36 }, 'human');
+  assert.equal(u.main.length, 2);
 });

@@ -59,14 +59,19 @@ export interface Clip {
   zoomTo?: number;
   /** Flash de 2 quadros (invertido, sem cor) na entrada do clipe, com o obturador no SFX. */
   flash?: boolean;
+  /** false = flash só visual, sem o obturador sintetizado (o editor põe a própria amostra no A2). */
+  flashSfx?: false;
   /** Velocidade (1 = normal; 0,5–2). O áudio acompanha sem mudar o tom. */
   speed?: number;
   /** Congela o último quadro por este tanto (s), em silêncio, no fim do clipe. */
   freeze?: Seconds;
   /** 2ª câmera para este clipe (asset com `role: 'cam'` e `syncOffset`); o áudio continua o da fala. */
   cam?: string;
-  /** Enquadramento no reframe (centro horizontal 0–1 em volta do rosto). */
-  framing?: { x: number };
+  /**
+   * Enquadramento: `x` = centro horizontal (0–1) do recorte no reframe; `y` = âncora vertical (0–1, altura dos olhos
+   * na fonte) do zoom: o ponto nessa altura fica parado na tela ao ampliar. Sem `y`, o zoom amplia pelo centro.
+   */
+  framing?: { x?: number; y?: number };
 }
 
 /** Trecho da fonte que foi descartado — fica visível para o humano poder restaurar. */
@@ -180,6 +185,20 @@ export interface OverlayItem {
   mix?: AudioMix;
   /** SFX de um motion de mídia (render do Motion Studio): cues lidos do film.js, sintetizados aqui. */
   sfx?: import('./sfx.ts').SfxCue[];
+  /** Enquadramento do B-roll que preenche o quadro: centro do recorte (0–1 na fonte) e zoom (1 = só preencher). */
+  framing?: OverlayFraming;
+  /** Velocidade do B-roll (1 = normal; 0,25–4): 0,5 = câmera lenta, o mesmo trecho da fonte dura o dobro. */
+  speed?: number;
+  /** Congela o quadro nos últimos `freeze` s do overlay (a duração na timeline não muda). */
+  freeze?: Seconds;
+  /** Camada que convive com a legenda (CH-0022: título fixo do cliente no topo): não esconde nem quebra a legenda. */
+  keepCaptions?: boolean;
+}
+
+export interface OverlayFraming {
+  x: number;
+  y: number;
+  zoom: number;
 }
 
 export interface Timeline {
@@ -253,13 +272,17 @@ export interface CaptionEdit {
   split?: boolean;
   /** Proíbe começar legenda nesta palavra: ela vai junto com a anterior (juntar). */
   join?: boolean;
+  /** Altura desta legenda no quadro (0–1, centro do bloco), no lugar da posição global (CH-0014: tela dividida). */
+  position?: number;
+  /** Com `position`: vale para todas as legendas que começam entre `at` e `until` (no bruto, mesmo arquivo) — um trecho. */
+  until?: Seconds;
 }
 
 export interface CaptionEditOp {
   assetId: string;
   at: Seconds;
   /** `text: null` volta ao texto automático (undefined some no JSON do WebSocket — por isso null). */
-  patch: { text?: string | null; hidden?: boolean; force?: boolean; split?: boolean; join?: boolean } | null;
+  patch: { text?: string | null; hidden?: boolean; force?: boolean; split?: boolean; join?: boolean; position?: number | null; until?: Seconds | null } | null;
 }
 
 /** Grafia corrigida pelo editor de uma palavra da transcrição (vale para legenda, lettering e motion). */
@@ -381,10 +404,11 @@ export type TimelineOp =
   | { type: 'move_clip'; clipId: string; toIndex: number }
   | { type: 'split'; time: Seconds }
   | { type: 'set_zoom'; clipId: string; zoom: number; zoomTo?: number | null }
-  | { type: 'set_flash'; clipId: string; on: boolean }
+  | { type: 'set_flash'; clipId: string; on: boolean; /** false = sem o obturador; true volta o som; omitido mantém. */ sfx?: boolean }
   | { type: 'set_speed'; clipId: string; speed?: number | null; freeze?: number | null }
   | { type: 'set_cam'; clipId: string; assetId: string | null }
-  | { type: 'set_framing'; clipId: string; x: number | null }
+  /** `x`/`y` ausentes mantêm o valor; `null` tira. */
+  | { type: 'set_framing'; clipId: string; x?: number | null; y?: number | null }
   | { type: 'set_reframe'; on: boolean }
   /** Formato da entrega em pixels (e fps): presets ou livre. Fica no histórico. */
   | { type: 'set_format'; width: number; height: number; fps?: number }
@@ -395,6 +419,10 @@ export type TimelineOp =
   | { type: 'remove_overlay'; id: string }
   | { type: 'set_captions'; captions: import('./text.ts').CaptionSettings }
   | { type: 'set_overlay_mix'; id: string; mix: AudioMix; sourceIn?: Seconds }
+  /** Posição e zoom do B-roll (CH-0003); campos ausentes ficam como estão, null volta ao recorte central. */
+  | { type: 'set_overlay_framing'; id: string; framing: Partial<OverlayFraming> | null }
+  /** Velocidade e congelamento do B-roll (CH-0004); null ou ausente = como estava (null volta ao normal). */
+  | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
@@ -407,6 +435,8 @@ export type TimelineOp =
   | { type: 'set_voice_chain'; on: boolean }
   | { type: 'set_overlay_lettering'; id: string; lettering: import('./lettering.ts').LetteringSpec }
   | { type: 'set_overlay_sfx'; id: string; sfx: import('./sfx.ts').SfxCue[] }
+  /** Liga/desliga a convivência com a legenda (título fixo; CH-0022). */
+  | { type: 'set_overlay_keep_captions'; id: string; keep: boolean }
   | { type: 'set_lettering_ref'; refId: string | null }
   /** Corrige a grafia de palavras (texto vazio desfaz a correção). */
   | { type: 'fix_words'; fixes: WordFix[] }

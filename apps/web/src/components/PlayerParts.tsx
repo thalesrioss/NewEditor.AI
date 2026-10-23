@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildCues, captionDefaults, captionInlineStyle, clipStarts, cueHtml, cueVisible, DEFAULT_CAPTIONS, FLASH_FRAMES, letteringFrameHtml, letteringFromText, motionHtml, overlayActive, resolveOverlay, type LetteringSpec, type MediaAsset } from '@neweditor/core';
+import { buildCues, captionDefaults, captionInlineStyle, clipStarts, cueCaptions, cueHtml, cueVisible, DEFAULT_CAPTIONS, FLASH_FRAMES, letteringFrameHtml, letteringFromText, motionHtml, overlayActive, overlaysInDrawOrder, resolveOverlay, type LetteringSpec, type MediaAsset } from '@neweditor/core';
 import { captionActions, cueText } from '../lib/captions.tsx';
 import { webcodecsAvailable } from '../lib/engine/media.ts';
 import { useEditor } from '../lib/store.ts';
@@ -82,7 +82,12 @@ export function TextLayer({ frameH, aspect }: { frameH: number; aspect: number }
       if (!tl) return;
       const c = tl.captions ?? DEFAULT_CAPTIONS;
       const d = captionDefaults(c);
-      if (kind === 'caption') {
+      const own = cue?.position !== undefined ? cue.words[0]?.src : undefined;
+      if (kind === 'caption' && own && cue?.position !== undefined) {
+        // Legenda com altura própria (ajuste por bloco/trecho): o arraste move só ela, na vertical.
+        const position = Math.max(0.06, Math.min(0.94, cue.position + dy));
+        sendOp({ op: { type: 'edit_captions', edits: [{ assetId: own.assetId, at: own.at, patch: { position: Math.round(position * 1000) / 1000 } }] }, note: `Moveu esta legenda para ${Math.round(position * 100)}% de altura` });
+      } else if (kind === 'caption') {
         const x = Math.max(0.05, Math.min(0.95, d.x + dx)), position = Math.max(0.04, Math.min(0.96, d.position + dy));
         sendOp({ op: { type: 'set_captions', captions: { ...c, x: Math.round(x * 1000) / 1000, position: Math.round(position * 1000) / 1000 } }, note: `Moveu a legenda para ${Math.round(position * 100)}% de altura` });
       } else if (kind === 'scale') {
@@ -101,7 +106,8 @@ export function TextLayer({ frameH, aspect }: { frameH: number; aspect: number }
   };
 
   // Enquanto arrasta, a legenda e o lettering seguem o mouse (sem gravar).
-  const liveCaps = drag?.kind === 'caption' ? { ...caps, x: captionDefaults(caps).x + drag.dx, position: caps.position + drag.dy } : drag?.kind === 'scale' ? { ...caps, scale: captionDefaults(caps).scale * drag.k } : caps;
+  const cueCaps = cueCaptions(caps, cue);
+  const liveCaps = drag?.kind === 'caption' ? { ...cueCaps, x: cue?.position !== undefined ? captionDefaults(caps).x : captionDefaults(caps).x + drag.dx, position: cueCaps.position + drag.dy } : drag?.kind === 'scale' ? { ...cueCaps, scale: captionDefaults(caps).scale * drag.k } : cueCaps;
   const liveSpec = (id: string, spec: LetteringSpec): LetteringSpec => (drag?.kind === 'lettering' && drag.id === id ? { ...spec, y: (spec.y ?? caps.position) + drag.dy, x: Math.abs(drag.dx) > 0.01 ? (spec.x ?? 0.5) + drag.dx : spec.x, align: Math.abs(drag.dx) > 0.01 ? 'center' : spec.align } : spec);
 
   return (
@@ -249,7 +255,8 @@ export function MediaMotionLayer() {
   const playing = useEditor((s) => s.playing);
   const items = useMemo(() => {
     if (!timeline || !project) return [];
-    return timeline.overlays.flatMap((o) => {
+    // V2 embaixo, V3 em cima, como no export (CH-0024); o B-roll de vídeo já vai no canvas, abaixo desta camada.
+    return overlaysInDrawOrder(timeline.overlays).flatMap((o) => {
       if (o.source.type !== 'media' || !overlayActive(timeline, o)) return [];
       const src = o.source;
       const a = project.assets.find((x) => x.id === src.assetId);

@@ -19,6 +19,7 @@ import { finalize } from './finalize.ts';
 import { backfill } from './ingest.ts';
 import { registerJob, resumeJobs } from './jobs.ts';
 import { REFS_DIR } from './motion/refs.ts';
+import { origemAceita, origensPermitidas, protegerOrigem } from './origens.ts';
 import { report } from './routes/_comum.ts';
 import { rotasAgente } from './routes/agente.ts';
 import { rotasBibliotecas } from './routes/bibliotecas.ts';
@@ -29,11 +30,15 @@ import { entregaJob, renderJob, rotasRender } from './routes/render.ts';
 import { rotasRevisao } from './routes/revisao.ts';
 import { rotasSistema } from './routes/sistema.ts';
 import { store } from './store.ts';
+import { PRODUCAO_PREFIX, PRODUTORA_DIR, entregaPublica } from './videos.ts';
 
 await store.load();
 
 const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 10 * 1024 * 1024 });
-await app.register(cors, { origin: true });
+// Só a própria tela fala com o servidor pelo navegador (BL-0123); curl e agentes (sem Origin) continuam passando.
+const origens = origensPermitidas(PORT, process.env.NEWEDITOR_ALLOWED_ORIGINS);
+await app.register(cors, { origin: (origem, cb) => cb(null, origemAceita(origem, origens)) });
+protegerOrigem(app, origens);
 await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 * 1024 } });
 await app.register(websocket);
 // Mídia do projeto (proxies, envelopes, renders) com suporte a Range — o player faz seek direto.
@@ -41,6 +46,8 @@ await app.register(fastifyStatic, { root: DATA_DIR, prefix: '/media/', decorateR
 // Biblioteca de referências de motion (capas e quadros).
 await fsp.mkdir(REFS_DIR, { recursive: true });
 await app.register(fastifyStatic, { root: REFS_DIR, prefix: '/refs/', decorateReply: false });
+// Vídeos editados da produtora (galeria, FB-0169): só leitura, com Range para o player, e só os de entrega/.
+if (fs.existsSync(path.join(PRODUTORA_DIR, 'producao'))) await app.register(fastifyStatic, { root: path.join(PRODUTORA_DIR, 'producao'), prefix: PRODUCAO_PREFIX, decorateReply: false, cacheControl: false, allowedPath: entregaPublica });
 const webDist = process.env.NEWEDITOR_WEB_DIST ?? path.join(ROOT, 'apps', 'web', 'dist');
 if (fs.existsSync(webDist)) await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: false });
 

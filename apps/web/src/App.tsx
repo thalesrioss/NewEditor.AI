@@ -6,6 +6,7 @@ import { Home } from './components/Home.tsx';
 import { ProfilesPage } from './components/ProfilesPage.tsx';
 import { AvatarGallery } from './components/AvatarGallery.tsx';
 import { CerebroPage } from './components/CerebroPage.tsx';
+import { VideosPage } from './components/VideosPage.tsx';
 
 function useHash(): string {
   const [hash, setHash] = useState(location.hash);
@@ -39,6 +40,8 @@ export function App() {
   if (hash === '#/avatar') return <AvatarGallery />;
   if (hash === '#/perfis') return <ProfilesPage />;
   if (hash === '#/cerebro') return <CerebroPage />;
+  // O app abre na galeria de vídeos editados (FB-0169); o Kanban de projetos fica em #/.
+  if (hash === '' || hash === '#' || hash === '#/videos') return <VideosPage />;
   const m = /^#\/p\/([\w-]+)/.exec(hash);
   return m ? <EditorShell projectId={m[1]!} brain={brain} /> : <Home />;
 }

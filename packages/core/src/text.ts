@@ -10,7 +10,7 @@ import type { Seconds, Timeline } from './types.ts';
 
 export type CaptionStyle = 'reels' | 'frase';
 
-export type CaptionFont = 'inter' | 'montserrat' | 'bebas' | 'anton' | 'playfair';
+export type CaptionFont = 'inter' | 'montserrat' | 'bebas' | 'anton' | 'playfair' | 'helvetica';
 /** Animação de entrada do bloco (função do tempo: igual no preview e no export). */
 export type CaptionAnim = 'none' | 'pop' | 'slide' | 'fade' | 'type';
 export type CaptionAnimOut = 'none' | 'fade' | 'slide';
@@ -25,6 +25,8 @@ export const CAPTION_FONTS: Record<CaptionFont, { label: string; family: string 
   bebas: { label: 'Bebas Neue', family: "'Bebas Neue','Oswald',Impact,sans-serif" },
   anton: { label: 'Anton', family: "'Anton',Impact,sans-serif" },
   playfair: { label: 'Playfair Display', family: "'Playfair Display',Georgia,serif" },
+  // Fonte do sistema (macOS), não empacotada: a licença não permite (ADR-005). Preview e export rodam no Mac (CH-0012).
+  helvetica: { label: 'Helvetica Neue', family: "'Helvetica Neue',Helvetica,Arial,sans-serif" },
 };
 
 export interface CaptionSettings {
@@ -146,7 +148,7 @@ export function captionInlineStyle(s: CaptionSettings, anim?: { t: Seconds; star
   }
   const transform = `transform:translateY(calc(-50% + var(--u)*${r2(shift)})) rotate(${d.rotation}deg) scale(${r2(scale)});`;
   const deco = d.underline ? 'text-decoration:underline;text-underline-offset:0.12em;' : '';
-  return `top:${(d.position * 100).toFixed(2)}%;left:${left.toFixed(2)}%;right:${right.toFixed(2)}%;font-family:${CAPTION_FONTS[d.font].family};font-weight:${d.weight};font-style:${d.italic ? 'italic' : 'normal'};font-size:calc(var(--u)*${d.size});color:${d.color};--hl:${d.accent};letter-spacing:${d.letterSpacing}em;line-height:${d.lineHeight};text-shadow:${sh};opacity:${r2(opacity)};${transform}${deco}${stroke}${box}`;
+  return `top:${(d.position * 100).toFixed(2)}%;left:${left.toFixed(2)}%;right:${right.toFixed(2)}%;font-family:${(CAPTION_FONTS[d.font] ?? CAPTION_FONTS.inter).family};font-weight:${d.weight};font-style:${d.italic ? 'italic' : 'normal'};font-size:calc(var(--u)*${d.size});color:${d.color};--hl:${d.accent};letter-spacing:${d.letterSpacing}em;line-height:${d.lineHeight};text-shadow:${sh};opacity:${r2(opacity)};${transform}${deco}${stroke}${box}`;
 }
 
 /** A legenda está dentro da área segura do quadro? (QC: `legenda-fora-do-quadro`.) */
@@ -188,7 +190,12 @@ export interface Cue {
   /** O editor mandou mostrar mesmo coberta. */
   forced?: boolean;
   hidden?: boolean;
+  /** Altura própria desta legenda (ajuste por bloco ou por trecho); sem ela, a posição global. */
+  position?: number;
 }
+
+/** Ajustes da legenda com a altura própria de uma legenda (CH-0014); sem altura própria, os globais. */
+export const cueCaptions = (s: CaptionSettings, c: Pick<Cue, 'position'> | undefined): CaptionSettings => (c?.position !== undefined ? { ...s, position: c.position } : s);
 
 export const cueKey = (w: CueWord) => (w.src ? `${w.src.assetId}@${w.src.at.toFixed(3)}` : `t@${w.start.toFixed(3)}`);
 
@@ -239,6 +246,11 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
   const chars = (ws: CueWord[]) => ws.reduce((n, w) => n + w.text.length + 1, -1);
   const minDur = s.style === 'reels' ? 0.35 : 0.8;
   const breakPause = s.style === 'reels' ? 0.3 : 0.4;
+  // Camadas que escondem a legenda (lettering, motion, B-roll), no tempo da timeline. Título fixo (`keepCaptions`) convive.
+  const layers = tl.overlays
+    .filter((o) => (o.role === 'lettering' || o.role === 'motion' || o.role === 'broll') && !o.keepCaptions)
+    .map((o) => ({ role: o.role as 'lettering' | 'motion' | 'broll', pos: resolveOverlay(tl, o) }))
+    .filter((x): x is { role: 'lettering' | 'motion' | 'broll'; pos: { start: number; end: number } } => !!x.pos);
   const cues: Cue[] = [];
   let cur: CueWord[] = [];
   const flush = () => {
@@ -248,6 +260,9 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
   placed.forEach((w, i) => {
     // Ajuste manual "dividir": uma legenda nova começa nesta palavra.
     if (cur.length && editOf(w)?.split) flush();
+    // Camada entrando: a legenda não junta palavras de antes e de depois dela (CH-0014; senão some inteira sob o B-roll).
+    // O "juntar" do editor na palavra vence (CH-0021: o artigo que começa junto com o lettering fica na legenda anterior).
+    if (cur.length && !editOf(w)?.join && layers.some(({ pos }) => cur[0]!.start < pos.start && w.start >= pos.start - 1e-6)) flush();
     // Limite de caracteres: fecha o bloco antes de a palavra estourar.
     if (cur.length && chars([...cur, w]) > maxChars) flush();
     cur.push(w);
@@ -273,6 +288,8 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
   for (const c of cues) {
     c.key = cueKey(c.words[0]!);
     const e = editOf(c.words[0]);
+    // "Forçar" numa palavra vale para o bloco que a contém (a quebra muda com o corte e com as camadas; CH-0016).
+    const forced = c.words.some((w) => editOf(w)?.force);
     if (e?.text !== undefined) {
       c.original = c.words.map((w) => w.text).join(' ');
       const toks = e.text.split(/\s+/).filter(Boolean);
@@ -288,19 +305,32 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
       c.edited = true;
     }
     if (e?.hidden) c.hidden = true;
-    if (e?.force) c.forced = true;
+    if (forced) c.forced = true;
+    // Altura própria: o ajuste do bloco vence o do trecho (`until`) que o contém.
+    const src = c.words[0]!.src;
+    const zone = src && edits.find((z) => z.position !== undefined && z.until !== undefined && z.assetId === src.assetId && src.at >= z.at - 0.02 && src.at <= z.until + 0.02);
+    const position = e?.position ?? zone?.position;
+    if (position !== undefined) c.position = position;
   }
-  // Coberta por camada: lettering, motion ou B-roll em cima de mais de 1/3 da legenda (ou do seu começo).
-  const layers = tl.overlays
-    .filter((o) => o.role === 'lettering' || o.role === 'motion' || o.role === 'broll')
-    .map((o) => ({ role: o.role as 'lettering' | 'motion' | 'broll', pos: resolveOverlay(tl, o) }))
-    .filter((x): x is { role: 'lettering' | 'motion' | 'broll'; pos: { start: number; end: number } } => !!x.pos);
+  // Coberta por camada: lettering, motion ou B-roll em cima de mais de 1/3 da legenda (ou do seu começo). Camada que
+  // só passa até 2 quadros do começo da legenda não a esconde (CH-0016): a legenda começa quando a camada sai.
+  const grace = 2 / (tl.fps || 30) + 1e-3;
   for (const c of cues) {
-    const hit = layers.find(({ pos }) => {
+    const tail = layers.filter(({ pos }) => pos.start <= c.start + 0.05 && pos.end > c.start && pos.end - c.start <= grace && pos.end < c.end);
+    const hit = layers.find((l) => {
+      if (tail.includes(l)) return false;
+      const { pos } = l;
       const ov = Math.min(c.end, pos.end) - Math.max(c.start, pos.start);
       return ov > 0 && (ov >= (c.end - c.start) / 3 || (pos.start <= c.start + 0.05 && pos.end > c.start));
     });
+    if (!hit && tail.length) c.start = tail.reduce((m, { pos }) => Math.max(m, pos.end), c.start);
     if (hit) c.coveredBy = hit.role;
+    // A legenda fica até a próxima começar, então pode atravessar o corte; camada que entra no meio dela a encerra
+    // ali (CH-0014: B-roll no 1º quadro do clipe mostrava a legenda do clipe anterior por cima).
+    else if (!c.forced) {
+      const cut = layers.filter(({ pos }) => pos.start > c.start && pos.start < c.end).reduce((m, { pos }) => Math.min(m, pos.start), Infinity);
+      if (cut < c.end) c.end = cut;
+    }
   }
   return opts.includeHidden ? cues : cues.filter((c) => !c.hidden && c.words.length);
 }
