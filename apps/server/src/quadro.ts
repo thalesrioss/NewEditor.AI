@@ -11,7 +11,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { clipDuration, clipStarts, normalizeGradeLut, overlayActive, overlaySourceTime, overlaysInDrawOrder, resolveOverlay, type ColorGrade, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
-import { deliverySize, gradeFilters, overlayFit, overlayFrames, segmentVideo } from './render.ts';
+import { deliverySize, gradeFilters, mainRange, overlayFit, overlayFrames, segmentVideo } from './render.ts';
 
 export interface QuadroSinal {
   ylow: number;
@@ -124,7 +124,7 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
     const { luts, lutFilter } = await gradeFilters(merged, work);
     const seg = path.join(work, 'seg.mp4');
     // Do início do clipe até o quadro pedido: zoom animado e congelamento saem iguais ao render.
-    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam);
+    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam, await mainRange(p));
     const name = `q_${Math.round(t * 1000)}_${Date.now().toString(36)}.png`;
     const png = path.join(outDir, name);
     const probe = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=color_range', '-of', 'default=nw=1:nk=1', seg])).toString().trim();

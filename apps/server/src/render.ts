@@ -73,6 +73,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     // --- 1. Trechos ---------------------------------------------------------------------------
     const starts = clipStarts(tl);
     const frameAt = (t: number) => Math.round(t * fps);
+    // Uma faixa de níveis para todos os trechos (CH-0029/CH-0030).
+    const range = await mainRange(p);
     const jobs = clips.map((c, i) => ({ c, i, a: assets.get(c.assetId)!, frames: frameAt(starts[i]! + clipDuration(c)) - frameAt(starts[i]!) }));
     let done = 0;
     const tick = () => onProgress?.(Math.min(0.85, (++done / (jobs.length * (hasVideo ? 2 : 1))) * 0.85));
@@ -81,7 +83,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const seg = (ext: string) => path.join(work, `${String(i).padStart(4, '0')}.${ext}`);
       if (hasVideo) {
         const cam = c.cam ? assets.get(c.cam) : undefined;
-        await segmentVideo(a, c, frames, fps, W, H, seg('mp4'), lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam);
+        await segmentVideo(a, c, frames, fps, W, H, seg('mp4'), lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam, range);
         tick();
       }
       await segmentAudio(a, c, seg('wav'), cleanMaster(p, a));
@@ -216,7 +218,9 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       parts.push(`[${k}:a]aformat=sample_rates=48000:channel_layouts=stereo[sfxbus]`);
       audio.push('[sfxbus]');
     }
-    parts.push(`${audio.join('')}amix=inputs=${audio.length}:duration=first:normalize=0,${LOUDNORM},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo[aout]`);
+    // O loudnorm vai numa passada só dele (`normalizeMix`, CH-0030): aqui, com duas saídas (vídeo e mix), o ffmpeg 9
+    // encerrava o grafo sem o loudnorm devolver o que segura de lookahead, e a mix saía 6 a 9 s curta (fim mudo).
+    parts.push(`${audio.join('')}amix=inputs=${audio.length}:duration=first:normalize=0,aformat=sample_rates=48000:channel_layouts=stereo[aout]`);
     const graph = path.join(work, 'final.txt');
     await fs.writeFile(graph, parts.join(';\n'));
 
@@ -234,14 +238,16 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     else args.push('-map', '0:v', '-c:v', 'copy');
     // Imagem num arquivo, mixagem em WAV no outro: o AAC só é feito depois, já no alvo de loudness (`deliverAudio`).
     const videoOnly = path.join(work, 'video.mp4');
+    const premix = path.join(work, 'premix.wav');
     const mixWav = path.join(work, 'mix.wav');
-    args.push('-an', '-t', String(total), videoOnly, '-map', '[aout]', '-c:a', 'pcm_f32le', '-t', String(total), mixWav);
+    args.push('-an', '-t', String(total), videoOnly, '-map', '[aout]', '-c:a', 'pcm_f32le', '-t', String(total), premix);
     await run('ffmpeg', args, {
       onStderr: (s) => {
         const m = /time=(\d+):(\d+):([\d.]+)/.exec(s);
         if (m && onProgress) onProgress(0.88 + 0.11 * Math.min(1, (+m[1]! * 3600 + +m[2]! * 60 + +m[3]!) / total));
       },
     });
+    await normalizeMix(premix, mixWav, total);
     // Loudness conferido no MP4 codificado (o que o QC mede): −14 LUFS ±0,5 e ≤ −1 dBTP.
     const loud = await atomic(out, (tmp) => deliverAudio(videoOnly, mixWav, tmp, total));
     const fmt = (x: number) => x.toFixed(1).replace('.', ',');
@@ -283,6 +289,38 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
 export function deliverySize(tl: Pick<Project['timeline'], 'width' | 'height'>): { W: number; H: number } {
   const k = Math.min(1, DELIVERY_SHORT_SIDE / Math.min(tl.width, tl.height));
   return { W: Math.round((tl.width * k) / 2) * 2, H: Math.round((tl.height * k) / 2) * 2 };
+}
+
+/** Faixa de níveis do vídeo: 'pc' (cheia, preto 0, bruto de câmera yuvj) ou 'tv' (limitada, preto 16). */
+export type Range = 'pc' | 'tv';
+
+/**
+ * Todo trecho da faixa principal sai no mesmo formato e com as mesmas etiquetas de cor, venha de bruto de câmera (yuvj,
+ * faixa cheia, sem etiqueta) ou de intermediário ProRes (faixa limitada, bt709). Misturados, o main.mp4 trocava de
+ * formato na emenda e o ffmpeg 9 refazia ali o grafo da passada final: o B-roll por cima sumia ou o render travava
+ * (CH-0029) e o loudnorm perdia o que segurava, tirando segundos da fala (CH-0030).
+ */
+export function segmentFormat(range: Range): { filter: string; tags: string[] } {
+  return { filter: `scale=out_range=${range},format=yuv420p`, tags: ['-color_range', range, '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'] };
+}
+
+/** Faixa de níveis de um arquivo de vídeo (cabeçalho). */
+export async function sourceRange(file: string): Promise<Range> {
+  const raw = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt,color_range', '-of', 'csv=p=0', file]).catch(() => Buffer.from(''))).toString();
+  return /yuvj|\bpc\b/.test(raw) ? 'pc' : 'tv';
+}
+
+/**
+ * Faixa dos trechos de um projeto: a do 1º clipe de vídeo da faixa principal. Projeto só de bruto sai como antes (a
+ * escala do /quadro e do QC não muda); o que vier na outra faixa é convertido.
+ */
+export async function mainRange(p: Pick<Project, 'assets' | 'timeline'>): Promise<Range> {
+  const assets = new Map(p.assets.map((a) => [a.id, a]));
+  for (const c of p.timeline.main) {
+    const a = assets.get(c.cam ?? c.assetId) ?? assets.get(c.assetId);
+    if (a?.kind === 'video') return sourceRange(a.path);
+  }
+  return 'tv';
 }
 
 /**
@@ -341,15 +379,35 @@ export function overlayFrames(start: number, end: number, fps: number): { f0: nu
  * reframe em volta do rosto, zoom fixo (crop) ou animado (zoompan, ease-out), congelamento (tpad) e a 2ª câmera
  * (mesmo trecho, deslocado pelo `syncOffset`).
  */
-export async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset): Promise<void> {
+export async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset, range: Range = 'tv'): Promise<void> {
   const src = cam ?? a;
   const off = cam ? (cam.syncOffset ?? 0) : 0;
-  const vf = segmentVideoFilter(src, c, fps, W, H, lut, reframe);
+  const fmt = segmentFormat(range);
+  const vf = `${segmentVideoFilter(src, c, fps, W, H, lut, reframe)},${fmt.filter}`;
   const limit = c.freeze ? ['-t', String(c.out - c.in + 0.05)] : [];
   const want = Math.max(1, frames);
-  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(want), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', '-r', String(fps), out];
+  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(want), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', ...fmt.tags, '-r', String(fps), out];
   await encodeExactFrames([['-hwaccel', 'videotoolbox', ...base], base], out, want);
 }
+
+/** Duração do arquivo (s) pelo cabeçalho. */
+export async function fileDuration(file: string): Promise<number> {
+  const raw = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]);
+  return Number.parseFloat(raw.toString().trim()) || 0;
+}
+
+/**
+ * Loudnorm da mixagem numa passada própria, uma entrada e uma saída (CH-0030), e a mix conferida: se sair mais curta
+ * que a peça, o render falha com a medida em vez de entregar o fim mudo (o `apad` da entrega esconderia a falta).
+ */
+export async function normalizeMix(premix: string, out: string, total: number): Promise<void> {
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', premix, '-af', `${LOUDNORM},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo`, '-c:a', 'pcm_f32le', '-t', String(total), out]);
+  const got = await fileDuration(out);
+  if (got < total - MIX_SLACK) throw new Error(`mixagem saiu com ${got.toFixed(2)} s, a peça tem ${total.toFixed(2)} s`);
+}
+
+/** Folga aceita entre a mix e a peça (s): o loudnorm pode devolver uns 40 ms a menos no fim; o defeito era de segundos. */
+const MIX_SLACK = 0.1;
 
 /** Quadros de vídeo gravados no cabeçalho do arquivo (sem decodificar). */
 export async function countFrames(file: string): Promise<number> {

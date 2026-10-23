@@ -19,7 +19,7 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const { run } = await import('./media.ts');
 const { clipNoTempo, lerSinal, limparQuadros, renderQuadro } = await import('./quadro.ts');
-const { deliverySize, gradeFilters, segmentVideo } = await import('./render.ts');
+const { deliverySize, gradeFilters, mainRange, segmentVideo } = await import('./render.ts');
 
 // Bruto full range (yuvj420p, color_range=pc), 2 s, 30 fps, gradiente com preto de verdade.
 const bruto = path.join(tmp, 'bruto.mp4');
@@ -71,7 +71,7 @@ describe('quadro de conferência da grade (CH-0018)', () => {
     const { W, H } = deliverySize(p.timeline);
     const { lutFilter } = await gradeFilters(p.timeline.grades, work);
     const seg = path.join(work, 'seg.mp4');
-    await segmentVideo(p.assets[0]!, p.timeline.main[1]!, 30, 30, W, H, seg, lutFilter('a1'));
+    await segmentVideo(p.assets[0]!, p.timeline.main[1]!, 30, 30, W, H, seg, lutFilter('a1'), false, undefined, await mainRange(p));
     const ref = lerSinal((await run('ffmpeg', ['-v', 'error', '-i', seg, '-vf', "select='eq(n\\,15)',signalstats,metadata=print:file=-", '-f', 'null', '-'])).toString());
     assert.ok(Math.abs(q.sinal.ylow - ref.ylow) <= 1, `YLOW quadro ${q.sinal.ylow} x render ${ref.ylow}`);
     assert.ok(Math.abs(q.sinal.yavg - ref.yavg) <= 1, `YAVG quadro ${q.sinal.yavg} x render ${ref.yavg}`);
