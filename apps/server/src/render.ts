@@ -30,6 +30,8 @@ export interface RenderResult {
   skipped: string[];
   /** O que entrou no export além do corte (ex.: voz limpa). */
   notes: string[];
+  /** Medida do áudio no MP4 codificado (BL-0093). */
+  loudness?: { lufs: number; truePeak: number; ok: boolean };
 }
 
 /**
@@ -254,7 +256,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     const loud = await atomic(out, (tmp) => deliverAudio(videoOnly, mixWav, tmp, total));
     const fmt = (x: number) => x.toFixed(1).replace('.', ',');
     notes.push(`áudio ${fmt(loud.after.i)} LUFS, ${fmt(loud.after.tp)} dBTP${loud.ok ? '' : ' (FORA do alvo de entrega −14 LUFS / −1 dBTP: conferir a mixagem)'}`);
-    return { file: `renders/${name}`, skipped, notes };
+    return { file: `renders/${name}`, skipped, notes, loudness: { lufs: loud.after.i, truePeak: loud.after.tp, ok: loud.ok } };
   } finally {
     await fs.rm(work, { recursive: true, force: true });
   }

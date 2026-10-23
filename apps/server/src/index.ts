@@ -60,7 +60,7 @@ store.onTimeline((id) => void syncVoiceClean(id).catch((e) => report(id, 'limpez
 // Trabalhos nomeados da fila global (retomados se o servidor reiniciar).
 registerJob('decupagem', (id, payload) => runDecupagem(id, payload.assetId ? String(payload.assetId) : undefined));
 registerJob('finalizar', (id) => finalize(id));
-registerJob('render', (id, payload) => (payload.entrega ? entregaJob(id, payload.entrega as EntregaOpts) : renderJob(id)));
+registerJob('render', (id, payload, job) => (payload.entrega ? entregaJob(id, payload.entrega as EntregaOpts) : renderJob(id, job.id)));
 registerJob('alteracoes', (id) => runAlteracoes(id));
 
 await app.listen({ port: PORT, host: '127.0.0.1' });
