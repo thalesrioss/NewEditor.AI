@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildCues, captionDefaults, captionInlineStyle, clipStarts, cueCaptions, cueHtml, cueVisible, DEFAULT_CAPTIONS, FLASH_FRAMES, letteringFrameHtml, letteringFromText, motionHtml, overlayActive, overlaysInDrawOrder, resolveOverlay, type LetteringSpec, type MediaAsset } from '@neweditor/core';
+import { buildCues, captionDefaults, captionInlineStyle, clipStarts, cueCaptions, cueHtml, cueVisible, DEFAULT_CAPTIONS, FLASH_FRAMES, letteringFrameHtml, letteringFromText, motionHtml, overlayActive, overlaysInDrawOrder, resolveOverlay, type LetteringSpec, type MediaAsset, frameCenter } from '@neweditor/core';
 import { captionActions, cueText } from '../lib/captions.tsx';
 import { webcodecsAvailable } from '../lib/engine/media.ts';
 import { useEditor } from '../lib/store.ts';
@@ -15,7 +15,8 @@ export function TextLayer({ frameH, aspect }: { frameH: number; aspect: number }
   const beforeAgent = useEditor((s) => s.beforeAgent);
   const timeline = useEditor((s) => (showBefore && beforeAgent ? beforeAgent : s.project?.timeline));
   const transcripts = useEditor((s) => s.transcripts);
-  const playhead = useEditor((s) => s.playhead);
+  // Legenda, lettering e motion decidem pelo meio do quadro, como o export (BL-0101): trocam no mesmo quadro.
+  const playhead = frameCenter(useEditor((s) => s.playhead), timeline?.fps ?? 30);
   const sendOp = useEditor((s) => s.sendOp);
   const caps = timeline?.captions ?? DEFAULT_CAPTIONS;
   const cues = useMemo(() => (timeline && caps.enabled ? buildCues(timeline, transcripts, caps) : []), [timeline, transcripts, caps]);
@@ -253,6 +254,7 @@ export function MediaMotionLayer() {
   const timeline = project?.timeline;
   const playhead = useEditor((s) => s.playhead);
   const playing = useEditor((s) => s.playing);
+  const at = frameCenter(playhead, timeline?.fps ?? 30); // entra e sai no quadro do export (BL-0101)
   const items = useMemo(() => {
     if (!timeline || !project) return [];
     // V2 embaixo, V3 em cima, como no export (CH-0024); o B-roll de vídeo já vai no canvas, abaixo desta camada.
@@ -271,9 +273,9 @@ export function MediaMotionLayer() {
     <>
       {items.map((it) =>
         it.image ? (
-          <img key={it.id} src={it.url} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ objectFit: it.alpha ? 'contain' : 'cover', opacity: playhead >= it.start && playhead < it.end ? 1 : 0 }} />
+          <img key={it.id} src={it.url} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ objectFit: it.alpha ? 'contain' : 'cover', opacity: at >= it.start && at < it.end ? 1 : 0 }} />
         ) : (
-          <AlphaVideo key={it.id} url={it.url} srcIn={it.srcIn} start={it.start} visible={playhead >= it.start && playhead < it.end} playing={playing} playhead={playhead} />
+          <AlphaVideo key={it.id} url={it.url} srcIn={it.srcIn} start={it.start} visible={at >= it.start && at < it.end} playing={playing} playhead={playhead} />
         ),
       )}
     </>

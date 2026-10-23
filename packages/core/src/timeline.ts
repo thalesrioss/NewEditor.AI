@@ -601,6 +601,15 @@ export function overlayActive(t: Timeline, o: OverlayItem): boolean {
 }
 
 /**
+ * Instante que decide o que aparece no quadro que contém `t`: o meio dele. É o grid round(t·fps) do export
+ * (cortes, `overlayFrames`, camada de texto, BL-0101): uma camada que começa em 2,74 s a 30 fps entra no quadro 82.
+ */
+export function frameCenter(t: number, fps: number): number {
+  const f = fps || 30;
+  return (Math.floor(t * f + 1e-6) + 0.5) / f;
+}
+
+/**
  * Altura da camada de imagem do overlay: V3 fica acima de V2, como no DaVinci (CH-0024). Trilha `V<n>` usa o n;
  * trilha sem número cai no papel (B-roll = 2, lettering e motion = 3); som = 0.
  */
