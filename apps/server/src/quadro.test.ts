@@ -18,7 +18,7 @@ process.env.NEWEDITOR_LLM = 'off';
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const { run } = await import('./media.ts');
-const { clipNoTempo, lerSinal, renderQuadro } = await import('./quadro.ts');
+const { clipNoTempo, lerSinal, limparQuadros, renderQuadro } = await import('./quadro.ts');
 const { deliverySize, gradeFilters, segmentVideo } = await import('./render.ts');
 
 // Bruto full range (yuvj420p, color_range=pc), 2 s, 30 fps, gradiente com preto de verdade.
@@ -92,5 +92,42 @@ describe('quadro de conferência da grade (CH-0018)', () => {
 
   test('t fora da timeline devolve 400', async () => {
     await assert.rejects(renderQuadro(projeto(), path.join(tmp, 'proj3'), 9), (e: Error & { statusCode?: number }) => e.statusCode === 400);
+  });
+
+  test('grades com chave que não é arquivo do projeto devolve 400 e não grava nada fora da pasta de trabalho', async () => {
+    const raiz = path.join(tmp, 'evil');
+    const dir = path.join(raiz, 'a', 'b', 'proj4');
+    fs.mkdirSync(dir, { recursive: true });
+    const g = { blacks: -0.5 };
+    for (const grades of [{ '../../../../x': g }, { '../x': g }, { a1: g, outro: g }] as Record<string, Partial<typeof NEUTRAL_GRADE>>[]) {
+      await assert.rejects(renderQuadro(projeto(), dir, 0.5, grades), (e: Error & { statusCode?: number }) => e.statusCode === 400);
+    }
+    await assert.rejects(renderQuadro(projeto(), dir, 0.5, { a1: 'x' } as never), (e: Error & { statusCode?: number }) => e.statusCode === 400);
+    await assert.rejects(renderQuadro(projeto(), dir, 0.5, [] as never), (e: Error & { statusCode?: number }) => e.statusCode === 400);
+    const cubes = (fs.readdirSync(raiz, { recursive: true }) as string[]).filter((f) => f.endsWith('.cube'));
+    assert.deepEqual(cubes, []);
+  });
+
+  test('o .cube da grade tem nome pelo índice, nunca pelo id do arquivo', async () => {
+    const work = fs.mkdtempSync(path.join(tmp, 'gf-'));
+    const { luts, lutFilter } = await gradeFilters({ "../fora'x": grade, a1: grade }, work);
+    for (const f of luts.values()) assert.equal(path.dirname(f), work);
+    assert.deepEqual(fs.readdirSync(work).sort(), ['grade-0.cube', 'grade-1.cube']);
+    assert.ok(!lutFilter("../fora'x").includes('fora'));
+  });
+
+  test('limpeza apaga só trabalho abandonado (> 10 min) e guarda os 20 quadros mais novos', async () => {
+    const out = fs.mkdtempSync(path.join(tmp, 'limpa-'));
+    const velho = path.join(out, '.work-velho');
+    const atual = path.join(out, '.work-atual');
+    fs.mkdirSync(velho);
+    fs.mkdirSync(atual);
+    const t0 = Date.now();
+    fs.utimesSync(velho, new Date(t0 - 11 * 60_000), new Date(t0 - 11 * 60_000));
+    for (let i = 0; i < 22; i++) fs.writeFileSync(path.join(out, `q_500_${(1000 + i).toString(36)}.png`), '');
+    await limparQuadros(out, t0);
+    assert.ok(!fs.existsSync(velho), 'trabalho abandonado apagado');
+    assert.ok(fs.existsSync(atual), 'trabalho de outro pedido em curso fica');
+    assert.equal(fs.readdirSync(out).filter((f) => f.startsWith('q_')).length, 20);
   });
 });

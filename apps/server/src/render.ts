@@ -260,7 +260,8 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
   const luts = new Map<string, string>();
   for (const [assetId, grade] of Object.entries(grades ?? {})) {
     if (isNeutral(grade)) continue;
-    const f = path.join(work, `grade-${assetId}.cube`);
+    // Nome do arquivo pelo índice, nunca pelo id: o id vem do pedido e não pode virar caminho nem aspas no filtro.
+    const f = path.join(work, `grade-${luts.size}.cube`);
     // Look (LUT .cube do CinePRO) entra depois da conversão e das primárias — a mesma composição do preview.
     const cube = grade.lut ? await cineproCube(grade.lut.id).catch(() => null) : null;
     await fs.writeFile(f, lutToCube(buildLut(grade, 33, cube), 33));

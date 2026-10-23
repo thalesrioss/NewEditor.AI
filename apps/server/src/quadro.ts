@@ -54,6 +54,23 @@ export function lerSinal(txt: string): QuadroSinal {
   return { ylow: v('YLOW'), yavg: v('YAVG'), yhigh: v('YHIGH'), ymin: v('YMIN'), ymax: v('YMAX') };
 }
 
+/** Trabalho com mais de 10 min é sobra de pedido que caiu; o de outro pedido em curso fica. */
+const WORK_TTL_MS = 10 * 60_000;
+
+/**
+ * Guarda só os últimos 20 quadros (são de conferência, não de entrega) e apaga as pastas `.work-*` abandonadas.
+ * Pedidos simultâneos no mesmo projeto não apagam o trabalho um do outro.
+ */
+export async function limparQuadros(outDir: string, agora = Date.now()): Promise<void> {
+  const nomes = await fs.readdir(outDir);
+  const pngs = nomes.filter((f) => f.startsWith('q_')).sort((x, y) => x.slice(x.lastIndexOf('_')).localeCompare(y.slice(y.lastIndexOf('_'))));
+  for (const f of pngs.slice(0, -20)) await fs.rm(path.join(outDir, f), { force: true });
+  for (const f of nomes.filter((f) => f.startsWith('.work-'))) {
+    const st = await fs.stat(path.join(outDir, f)).catch(() => null);
+    if (st && agora - st.mtimeMs > WORK_TTL_MS) await fs.rm(path.join(outDir, f), { recursive: true, force: true });
+  }
+}
+
 export async function renderQuadro(p: Project, dir: string, t: number, grades?: Record<string, Partial<ColorGrade>>): Promise<QuadroResult> {
   const tl = p.timeline;
   if (!tl.main.length) throw Object.assign(new Error('timeline vazia'), { statusCode: 400 });
@@ -68,15 +85,18 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
   const fps = tl.fps || 30;
   const { W, H } = deliverySize(tl);
 
-  // Grade de teste por cima da salva (só neste quadro).
+  // Grade de teste por cima da salva (só neste quadro). Só vale para arquivo do projeto: chave desconhecida é 400.
+  if (grades != null && (typeof grades !== 'object' || Array.isArray(grades))) throw Object.assign(new Error('grades precisa ser um objeto { <assetId>: grade }'), { statusCode: 400 });
   const merged: NonNullable<Project['timeline']['grades']> = { ...(tl.grades ?? {}) };
-  for (const [id, g] of Object.entries(grades ?? {})) merged[id] = normalizeGradeLut({ ...(merged[id] ?? {}), ...g } as ColorGrade);
+  for (const [id, g] of Object.entries(grades ?? {})) {
+    if (!assets.has(id)) throw Object.assign(new Error(`grades: "${id}" não é um arquivo do projeto`), { statusCode: 400 });
+    if (!g || typeof g !== 'object' || Array.isArray(g)) throw Object.assign(new Error(`grades.${id} precisa ser um objeto de grade`), { statusCode: 400 });
+    merged[id] = normalizeGradeLut({ ...(merged[id] ?? {}), ...g } as ColorGrade);
+  }
 
   const outDir = path.join(dir, 'quadros');
   await fs.mkdir(outDir, { recursive: true });
-  // Guarda só os últimos quadros (são de conferência, não de entrega).
-  const old = (await fs.readdir(outDir)).filter((f) => f.startsWith('q_') || f.startsWith('.work-')).sort((x, y) => x.slice(x.lastIndexOf('_')).localeCompare(y.slice(y.lastIndexOf('_'))));
-  for (const f of old.filter((f) => f.startsWith('.work-')).concat(old.filter((f) => f.startsWith('q_')).slice(0, -20))) await fs.rm(path.join(outDir, f), { recursive: true, force: true });
+  await limparQuadros(outDir);
   const work = await fs.mkdtemp(path.join(outDir, '.work-'));
   try {
     const { luts, lutFilter } = await gradeFilters(merged, work);
