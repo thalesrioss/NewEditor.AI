@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Project } from '@neweditor/core';
+import { travas } from './assumir.ts';
 
 /** Raiz da produtora (FILA.md e producao/). Padrão: ~/newstudios. */
 export const PRODUTORA_DIR = process.env.NEWEDITOR_PRODUTORA ?? path.join(os.homedir(), 'newstudios');
@@ -45,6 +46,8 @@ export interface VideoEditado {
   trello?: string;
   drive?: string;
   projectId?: string;
+  /** Humano que assumiu a edição do card (BL-0122): o editor agente não é redisparado. */
+  emEdicaoPor?: string;
 }
 
 const cell = (s: string | undefined) => (s ?? '').trim();
@@ -84,6 +87,7 @@ export const versaoDoArquivo = (nome: string): number | null => {
 export async function listVideos(root: string, projects: Pick<Project, 'id' | 'assets' | 'createdAt'>[] = []): Promise<VideoEditado[]> {
   const producao = path.join(root, 'producao');
   const fila = parseFila(await fs.readFile(path.join(root, 'FILA.md'), 'utf8').catch(() => ''));
+  const travados = await travas(root);
   const dirs = async (d: string) => (await fs.readdir(d, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name);
   const out: VideoEditado[] = [];
   for (const cliente of await dirs(producao)) {
@@ -115,6 +119,7 @@ export async function listVideos(root: string, projects: Pick<Project, 'id' | 'a
           trello: f?.trello,
           drive: f?.drive,
           projectId: projeto?.id,
+          ...(travados.has(cardId) && { emEdicaoPor: travados.get(cardId)!.quem }),
         });
       }
     }

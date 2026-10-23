@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Download, Keyboard, ListChecks, PanelLeft, PanelRight } from 'lucide-react';
+import { ArrowLeft, Bot, Check, Download, Hand, Keyboard, ListChecks, PanelLeft, PanelRight } from 'lucide-react';
 import { profileOptions, profileValue, type ClientProfile, type Project, type ProjectStatus } from '@neweditor/core';
-import { api } from '../lib/api.ts';
+import { api, type TravaCard } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { IconButton } from '../components/ui.tsx';
 import { Notifications } from '../components/Notifications.tsx';
@@ -42,6 +42,7 @@ export function TopBar({ project, leftOpen, rightOpen, onLeft, onRight, onExport
         ))}
       </select>
       <ProfileSelect project={project} />
+      <AssumirEdicao projectId={project.id} />
       {statusErr && (
         <span className="max-w-xs truncate text-ui-xs text-rose-300" title={statusErr}>
           {statusErr}
@@ -80,6 +81,61 @@ export function TopBar({ project, leftOpen, rightOpen, onLeft, onRight, onExport
         </button>
       </div>
     </header>
+  );
+}
+
+/**
+ * "Assumir edição" (BL-0122): só em projeto de card da produtora. Trava o card (o editor agente dele não é
+ * redisparado) e mostra "Em edição por Thales"; "Devolver ao agente" solta e anota no PROJETO.md o que mudou.
+ */
+function AssumirEdicao({ projectId }: { projectId: string }) {
+  const [card, setCard] = useState<string | null>(null);
+  const [trava, setTrava] = useState<TravaCard | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    const load = () =>
+      api
+        .trava(projectId)
+        .then((r) => (setCard(r.card), setTrava(r.trava)))
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [projectId]);
+  if (!card) return null;
+  const run = (fn: () => Promise<{ trava: TravaCard | null; passos?: string[]; estado?: string }>) => {
+    setBusy(true);
+    fn()
+      .then((r) => {
+        setTrava(r.trava);
+        setMsg(r.passos ? `Devolvido ao agente: ${r.passos.length} alteração(ões) anotadas no PROJETO.md; card de volta a "${r.estado}".` : '');
+      })
+      .catch((e: Error) => setMsg(e.message))
+      .finally(() => (setBusy(false), setTimeout(() => setMsg(''), 8000)));
+  };
+  return (
+    <>
+      {trava ? (
+        <>
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-ui-xs font-semibold text-amber-200" title={`Desde ${new Date(trava.desde).toLocaleString('pt-BR')}. O editor agente do card ${trava.card} não é redisparado.`}>
+            Em edição por {trava.quem}
+          </span>
+          <button disabled={busy} onClick={() => run(() => api.devolver(projectId))} className="flex items-center gap-1.5 rounded-full border border-ink-700 px-2.5 py-0.5 text-ui-xs font-semibold text-ink-200 hover:border-ink-500 hover:text-white disabled:opacity-40" title="Solta a trava, volta o card ao estado de antes e anota no PROJETO.md o que você mudou">
+            <Bot size={12} /> Devolver ao agente
+          </button>
+        </>
+      ) : (
+        <button disabled={busy} onClick={() => run(() => api.assumir(projectId))} className="flex items-center gap-1.5 rounded-full border border-amber-400/40 px-2.5 py-0.5 text-ui-xs font-semibold text-amber-200 hover:bg-amber-400/10 disabled:opacity-40" title={`Trava o card ${card}: o editor agente dele não é redisparado enquanto você edita`}>
+          <Hand size={12} /> Assumir edição
+        </button>
+      )}
+      {msg && (
+        <span className="max-w-xs truncate text-ui-xs text-ink-300" title={msg}>
+          {msg}
+        </span>
+      )}
+    </>
   );
 }
 

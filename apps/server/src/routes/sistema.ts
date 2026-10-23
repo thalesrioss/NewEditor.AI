@@ -2,6 +2,7 @@
 import type { FastifyInstance } from 'fastify';
 import { listGabaritos } from '../benchmark.ts';
 import { cerebroGraph, cerebroNote } from '../cerebro.ts';
+import { assumir, cardDoProjeto, devolver, lerTrava } from '../assumir.ts';
 import { BRAIN } from '../config.ts';
 import { createFromTask, parseTask } from '../gestor.ts';
 import { cancelJob, isBusy, lastResult, queuePosition, queueState } from '../jobs.ts';
@@ -23,6 +24,30 @@ export async function rotasSistema(app: FastifyInstance): Promise<void> {
 
   // --- Galeria: todos os vídeos editados da produtora (FB-0169) -----------------------------------------
   app.get('/api/videos', async () => ({ produtora: PRODUTORA_DIR, videos: await listVideos(PRODUTORA_DIR, store.list()) }));
+
+  // --- Assumir edição (BL-0122): o humano trava o card e o editor agente não é redisparado -------------
+  app.get<{ Params: { id: string } }>('/api/projects/:id/trava', async (req) => {
+    const alvo = cardDoProjeto(PRODUTORA_DIR, store.get(req.params.id));
+    return { card: alvo?.card ?? null, trava: alvo ? await lerTrava(PRODUTORA_DIR, alvo.card) : null };
+  });
+  app.post<{ Params: { id: string }; Body: { quem?: string } | undefined }>('/api/projects/:id/assumir', async (req) => {
+    const p = store.get(req.params.id);
+    const quem = req.body?.quem?.trim() || 'Thales';
+    const trava = await assumir(PRODUTORA_DIR, p, quem, store.undoLabels(p.id).length);
+    store.log(p.id, 'human', `${quem} assumiu a edição do card ${trava.card}: o editor agente não é redisparado até devolver.`);
+    return { card: trava.card, trava };
+  });
+  app.post<{ Params: { id: string } }>('/api/projects/:id/devolver', async (req) => {
+    const p = store.get(req.params.id);
+    const alvo = cardDoProjeto(PRODUTORA_DIR, p);
+    const t = alvo && (await lerTrava(PRODUTORA_DIR, alvo.card));
+    // Passos feitos depois de assumir (o histórico guarda até 60; os desfeitos saem da lista).
+    const labels = store.undoLabels(p.id);
+    const passos = t ? labels.slice(Math.min(t.passosAntes, labels.length)) : [];
+    const r = await devolver(PRODUTORA_DIR, p, passos);
+    store.log(p.id, 'human', `${r.trava.quem} devolveu a edição ao agente (${passos.length} alteração(ões) anotadas no PROJETO.md; card de volta a "${r.estado}").`);
+    return { card: r.trava.card, trava: null, estado: r.estado, passos };
+  });
 
   // --- Fila global ---------------------------------------------------------------------------------
   app.get('/api/fila', async () => queueState());
