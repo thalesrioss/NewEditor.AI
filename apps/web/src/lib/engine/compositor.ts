@@ -1,7 +1,7 @@
 /**
  * Compositor WebGL2 único do preview (ADR-005): fala (com zoom), B-roll e o LUT de cor de cada arquivo num canvas
  * só, com o MESMO enquadramento do export:
- *  - fala: zoom = recorte (crop iw/z) centrado na horizontal e ancorado na altura dos olhos (`cy`), depois "contain" no quadro (letterbox);
+ *  - fala: zoom = recorte (crop iw/z) ancorado na largura (`cx`, CH-0023) e na altura dos olhos (`cy`), depois "contain" no quadro (letterbox);
  *  - B-roll: "cover" (preenche e recorta).
  */
 import { buildLut, coverCrop, isNeutral, type ColorGrade, type CubeLut, type OverlayFraming, textureOf } from '@neweditor/core';
@@ -54,7 +54,7 @@ export interface Layer {
   grade?: ColorGrade | null;
   /** Rotação de exibição do arquivo, em graus no sentido horário (o quadro decodificado vem sem girar). */
   rotate?: 0 | 90 | 180 | 270;
-  /** Reframe: centro horizontal (0–1) do recorte em volta do rosto. */
+  /** Reframe: centro horizontal (0–1) do recorte em volta do rosto. Contain: âncora horizontal do zoom (CH-0023). */
   cx?: number;
   /** Cover: enquadramento do B-roll (centro e zoom), a mesma conta do export (core coverCrop). */
   framing?: OverlayFraming;
@@ -176,9 +176,10 @@ export class Compositor {
       let y1 = 1;
       if (l.fit === 'contain') {
         const z = Math.max(1, l.zoom ?? 1);
+        const cx = Math.min(1, Math.max(0, l.cx ?? 0.5));
         const cy = Math.min(1, Math.max(0, l.cy ?? 0.5));
-        u0 = 0.5 - 0.5 / z;
-        u1 = 0.5 + 0.5 / z;
+        u0 = cx * (1 - 1 / z);
+        u1 = u0 + 1 / z;
         v0 = cy * (1 - 1 / z);
         v1 = v0 + 1 / z;
         const s = Math.min(W / fw, H / fh);

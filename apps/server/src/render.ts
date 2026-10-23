@@ -300,6 +300,8 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
   if (useReframe) parts.push(`crop=w='min(iw\\,ih*${(W / H).toFixed(5)})':h=ih:x='(iw-ow)*${c.framing!.x!.toFixed(4)}':y=0`);
   // Âncora vertical do zoom (altura dos olhos): o ponto nessa altura fica parado na tela; sem âncora, o centro.
   const ay = (c.framing?.y ?? 0.5).toFixed(4);
+  // Âncora horizontal (CH-0023): fora do reframe, `framing.x` segura o ponto nessa largura parado na tela, como o y.
+  const ax = (useReframe ? 0.5 : (c.framing?.x ?? 0.5)).toFixed(4);
   if (z1 !== z0) {
     // Tamanho "contido" da fonte no quadro (o zoompan entrega direto nesse tamanho).
     const ar = useReframe ? W / H : (src.width ?? W) / (src.height ?? H);
@@ -309,8 +311,8 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
     // O zoompan (d=1) entrega 1 quadro por quadro de entrada: a fonte entra já no fps da timeline, senão um bruto
     // 23,976 numa timeline 29,97 sai 1,25× mais rápido que o áudio (CH-0017).
     parts.push(`fps=${fps}`);
-    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*${ay}':d=1:s=${sw}x${sh}:fps=${fps}`);
-  } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)/2:y=(ih-oh)*${ay}`);
+    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${ax}':y='(ih-ih/zoom)*${ay}':d=1:s=${sw}x${sh}:fps=${fps}`);
+  } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)*${ax}:y=(ih-oh)*${ay}`);
   // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
   parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
   if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
