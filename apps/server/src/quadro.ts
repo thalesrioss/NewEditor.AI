@@ -9,8 +9,9 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { clipDuration, clipStarts, normalizeGradeLut, overlayActive, overlaySourceTime, overlaysInDrawOrder, resolveOverlay, type ColorGrade, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
+import { clipDuration, clipStarts, normalizeGradeLut, overlayActive, overlaySourceTime, overlaysInDrawOrder, resolveOverlay, resolveRegionFx, TIMELINE_ANCHOR, type ColorGrade, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
+import { regionFxGraph } from './region-fx.ts';
 import { deliverySize, gradeFilters, mainRange, overlayFit, overlayFrames, segmentVideo } from './render.ts';
 
 export interface QuadroSinal {
@@ -50,6 +51,18 @@ export function camadasNoQuadro(tl: Project['timeline'], assets: Map<string, Med
     if (f < w.f0 || f >= w.f1) return [];
     return [{ o, a, fonte: a.kind === 'image' ? 0 : overlaySourceTime(o, f / fps - w.at) }];
   });
+}
+
+/**
+ * Efeitos por região ativos no instante `t`, reescritos para um quadro só com tempo 0 (o quadro de conferência
+ * sai com setpts=0). A rampa de entrada/saída não entra: o quadro mostra o efeito inteiro.
+ */
+export function regioesNoQuadro(tl: Project['timeline'], t: number): Project['timeline'] {
+  const ativos = (tl.regionFx ?? []).filter((fx) => {
+    const pos = resolveRegionFx(tl, fx);
+    return pos && t >= pos.start && t < pos.end;
+  });
+  return { ...tl, regionFx: ativos.map(({ fade: _f, ...fx }) => ({ ...fx, anchor: { assetId: TIMELINE_ANCHOR, at: 0 }, duration: 1 })) };
 }
 
 /** Clipe da V1 no tempo `t` da timeline e o índice do quadro dentro dele (no grid de quadros do render). */
@@ -131,20 +144,24 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
     const base = `select='eq(n\\,${hit.frame})'`;
     const medir = 'signalstats,metadata=print:file=-';
     const sobre = camadas ? camadasNoQuadro(tl, assets, Math.round(clipStarts(tl)[hit.i]! * fps) + hit.frame) : [];
+    // Efeito por região ativo neste instante (CH-0033): entra na V1, antes das camadas, como no render.
+    const rfx = regionFxGraph(regioesNoQuadro(tl, t), W, H, fps, 'b0');
     let out: Buffer;
-    if (!sobre.length) {
+    if (!sobre.length && !rfx.parts.length) {
       // Último quadro do trecho: medido em YUV como está no arquivo (escala do render) e salvo em PNG.
       out = await run('ffmpeg', ['-v', 'error', '-i', seg, '-vf', `${base},${medir}`, '-frames:v', '1', '-update', '1', '-y', png]);
     } else {
       // Camadas por cima: o quadro de cada fonte no instante que o render mostra, com o encaixe do render (CH-0028).
       const args = ['-v', 'error', '-i', seg];
-      const parts = [`[0:v]${base},setpts=0[b0]`];
+      const parts = [`[0:v]${base},setpts=0[b0]`, ...rfx.parts];
+      let cur = rfx.out;
       sobre.forEach(({ o, a: oa, fonte }, k) => {
         args.push(...(oa.kind === 'image' ? [] : ['-ss', fonte.toFixed(4)]), '-i', oa.path);
         parts.push(`[${k + 1}:v:0]trim=end_frame=1,setpts=0,${overlayFit(oa, W, H, o.framing, lutFilter)},setsar=1[o${k}]`);
-        parts.push(`[b${k}][o${k}]overlay=eof_action=repeat[b${k + 1}]`);
+        parts.push(`[${cur}][o${k}]overlay=eof_action=repeat[c${k}]`);
+        cur = `c${k}`;
       });
-      parts.push(`[b${sobre.length}]${medir}[q]`);
+      parts.push(`[${cur}]${medir}[q]`);
       out = await run('ffmpeg', [...args, '-filter_complex', parts.join(';'), '-map', '[q]', '-frames:v', '1', '-update', '1', '-y', png]);
     }
     const sinal = lerSinal(out.toString());

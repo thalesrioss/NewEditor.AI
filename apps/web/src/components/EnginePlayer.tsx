@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { locate, placeWords, timelineDuration } from '@neweditor/core';
+import { locate, placeWords, resolveRegionFx, timelineDuration, type Timeline } from '@neweditor/core';
 import { mediaUrl, proxyOf } from '../lib/api.ts';
 import { Engine } from '../lib/engine/engine.ts';
 import { useMotionSfx } from '../lib/motionSfx.ts';
@@ -140,6 +140,7 @@ export function EnginePlayer() {
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-3">
         <div ref={frame} className="relative max-h-full max-w-full overflow-hidden bg-black shadow-[var(--shadow-ui-2)] ring-1 ring-ink-700" style={{ aspectRatio: aspect, height: '100%' }}>
           <canvas ref={canvas} className="absolute inset-0 h-full w-full" />
+          {timeline?.regionFx?.length ? <RegionFxLayer timeline={timeline} t={playhead} frameH={frameH} /> : null}
           {asset?.kind === 'audio' && <AudioCard asset={asset} t={loc!.sourceTime} />}
           {!timeline?.main.length && <EmptyPlayer />}
           {error && <p className="absolute inset-x-4 top-4 rounded bg-rose-500/20 p-2 text-ui-xs text-rose-200">Motor novo indisponível: {error}. Use o clássico.</p>}
@@ -148,5 +149,47 @@ export function EnginePlayer() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Efeito por região no preview (CH-0033): desfoque do que está atrás (backdrop-filter) no retângulo, com a borda
+ * suave por máscara. Fica entre a fala e o lettering/legenda, como no export. Aproximação: a limpeza aparece como
+ * desfoque forte e a proteção dos pixels escuros só entra no render.
+ */
+function RegionFxLayer({ timeline, t, frameH }: { timeline: Timeline; t: number; frameH: number }) {
+  if (timeline.trackState?.V1?.hidden) return null;
+  const k = frameH / 1920;
+  return (
+    <>
+      {(timeline.regionFx ?? []).map((fx) => {
+        const pos = resolveRegionFx(timeline, fx);
+        if (!pos || t < pos.start || t >= pos.end) return null;
+        const blur = (fx.mode === 'clean' ? 6 + fx.strength * 34 : 3 + fx.strength * 57) * k;
+        const fade = fx.fade ? Math.min(1, (t - pos.start) / fx.fade, (pos.end - t) / fx.fade) : 1;
+        const f = fx.feather * frameH;
+        const mask = f > 0.5 ? `linear-gradient(to right, transparent, #000 ${f}px, #000 calc(100% - ${f}px), transparent), linear-gradient(to bottom, transparent, #000 ${f}px, #000 calc(100% - ${f}px), transparent)` : undefined;
+        return (
+          <div
+            key={fx.id}
+            className="pointer-events-none absolute"
+            title={fx.reason ?? 'efeito por região'}
+            style={{
+              left: `calc(${fx.rect.x * 100}% - ${f / 2}px)`,
+              top: `calc(${fx.rect.y * 100}% - ${f / 2}px)`,
+              width: `calc(${fx.rect.w * 100}% + ${f}px)`,
+              height: `calc(${fx.rect.h * 100}% + ${f}px)`,
+              backdropFilter: `blur(${blur.toFixed(1)}px)`,
+              WebkitBackdropFilter: `blur(${blur.toFixed(1)}px)`,
+              opacity: fade,
+              maskImage: mask,
+              WebkitMaskImage: mask,
+              maskComposite: mask ? 'intersect' : undefined,
+              WebkitMaskComposite: mask ? 'source-in' : undefined,
+            }}
+          />
+        );
+      })}
+    </>
   );
 }

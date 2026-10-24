@@ -9,6 +9,7 @@ import { cleanMaster, syncVoiceClean } from './denoise.ts';
 import { DELIVERY, deliverAudio } from './loudness.ts';
 import { atomic, run, filterGraphArgs } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
+import { regionFxGraph } from './region-fx.ts';
 import { captionsWithoutWords } from './legenda-vazia.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 
@@ -145,6 +146,17 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     }
     // Com fala em vídeo, a imagem base é a própria entrada 0; overlays encadeiam a partir dela.
     let vCur = hasVideo ? '0:v' : 'v0';
+    let videoTouched = !hasVideo;
+    // Efeito por região (CH-0033): na imagem da fala, já com a cor, antes de B-roll, motion, lettering e legenda.
+    if (hasVideo && !trackFlag(tl, 'V1', 'hidden')) {
+      const rfx = regionFxGraph(tl, W, H, fps, vCur);
+      if (rfx.parts.length) {
+        parts.push(...rfx.parts);
+        vCur = rfx.out;
+        videoTouched = true;
+        notes.push(`${tl.regionFx!.length} efeito(s) por região`);
+      }
+    }
     // A fala vira gatilho do ducking: uma cópia vai para a mixagem, as outras para os compressores.
     const ducked = placed.filter(({ o, a }) => (o.role === 'music' || o.role === 'sfx') && a.hasAudio && (o.mix?.duck ?? o.role === 'music'));
     const speech = hasVideo ? '[1:a]' : '[a1]';
@@ -159,7 +171,6 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       audio[0] = '[spmute]';
     }
     let duckN = 0;
-    let videoTouched = !hasVideo;
     // O obturador só nos flashes com som (flashSfx false = o editor põe a amostra dele no A2).
     const flashCues: { at: number; c: SfxCue }[] = flashShutterCues(tl).map(({ at, cue }) => ({ at, c: cue }));
     // SFX dos motions do Motion Studio (cues do film.js), no tempo da timeline.

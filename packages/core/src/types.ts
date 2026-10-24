@@ -209,6 +209,46 @@ export interface OverlayFraming {
   anchor?: 'clip';
 }
 
+/**
+ * Efeito por região no V1 (CH-0033): desfoque ou limpeza num retângulo da TELA (0–1 do quadro de entrega),
+ * com borda suave, num trecho ancorado na fala como os overlays. Entra na imagem da fala (já com a cor) antes
+ * do B-roll, dos motions, dos letterings e da legenda: o título fixo fica por cima, nítido.
+ */
+export interface RegionFx {
+  id: string;
+  anchor: Anchor;
+  duration: Seconds;
+  /** Canto superior esquerdo e tamanho, em fração do quadro de entrega. */
+  rect: { x: number; y: number; w: number; h: number };
+  /** Borda suave, em fração da altura do quadro (0,02 = ~38 px em 1920). 0 = borda seca. */
+  feather: number;
+  /** blur = desfoque; clean = some com texto e detalhe fino (mediana larga + desfoque leve), mantém a cor de fundo. */
+  mode: 'blur' | 'clean';
+  /** Intensidade 0–1. */
+  strength: number;
+  /** Protege pixels escuros (luma 0–1 abaixo deste valor ficam intactos: cabelo, roupa, contorno da pessoa). */
+  protectDark?: number;
+  /** Entra e sai em rampa (s), além da borda no espaço. */
+  fade?: Seconds;
+  reason?: string;
+  by: Actor;
+}
+
+/** Campos de `set_region_fx`: `start`/`end` em tempo da timeline viram âncora e duração; null tira o opcional. */
+export interface RegionFxPatch {
+  anchor?: Anchor;
+  start?: Seconds;
+  end?: Seconds;
+  duration?: Seconds;
+  rect?: Partial<RegionFx['rect']>;
+  feather?: number;
+  mode?: RegionFx['mode'];
+  strength?: number;
+  protectDark?: number | null;
+  fade?: Seconds | null;
+  reason?: string;
+}
+
 export interface Timeline {
   fps: number;
   width: number;
@@ -245,6 +285,8 @@ export interface Timeline {
   formatoManual?: boolean;
   /** Banco dos SFX dos motions, letterings e flashes: foley sintetizado ou amostras reais do CinePRO. */
   sfxBank?: import('./sfx.ts').SfxBank;
+  /** Efeitos por região no V1 (CH-0033). */
+  regionFx?: RegionFx[];
 }
 
 /**
@@ -446,6 +488,8 @@ export type TimelineOp =
   /** Liga/desliga a convivência com a legenda (título fixo; CH-0022). */
   | { type: 'set_overlay_keep_captions'; id: string; keep: boolean }
   | { type: 'set_lettering_ref'; refId: string | null }
+  /** Efeito por região (CH-0033): sem `id` cria; com `id` altera só os campos enviados; `fx: null` apaga. */
+  | { type: 'set_region_fx'; id?: string; fx: RegionFxPatch | null }
   /** Corrige a grafia de palavras (texto vazio desfaz a correção). */
   | { type: 'fix_words'; fixes: WordFix[] }
   /** Ajusta legendas em lote (patch null volta ao automático naquela palavra). */

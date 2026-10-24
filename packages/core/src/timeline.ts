@@ -1,4 +1,4 @@
-import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
+import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { normalizeGradeLut } from './color.ts';
 
@@ -462,6 +462,18 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_overlay_keep_captions':
       if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
       return { ...t, overlays: t.overlays.map((o) => (o.id !== op.id ? o : op.keep ? { ...o, keepCaptions: true } : (({ keepCaptions: _k, ...rest }) => rest)(o))) };
+    case 'set_region_fx': {
+      const list = t.regionFx ?? [];
+      const prev = op.id ? list.find((r) => r.id === op.id) : undefined;
+      if (op.id && !prev && op.fx === null) throw new OpError(`set_region_fx: ${op.id} não existe`);
+      const rest = (l: RegionFx[]) => {
+        const { regionFx: _drop, ...r } = t;
+        return l.length ? { ...r, regionFx: l } : r;
+      };
+      if (op.fx === null) return rest(list.filter((r) => r.id !== op.id));
+      const fx = buildRegionFx(t, prev, op.fx, op.id ?? uid('rfx'), by);
+      return rest(prev ? list.map((r) => (r.id === prev.id ? fx : r)) : [...list, fx]);
+    }
     case 'set_lettering_ref': {
       const { letteringRef: _drop, ...rest } = t;
       return op.refId ? { ...rest, letteringRef: op.refId } : rest;
@@ -520,6 +532,68 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
   // Tipo que esta versão não conhece (ex.: op de uma versão mais nova, CH-0025): recusa sem tocar na
   // timeline. Antes o switch caía no fim, devolvia undefined e o projeto ficava sem timeline.
   throw new OpError(`operação desconhecida: ${String((op as { type?: unknown }).type)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Efeito por região (CH-0033)
+// ---------------------------------------------------------------------------
+
+
+/** Monta (ou altera) um efeito por região a partir dos campos enviados, validando e limitando os valores. */
+function buildRegionFx(t: Timeline, prev: RegionFx | undefined, p: RegionFxPatch, id: string, by: Actor): RegionFx {
+  const num = (v: unknown, name: string) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw new OpError(`set_region_fx: ${name} precisa ser número`);
+    return v;
+  };
+  let anchor = p.anchor ?? prev?.anchor;
+  let duration = p.duration ?? prev?.duration;
+  if (p.start !== undefined) {
+    const a = anchorAt(t, num(p.start, 'start'));
+    if (!a) throw new OpError('set_region_fx: start fora da timeline');
+    anchor = a;
+  }
+  if (p.end !== undefined) {
+    const start = anchor ? resolveRegionFx(t, { anchor, duration: 0 })?.start : undefined;
+    if (start === undefined) throw new OpError('set_region_fx: end sem início (mande start ou anchor)');
+    duration = num(p.end, 'end') - start;
+  }
+  if (!anchor) throw new OpError('set_region_fx: falta o início (start em segundos da timeline, ou anchor)');
+  if (!anchorValid(t, anchor.assetId, anchor.at)) throw new OpError('set_region_fx: o ponto de âncora não está na timeline');
+  if (duration === undefined || !(num(duration, 'duration') >= MIN_CLIP)) throw new OpError('set_region_fx: duração curta demais (mande end ou duration)');
+  const r0 = { x: 0, y: 0, w: 1, h: 1, ...prev?.rect };
+  const rr = { ...r0, ...p.rect };
+  const x = clamp01(num(rr.x, 'rect.x'));
+  const y = clamp01(num(rr.y, 'rect.y'));
+  const w = Math.min(1 - x, Math.max(0, num(rr.w, 'rect.w')));
+  const h = Math.min(1 - y, Math.max(0, num(rr.h, 'rect.h')));
+  if (w < 0.005 || h < 0.005) throw new OpError('set_region_fx: retângulo vazio (rect.w e rect.h entre 0 e 1, fração do quadro)');
+  if (!prev && !p.rect) throw new OpError('set_region_fx: falta rect { x, y, w, h } (fração do quadro)');
+  const mode = p.mode ?? prev?.mode ?? 'blur';
+  if (mode !== 'blur' && mode !== 'clean') throw new OpError("set_region_fx: mode 'blur' ou 'clean'");
+  const fx: RegionFx = {
+    id,
+    anchor,
+    duration: r4(duration),
+    rect: { x: r4(x), y: r4(y), w: r4(w), h: r4(h) },
+    feather: r4(Math.max(0, Math.min(0.2, num(p.feather ?? prev?.feather ?? 0.015, 'feather')))),
+    mode,
+    strength: r4(clamp01(num(p.strength ?? prev?.strength ?? 0.6, 'strength'))),
+    by: by === 'human' || !prev ? by : prev.by,
+  };
+  const dark = p.protectDark === undefined ? prev?.protectDark : p.protectDark;
+  if (dark !== undefined && dark !== null && num(dark, 'protectDark') > 0) fx.protectDark = r4(clamp01(dark));
+  const fade = p.fade === undefined ? prev?.fade : p.fade;
+  if (fade !== undefined && fade !== null && num(fade, 'fade') > 0) fx.fade = r4(Math.min(fade, duration / 2));
+  const reason = p.reason ?? prev?.reason;
+  if (reason) fx.reason = reason;
+  return fx;
+}
+
+/** Trecho de um efeito por região na timeline; null = o instante da fala onde ele estava foi cortado. */
+export function resolveRegionFx(t: Timeline, fx: Pick<RegionFx, 'anchor' | 'duration'>): { start: Seconds; end: Seconds } | null {
+  const start = fx.anchor.assetId === TIMELINE_ANCHOR ? fx.anchor.at : sourceToTimeline(t, fx.anchor.assetId, fx.anchor.at);
+  if (start === null) return null;
+  return { start, end: Math.min(start + fx.duration, timelineDuration(t)) };
 }
 
 /** Junta clipes vizinhos que são continuação exata um do outro na fonte. */
