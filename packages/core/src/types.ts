@@ -76,6 +76,20 @@ export interface Clip {
    * na fonte) do zoom: o ponto nessa altura fica parado na tela ao ampliar. Sem `y`, o zoom amplia pelo centro.
    */
   framing?: { x?: number; y?: number };
+  /**
+   * Rampa de enquadramento (CH-0036): `framing` vai até este `x`/`y` de `start` a `start + dur` (s desde o início do
+   * clipe, tempo de saída; sem `dur`, até o fim do clipe), ease-out ou linear. Só a imagem; o áudio não é tocado.
+   * Fora do reframe, como o `framing` (âncora do zoom: precisa de zoom > 1 para mover).
+   */
+  framingTo?: FramingRamp;
+}
+
+export interface FramingRamp {
+  x?: number;
+  y?: number;
+  start?: Seconds;
+  dur?: Seconds;
+  ease?: 'out' | 'linear';
 }
 
 /** Trecho da fonte que foi descartado — fica visível para o humano poder restaurar. */
@@ -460,7 +474,7 @@ export type TimelineOp =
   | { type: 'set_speed'; clipId: string; speed?: number | null; freeze?: number | null }
   | { type: 'set_cam'; clipId: string; assetId: string | null }
   /** `x`/`y` ausentes mantêm o valor; `null` tira. */
-  | { type: 'set_framing'; clipId: string; x?: number | null; y?: number | null }
+  | { type: 'set_framing'; clipId: string; x?: number | null; y?: number | null; /** Rampa (CH-0036): campos ausentes mantêm, `null` tira a rampa. */ to?: { x?: number | null; y?: number | null; start?: Seconds | null; dur?: Seconds | null; ease?: 'out' | 'linear' | null } | null }
   | { type: 'set_reframe'; on: boolean }
   /** Formato da entrega em pixels (e fps): presets ou livre. Fica no histórico. */
   | { type: 'set_format'; width: number; height: number; fps?: number }

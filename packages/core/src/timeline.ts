@@ -1,4 +1,4 @@
-import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
+import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { normalizeGradeLut } from './color.ts';
 
@@ -34,6 +34,26 @@ export function zoomAt(c: Clip, local: Seconds): number {
   if (z1 === z0) return z0;
   const p = Math.min(1, Math.max(0, local / Math.max(0.01, clipPlayed(c))));
   return z0 + (z1 - z0) * (1 - Math.pow(1 - p, 3));
+}
+/** Janela da rampa de enquadramento no tempo local do clipe (CH-0036): início e duração, limitados ao clipe. */
+export function framingRampWindow(c: Clip): { start: Seconds; dur: Seconds } | null {
+  const r = c.framingTo;
+  if (!r || (r.x === undefined && r.y === undefined)) return null;
+  const played = clipPlayed(c);
+  const start = Math.min(Math.max(0, r.start ?? 0), played);
+  return { start, dur: Math.max(0.01, Math.min(r.dur ?? played - start, played - start)) };
+}
+/** Enquadramento no instante `local`: `framing`, ou a caminho de `framingTo` dentro da janela da rampa. */
+export function framingAt(c: Clip, local: Seconds): { x?: number; y?: number } {
+  const w = framingRampWindow(c);
+  if (!w) return c.framing ?? {};
+  const r = c.framingTo!;
+  const p = Math.min(1, Math.max(0, (local - w.start) / w.dur));
+  const e = r.ease === 'linear' ? p : 1 - Math.pow(1 - p, 3);
+  const lerp = (a: number | undefined, b: number | undefined) => (b === undefined ? a : (a ?? 0.5) + (b - (a ?? 0.5)) * e);
+  const x = lerp(c.framing?.x, r.x);
+  const y = lerp(c.framing?.y, r.y);
+  return { ...(x !== undefined ? { x } : {}), ...(y !== undefined ? { y } : {}) };
 }
 /** Duração do flash de entrada (2 quadros). */
 export const FLASH_FRAMES = 2;
@@ -348,6 +368,31 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
           }
           if (framing.x === undefined && framing.y === undefined) delete next.framing;
           else next.framing = framing;
+          if (op.to === null) delete next.framingTo;
+          else if (op.to !== undefined) {
+            const to: FramingRamp = { ...c.framingTo };
+            for (const k of ['x', 'y'] as const) {
+              const v = op.to[k];
+              if (v === null) delete to[k];
+              else if (v !== undefined) {
+                if (!Number.isFinite(v)) throw new OpError(`set_framing: to.${k} entre 0 e 1`);
+                to[k] = Math.min(1, Math.max(0, v));
+              }
+            }
+            for (const k of ['start', 'dur'] as const) {
+              const v = op.to[k];
+              if (v === null) delete to[k];
+              else if (v !== undefined) {
+                if (!Number.isFinite(v) || v < 0 || (k === 'dur' && v === 0)) throw new OpError(`set_framing: to.${k} em segundos (${k === 'dur' ? '> 0' : '>= 0'})`);
+                to[k] = v;
+              }
+            }
+            if (op.to.ease === null || op.to.ease === 'out') delete to.ease;
+            else if (op.to.ease === 'linear') to.ease = 'linear';
+            else if (op.to.ease !== undefined) throw new OpError("set_framing: to.ease 'out' ou 'linear'");
+            if (to.x === undefined && to.y === undefined) delete next.framingTo;
+            else next.framingTo = to;
+          }
           return next;
         }),
       };
@@ -601,7 +646,7 @@ export function coalesce(main: Clip[]): Clip[] {
   const out: Clip[] = [];
   for (const c of main) {
     const prev = out[out.length - 1];
-    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y;
+    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y && !a.framingTo && !b.framingTo;
     if (prev && prev.assetId === c.assetId && Math.abs(prev.out - c.in) < 1e-3 && same(prev, c)) {
       out[out.length - 1] = { ...prev, out: c.out };
     } else out.push(c);

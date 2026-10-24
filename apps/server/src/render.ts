@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
+import { buildCues, buildLut, clipPlayed, coverCrop, framingRampWindow, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -354,7 +354,19 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
   const ay = (c.framing?.y ?? 0.5).toFixed(4);
   // Âncora horizontal (CH-0023): fora do reframe, `framing.x` segura o ponto nessa largura parado na tela, como o y.
   const ax = (useReframe ? 0.5 : (c.framing?.x ?? 0.5)).toFixed(4);
-  if (z1 !== z0) {
+  // Rampa de enquadramento (CH-0036): a âncora anda de `framing` até `framingTo` dentro da janela, quadro a quadro.
+  const ramp = framingRampWindow(c);
+  const rampTo = (a: string, b: number | undefined): string => {
+    if (!ramp || b === undefined || Number(a) === b) return a;
+    const f0 = (ramp.start * fps).toFixed(3);
+    const fd = Math.max(1, ramp.dur * fps).toFixed(3);
+    const p = `min(1\\,max(0\\,(on-${f0})/${fd}))`;
+    const e = c.framingTo?.ease === 'linear' ? p : `(1-pow(1-${p}\\,3))`;
+    return `(${a}+(${(b - Number(a)).toFixed(4)})*${e})`;
+  };
+  const rx = useReframe ? ax : rampTo(ax, c.framingTo?.x);
+  const ry = rampTo(ay, c.framingTo?.y);
+  if (z1 !== z0 || rx !== ax || ry !== ay) {
     // Tamanho "contido" da fonte no quadro (o zoompan entrega direto nesse tamanho).
     const ar = useReframe ? W / H : (src.width ?? W) / (src.height ?? H);
     const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
@@ -363,7 +375,7 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
     // O zoompan (d=1) entrega 1 quadro por quadro de entrada: a fonte entra já no fps da timeline, senão um bruto
     // 23,976 numa timeline 29,97 sai 1,25× mais rápido que o áudio (CH-0017).
     parts.push(`fps=${fps}`);
-    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${ax}':y='(ih-ih/zoom)*${ay}':d=1:s=${sw}x${sh}:fps=${fps}`);
+    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${rx}':y='(ih-ih/zoom)*${ry}':d=1:s=${sw}x${sh}:fps=${fps}`);
   } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)*${ax}:y=(ih-oh)*${ay}`);
   // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
   parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
