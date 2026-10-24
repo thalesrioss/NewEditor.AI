@@ -644,13 +644,15 @@ export const MAX_CLIP_ZOOM = MAX_FRAMING_ZOOM;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
-export function normalizeFraming(f: Partial<import('./types.ts').OverlayFraming>): import('./types.ts').OverlayFraming {
+export function normalizeFraming(f: Partial<Omit<import('./types.ts').OverlayFraming, 'anchor'>> & { anchor?: unknown }): import('./types.ts').OverlayFraming {
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-  return { x: r4(clamp01(num(f.x, 0.5))), y: r4(clamp01(num(f.y, 0.5))), zoom: r4(Math.min(MAX_FRAMING_ZOOM, Math.max(1, num(f.zoom, 1)))) };
+  const out: import('./types.ts').OverlayFraming = { x: r4(clamp01(num(f.x, 0.5))), y: r4(clamp01(num(f.y, 0.5))), zoom: r4(Math.min(MAX_FRAMING_ZOOM, Math.max(1, num(f.zoom, 1)))) };
+  if (f.anchor === 'clip') out.anchor = 'clip';
+  return out;
 }
 
 export function isDefaultFraming(f: import('./types.ts').OverlayFraming): boolean {
-  return f.x === 0.5 && f.y === 0.5 && f.zoom === 1;
+  return f.x === 0.5 && f.y === 0.5 && f.zoom === 1 && !f.anchor;
 }
 
 /**
@@ -659,12 +661,14 @@ export function isDefaultFraming(f: import('./types.ts').OverlayFraming): boolea
  * crop) e no preview (WebGL), para o quadro sair igual nos dois. O recorte nunca sai da fonte: centro
  * perto da borda encosta na borda.
  */
-export function coverCrop(sw: number, sh: number, W: number, H: number, framing?: Partial<import('./types.ts').OverlayFraming> | null): { u0: number; v0: number; kx: number; ky: number } {
+export function coverCrop(sw: number, sh: number, W: number, H: number, framing?: Parameters<typeof normalizeFraming>[0] | null): { u0: number; v0: number; kx: number; ky: number } {
   const f = normalizeFraming(framing ?? {});
   const ar = sw / sh;
   const AR = W / H;
   const kx = Math.min(1, AR / ar) / f.zoom;
   const ky = Math.min(1, ar / AR) / f.zoom;
+  // Âncora (CH-0032): x/y lidos como no clipe principal, o recorte desliza de borda a borda.
+  if (f.anchor === 'clip') return { u0: (1 - kx) * f.x, v0: (1 - ky) * f.y, kx, ky };
   const cx = Math.min(1 - kx / 2, Math.max(kx / 2, f.x));
   const cy = Math.min(1 - ky / 2, Math.max(ky / 2, f.y));
   return { u0: cx - kx / 2, v0: cy - ky / 2, kx, ky };

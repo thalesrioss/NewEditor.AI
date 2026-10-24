@@ -56,3 +56,29 @@ test('set_overlay_framing em overlay que não é mídia ou inexistente é erro',
   assert.throws(() => applyOp(tl(), { type: 'set_overlay_framing', id: 't1', framing: { x: 0 } }, 'human'), OpError);
   assert.throws(() => applyOp(tl(), { type: 'set_overlay_framing', id: 'nada', framing: { x: 0 } }, 'human'), OpError);
 });
+
+test('CH-0032: anchor clip lê x/y como o clipe principal (mesmo x, mesmo zoom, mesmo recorte)', () => {
+  const k = 1 / 1.85;
+  const a = coverCrop(1080, 1920, 1080, 1920, { x: 0.72, y: 0.3, zoom: 1.85, anchor: 'clip' });
+  // clipe principal: crop=iw/z:ih/z:x=(iw-ow)*ax:y=(ih-oh)*ay
+  near(a.u0, (1 - k) * 0.72);
+  near(a.v0, (1 - k) * 0.3);
+  near(a.kx, k);
+  // o contorno do chamado (centro 0,601) dá o mesmo recorte no modo de sempre
+  near(coverCrop(1080, 1920, 1080, 1920, { x: (1 - k) * 0.72 + k / 2, zoom: 1.85 }).u0, a.u0);
+  // B-roll 16:9 em 9:16: âncora 0 e 1 encostam nas bordas
+  near(coverCrop(1920, 1080, 1080, 1920, { x: 0, anchor: 'clip' }).u0, 0);
+  const d = coverCrop(1920, 1080, 1080, 1920, { x: 1, anchor: 'clip' });
+  near(d.u0 + d.kx, 1);
+});
+
+test('CH-0032: set_overlay_framing guarda anchor clip entre edições; center volta ao padrão', () => {
+  let t = applyOp(tl(), { type: 'set_overlay_framing', id: 'b1', framing: { x: 0.72, zoom: 1.85, anchor: 'clip' } }, 'human');
+  assert.deepEqual(t.overlays[0]!.framing, { x: 0.72, y: 0.5, zoom: 1.85, anchor: 'clip' });
+  t = applyOp(t, { type: 'set_overlay_framing', id: 'b1', framing: { y: 0.3 } }, 'human');
+  assert.equal(t.overlays[0]!.framing?.anchor, 'clip');
+  t = applyOp(t, { type: 'set_overlay_framing', id: 'b1', framing: { anchor: 'center' } }, 'human');
+  assert.deepEqual(t.overlays[0]!.framing, { x: 0.72, y: 0.3, zoom: 1.85 });
+  t = applyOp(t, { type: 'set_overlay_framing', id: 'b1', framing: { x: 0.5, y: 0.5, zoom: 1, anchor: 'clip' } }, 'human');
+  assert.equal(t.overlays[0]!.framing?.anchor, 'clip');
+});

@@ -201,6 +201,12 @@ export interface OverlayFraming {
   x: number;
   y: number;
   zoom: number;
+  /**
+   * Como ler x/y (CH-0032). Ausente = centro do recorte (padrão do B-roll). `clip` = âncora, como o
+   * `framing` do clipe principal: 0 encosta o recorte na borda esquerda/de cima, 1 na direita/de baixo,
+   * e o mesmo x/y com o mesmo zoom dá o mesmo recorte do clipe.
+   */
+  anchor?: 'clip';
 }
 
 export interface Timeline {
@@ -422,7 +428,7 @@ export type TimelineOp =
   | { type: 'set_captions'; captions: import('./text.ts').CaptionSettings }
   | { type: 'set_overlay_mix'; id: string; mix: AudioMix; sourceIn?: Seconds }
   /** Posição e zoom do B-roll (CH-0003); campos ausentes ficam como estão, null volta ao recorte central. */
-  | { type: 'set_overlay_framing'; id: string; framing: Partial<OverlayFraming> | null }
+  | { type: 'set_overlay_framing'; id: string; framing: (Partial<Omit<OverlayFraming, 'anchor'>> & { anchor?: 'clip' | 'center' | null }) | null }
   /** Velocidade e congelamento do B-roll (CH-0004); null ou ausente = como estava (null volta ao normal). */
   | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }

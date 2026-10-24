@@ -496,5 +496,9 @@ export function overlayTiming(o: Parameters<typeof overlayPlayback>[0], srcIn: n
   const pts = pb.speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${r(pb.speed)}`;
   // Clona o último quadro também sem congelamento: fonte que acaba um quadro antes não mostra a fala por baixo.
   const pad = `,tpad=stop_mode=clone:stop_duration=${r(hold + 0.1)}`;
-  return `trim=start=${r(srcIn)}:end=${r(srcIn + moving * pb.speed)},${pts}${pad},setpts=PTS+${start}/TB`;
+  // Congelado do começo ao fim (freeze = duração) ou trecho menor que 1 quadro: a janela da fonte pode não ter
+  // quadro nenhum e o B-roll sumia (CH-0032). O primeiro quadro a partir do início sempre entra e é ele que congela.
+  const span = moving * pb.speed;
+  const cut = `trim=start=${r(srcIn)},setpts=PTS-STARTPTS,trim=end=${r(Math.max(span, 0.001))}`;
+  return `${cut},${pts}${pad},setpts=PTS+${start}/TB`;
 }
