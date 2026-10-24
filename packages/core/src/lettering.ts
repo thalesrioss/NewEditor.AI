@@ -40,7 +40,16 @@ export interface LetteringTemplate {
   upper?: boolean;
   /** Tamanho em % da altura do quadro (padrão 6). */
   size?: number;
-  shadow?: boolean;
+  /** true = sombra padrão (intensidade 1); número = intensidade de 0 a 3 (CH-0034: reforçar sobre fundo claro). */
+  shadow?: boolean | number;
+  /** Cor da sombra (#RGB ou #RRGGBB, padrão preto). */
+  shadowColor?: string;
+  /** Desfoque da sombra em em (padrão 0,3; 0 = sombra dura). */
+  shadowBlur?: number;
+  /** Contorno fino em em (0 a 0,2; padrão 0 = sem contorno), desenhado por trás do preenchimento. */
+  stroke?: number;
+  /** Cor do contorno (padrão preto). */
+  strokeColor?: string;
   italic?: boolean;
 }
 
@@ -276,6 +285,29 @@ export function letteringFrameHtml(spec: LetteringSpec, t: number, dur: number, 
 
 const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 
+const hexOk = (c: unknown): c is string => typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+const rgbA = (hex: string, a: number) => {
+  const h = hex.length === 4 ? [...hex.slice(1)].map((c) => c + c).join('') : hex.slice(1);
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${r(Math.min(1, a), 3)})`;
+};
+
+/**
+ * Sombra e contorno do template do cliente (CH-0034). Intensidade 1 = a sombra de sempre (0,62 de opacidade); acima
+ * de 1 a opacidade satura e entra uma 2ª camada mais justa (o que a 2ª camada idêntica do editor fazia, sem duplicar
+ * o overlay). O contorno usa -webkit-text-stroke com paint-order, como a legenda.
+ */
+function clienteSombra(tp: ReturnType<typeof templateCliente>): string {
+  const k = tp.shadow;
+  const layers: string[] = [];
+  if (k > 0) layers.push(`0 0.05em ${tp.shadowBlur}em ${rgbA(tp.shadowColor, 0.62 * k)}`);
+  if (k > 1) layers.push(`0 0.02em ${r(tp.shadowBlur * 0.4, 3)}em ${rgbA(tp.shadowColor, 0.62 * (k - 1))}`);
+  if (k > 2) layers.push(`0 0 ${r(tp.shadowBlur * 0.15, 3)}em ${rgbA(tp.shadowColor, 0.8 * (k - 2))}`);
+  // Com paint-order a metade de dentro do traço fica sob o preenchimento: o traço tem o dobro para a borda visível ser `stroke`.
+  const stroke = tp.stroke > 0 ? `-webkit-text-stroke:${r(tp.stroke * 2, 3)}em ${tp.strokeColor};paint-order:stroke fill;` : '';
+  return `text-shadow:${layers.length ? layers.join(',') : 'none'};${stroke}`;
+}
+
 /** Template do cliente com os valores conferidos (nada do spec entra cru no HTML/CSS). */
 export function templateCliente(tpl: LetteringTemplate | undefined) {
   const t = tpl ?? {};
@@ -287,7 +319,11 @@ export function templateCliente(tpl: LetteringTemplate | undefined) {
     tracking: num(t.tracking, -0.3, 1, 0),
     upper: t.upper === true,
     size: num(t.size, 1, 30, 6),
-    shadow: t.shadow === true,
+    shadow: t.shadow === true ? 1 : num(t.shadow, 0, 3, 0),
+    shadowColor: hexOk(t.shadowColor) ? t.shadowColor! : '#000000',
+    shadowBlur: num(t.shadowBlur, 0, 2, 0.3),
+    stroke: num(t.stroke, 0, 0.2, 0),
+    strokeColor: hexOk(t.strokeColor) ? t.strokeColor! : '#000000',
     italic: t.italic === true,
   };
 }
@@ -314,7 +350,7 @@ function clienteHtml(spec: LetteringSpec, wu: number, position: number): string 
   const side = al === 'center' ? '' : al === 'left' ? 'left:7%;right:auto;text-align:left;' : 'right:7%;left:auto;text-align:right;';
   const shift = spec.x !== undefined && al === 'center' ? `translateX(${r((spec.x - 0.5) * 100, 2)}%) ` : '';
   const face = `font-family:${tp.family};font-weight:${tp.weight};${tp.italic ? 'font-style:italic;' : ''}font-size:calc(var(--u)*${r(tp.size * k, 2)});letter-spacing:${tp.tracking}em;line-height:1.05;white-space:nowrap;color:${tp.color};`;
-  const shadow = tp.shadow ? 'text-shadow:0 0.05em 0.3em rgba(0,0,0,.62);' : 'text-shadow:none;';
+  const shadow = clienteSombra(tp);
   return `<div class="ne-lt" style="top:${r((spec.y ?? position) * 100, 2)}%;${side}${face}${shadow}transform:${shift}translateY(-50%)">${html}</div>`;
 }
 

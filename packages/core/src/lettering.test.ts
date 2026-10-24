@@ -62,10 +62,28 @@ test('lettering cliente: valores fora do padrão não entram crus no HTML', () =
   assert.equal(tp.tracking, -0.3);
   assert.equal(tp.size, 30);
   const d = templateCliente(undefined);
-  assert.deepEqual([d.weight, d.color, d.tracking, d.upper, d.shadow], [700, '#FFFFFF', 0, false, false]);
+  assert.deepEqual([d.weight, d.color, d.tracking, d.upper, d.shadow], [700, '#FFFFFF', 0, false, 0]);
   const html = letteringFrameHtml({ ...letteringFrameSpec('<b>oi</b>'), template: { font: 'Inter', color: '#abc' } }, 0, 1, 56.25, 0.5);
   assert.match(html, /&lt;b&gt;oi&lt;\/b&gt;/);
   assert.match(html, /color:#abc/);
+});
+
+test('lettering cliente (CH-0034): intensidade e desfoque da sombra e contorno fino, conferidos', () => {
+  const spec = (template: object) => letteringFrameHtml({ ...letteringFrameSpec('do público errado'), template: { color: '#E4B249', ...template } }, 0, 1, 56.25, 0.19);
+  // true continua igual ao de antes (uma camada, 0,62).
+  assert.match(spec({ shadow: true }), /text-shadow:0 0\.05em 0\.3em rgba\(0,0,0,0\.62\);/);
+  // intensidade 2 = a 2ª camada idêntica do editor: opacidade satura e entra uma camada mais justa.
+  const forte = spec({ shadow: 2, shadowBlur: 0.5 });
+  assert.match(forte, /text-shadow:0 0\.05em 0\.5em rgba\(0,0,0,1\),0 0\.02em 0\.2em rgba\(0,0,0,0\.62\);/);
+  assert.match(spec({ shadow: 3 }).match(/text-shadow:[^;]*/)![0], /,.*,/);
+  // Contorno: por trás do preenchimento, sem engordar a letra por dentro.
+  assert.match(spec({ stroke: 0.03, strokeColor: '#111' }), /-webkit-text-stroke:0\.06em #111;paint-order:stroke fill;/);
+  assert.match(spec({ shadow: 0 }), /text-shadow:none;/);
+  assert.doesNotMatch(spec({ shadow: 0 }), /text-stroke/);
+  // Fora da faixa ou cru não entra.
+  const tp = templateCliente({ shadow: 9, shadowBlur: -1, stroke: 5, strokeColor: 'red;x:y', shadowColor: '#abc' });
+  assert.deepEqual([tp.shadow, tp.shadowBlur, tp.stroke, tp.strokeColor], [3, 0, 0.2, '#000000']);
+  assert.match(spec({ shadow: 1, shadowColor: '#abc' }), /rgba\(170,187,204,0\.62\)/);
 });
 
 const letteringFrameSpec = (t: string) => letteringFromText(t, 'cliente');

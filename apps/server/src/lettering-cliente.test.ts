@@ -62,3 +62,33 @@ describe('lettering template do cliente (CH-0012)', () => {
     assert.ok(t0.width > s.width + 10, `tracking: ${t0.width} > ${s.width}`);
   });
 });
+
+/** Quanto de "escuro" a camada põe em volta da letra (soma do alfa dos pixels escuros): sombra e contorno. */
+function escuro(px: Buffer) {
+  let s = 0;
+  for (let i = 0; i < W * H; i++) {
+    const [r, g, b, a] = [px[i * 4]!, px[i * 4 + 1]!, px[i * 4 + 2]!, px[i * 4 + 3]!];
+    if (r + g + b < 150) s += a;
+  }
+  return s;
+}
+
+describe('lettering template do cliente: sombra e contorno (CH-0034)', () => {
+  test('dourado #E4B249: intensidade 2 escurece mais que 1, contorno fino desenha borda, sem mudar a cor da letra', async () => {
+    const gold = { font: 'Helvetica Neue', weight: 700, color: '#E4B249', size: 4 };
+    const um = frame(await layer('sombra1', { ...gold, shadow: true }), 0);
+    const dois = frame(await layer('sombra2', { ...gold, shadow: 2 }), 0);
+    const contorno = frame(await layer('contorno', { ...gold, shadow: 0, stroke: 0.03 }), 0);
+    const nada = frame(await layer('nada', { ...gold, shadow: 0 }), 0);
+    const [e1, e2, ec, e0] = [escuro(um), escuro(dois), escuro(contorno), escuro(nada)];
+    assert.ok(e2 > e1 * 1.4, `sombra 2× (${e2}) bem mais forte que 1× (${e1})`);
+    assert.ok(ec > e0 + 100_000, `contorno desenha borda escura (${ec} contra ${e0})`);
+    const dourado = (px: Buffer) => {
+      let n = 0;
+      for (let i = 0; i < W * H; i++) if (px[i * 4 + 3]! > 240 && Math.abs(px[i * 4]! - 0xe4) < 10 && Math.abs(px[i * 4 + 1]! - 0xb2) < 10 && Math.abs(px[i * 4 + 2]! - 0x49) < 10) n++;
+      return n;
+    };
+    // Contorno fica por trás do preenchimento (paint-order): o miolo dourado continua quase todo.
+    assert.ok(dourado(contorno) > dourado(nada) * 0.8, `miolo dourado ${dourado(contorno)} de ${dourado(nada)}`);
+  });
+});
