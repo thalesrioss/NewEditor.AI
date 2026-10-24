@@ -16,6 +16,8 @@ export interface MediaAsset {
   name: string;
   /** Caminho absoluto do arquivo original (nunca é alterado). */
   path: string;
+  /** Tamanho e mtime (ms) do arquivo quando foi lido: registrar o mesmo caminho com o arquivo mudado mede de novo (CH-0031). */
+  file?: { size: number; mtime: number };
   kind: 'video' | 'audio' | 'image';
   duration: Seconds;
   width?: number;

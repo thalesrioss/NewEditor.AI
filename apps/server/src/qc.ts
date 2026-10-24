@@ -14,6 +14,7 @@ import path from 'node:path';
 import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA, profileLabel } from '@neweditor/core';
 import { DELIVERY } from './loudness.ts';
 import { readTranscript } from './asr.ts';
+import { captionsWithoutWords, captionsWithoutWordsOf } from './legenda-vazia.ts';
 import { run } from './media.ts';
 import { profileOf } from './profiles.ts';
 import { reviewDoubts } from './review.ts';
@@ -124,6 +125,8 @@ export async function runQc(projectId: string): Promise<QcReport> {
   // --- Legenda e lettering não inventam dado (N-6) ------------------------------------------------------
   const transcripts: Record<string, TextWord[]> = {};
   for (const a of p.assets) if (a.transcript) transcripts[a.id] = (await readTranscript(path.join(store.dir(p.id), a.transcript))).words;
+  const semLegenda = captionsWithoutWords(p, tl.captions?.enabled ? buildCues(tl, transcripts, tl.captions, { includeHidden: true }).length : 0);
+  if (semLegenda) push({ severidade: 'bloqueia', regra: 'legenda-sem-palavras', texto: `Legenda ${semLegenda}` });
   if (prof.legenda.conferirNumeros) {
     const caps = tl.captions?.enabled ? buildCues(tl, transcripts, tl.captions) : [];
     for (const c of caps) {
@@ -213,9 +216,11 @@ export async function runRenderQc(projectId: string, file: string, opts: { expec
   // Mesmo alvo do QC da NewStudios (CH-0007): −14 LUFS ±0,5 e pico real ≤ −1 dBTP, medidos no MP4.
   if (lufs !== undefined && Math.abs(lufs - DELIVERY.I) > DELIVERY.tolI) push({ severidade: 'bloqueia', regra: 'loudness', texto: `Loudness ${lufs.toFixed(1)} LUFS (alvo −14 ±0,5)` });
   if (tp !== undefined && tp > DELIVERY.maxTP) push({ severidade: 'bloqueia', regra: 'pico', texto: `Pico real ${tp.toFixed(1)} dBTP (alvo ≤ −1)` });
+  const semLegenda = await captionsWithoutWordsOf(p);
+  if (semLegenda) push({ severidade: 'bloqueia', regra: 'legenda-sem-palavras', texto: `Legenda ${semLegenda}` });
   if (black) push({ severidade: 'avisa', regra: 'quadro-preto', texto: `${black} trecho(s) de quadro preto no vídeo` });
   if (duration !== undefined && Math.abs(duration - expected) > 2 * frame + 1e-6) push({ severidade: 'bloqueia', regra: 'duracao-render', texto: `Arquivo com ${duration.toFixed(2)} s; a timeline tem ${expected.toFixed(2)} s (${Math.round(Math.abs(duration - expected) / frame)} quadros de diferença, tolerância 2)` });
-  const report: QcReport = { at: new Date().toISOString(), fase: 'render', issues: [...(p.qc?.fase === 'edicao' ? p.qc.issues : []), ...issues], render: { lufs, truePeak: tp, blackFrames: black, duration, file } };
+  const report: QcReport = { at: new Date().toISOString(), fase: 'render', issues: [...(p.qc?.fase === 'edicao' ? p.qc.issues.filter((i) => i.regra !== 'legenda-sem-palavras') : []), ...issues], render: { lufs, truePeak: tp, blackFrames: black, duration, file } };
   store.update(projectId, { qc: report });
   return report;
 }

@@ -9,6 +9,7 @@ import { cleanMaster, syncVoiceClean } from './denoise.ts';
 import { DELIVERY, deliverAudio } from './loudness.ts';
 import { atomic, run, filterGraphArgs } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
+import { captionsWithoutWords } from './legenda-vazia.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 
 /** Logo usada no fundo de peças só de áudio. */
@@ -204,6 +205,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     const transcripts: Record<string, TextWord[]> = {};
     for (const a of p.assets) if (a.transcript) transcripts[a.id] = (await readTranscript(path.join(dir, a.transcript))).words;
     const cues = tl.captions?.enabled ? buildCues(tl, transcripts, tl.captions) : [];
+    const semLegenda = captionsWithoutWords(p, cues.length || (tl.captions?.enabled ? buildCues(tl, transcripts, tl.captions, { includeHidden: true }).length : 0));
+    if (semLegenda) notes.push(`ATENÇÃO: ${semLegenda}`);
     const textMov = await renderTextLayer({ W, H, fps, total, cues, captions: tl.captions, letterings, motions }, work, (x) => onProgress?.(0.88 + 0.04 * x));
     if (textMov) {
       const t = inputs.push(textMov) - 1;
