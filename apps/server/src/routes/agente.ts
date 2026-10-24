@@ -84,7 +84,8 @@ export async function rotasAgente(app: FastifyInstance): Promise<void> {
     const r = await enqueue(id, 'escolhendo a trilha', () => musicAuto(id));
     return r ? { track: r.track.name, bpmAlvo: r.bpmAlvo } : { track: null, bpmAlvo: 0 };
   });
-  app.post<{ Params: { id: string; assetId: string } }>('/api/projects/:id/assets/:assetId/sync-cam', async (req) => syncCamera(req.params.id, req.params.assetId));
+  // Body opcional: { fala: <assetId da fala de referência> } e/ou { offset: <s> } manual (CH-0035).
+  app.post<{ Params: { id: string; assetId: string }; Body: { fala?: string; offset?: number } }>('/api/projects/:id/assets/:assetId/sync-cam', async (req) => syncCamera(req.params.id, req.params.assetId, { fala: req.body?.fala, offset: req.body?.offset }));
   app.post<{ Params: { id: string } }>('/api/projects/:id/multicam-auto', async (req) => ({ trocas: await autoMulticam(req.params.id) }));
   app.post<{ Params: { id: string } }>('/api/projects/:id/reframe-auto', async (req) => autoReframe(req.params.id));
 

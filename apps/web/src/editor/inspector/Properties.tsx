@@ -614,7 +614,7 @@ function TemplateCliente({ spec, commit }: { spec: LetteringSpec; commit: (next:
 function CameraControls({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)!;
   const sendOp = useEditor((s) => s.sendOp);
-  const cams = project.assets.filter((a) => a.role === 'cam' && a.syncOffset !== undefined);
+  const cams = project.assets.filter((a) => a.role === 'cam' && a.syncOffset !== undefined && (!a.syncFala || a.syncFala === clip.assetId));
   const fala = project.assets.find((a) => a.id === clip.assetId);
   const wide = !!fala?.width && !!fala?.height && fala.width / fala.height > project.timeline.width / project.timeline.height + 0.02;
   const [busy, setBusy] = useState('');

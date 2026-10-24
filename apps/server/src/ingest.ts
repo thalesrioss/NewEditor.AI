@@ -89,7 +89,7 @@ export async function setRole(projectId: string, assetId: string, role: 'fala' |
   const a = p.assets.find((x) => x.id === assetId);
   if (!a) throw Object.assign(new Error('arquivo não existe'), { statusCode: 404 });
   if (a.role === role) return a;
-  store.upsertAsset(projectId, { ...a, role, syncOffset: undefined });
+  store.upsertAsset(projectId, { ...a, role, syncOffset: undefined, syncFala: undefined });
   if (role === 'broll') {
     if (isRaw(p.timeline) && p.timeline.main.some((c) => c.assetId === assetId)) store.apply(projectId, { by: 'system', op: { type: 'set_main', clips: p.timeline.main.filter((c) => c.assetId !== assetId), removals: [] } });
     store.log(projectId, 'agent', `${a.name} agora é B-roll.`);
@@ -107,7 +107,7 @@ export async function setRole(projectId: string, assetId: string, role: 'fala' |
  */
 function saveAsset(projectId: string, asset: MediaAsset): void {
   const cur = store.get(projectId).assets.find((a) => a.id === asset.id);
-  store.upsertAsset(projectId, cur ? { ...asset, role: cur.role ?? asset.role, syncOffset: cur.syncOffset ?? asset.syncOffset, clean: cur.clean ?? asset.clean, transcript: cur.transcript ?? asset.transcript } : asset);
+  store.upsertAsset(projectId, cur ? { ...asset, role: cur.role ?? asset.role, syncOffset: cur.syncOffset ?? asset.syncOffset, syncFala: cur.syncFala ?? asset.syncFala, clean: cur.clean ?? asset.clean, transcript: cur.transcript ?? asset.transcript } : asset);
 }
 
 /** O que ainda falta preparar neste asset (vazio = pronto). */

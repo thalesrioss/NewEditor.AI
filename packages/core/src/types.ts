@@ -30,6 +30,8 @@ export interface MediaAsset {
   alpha?: boolean;
   /** 2ª câmera: tempo nesta gravação = tempo na fala + syncOffset (alinhado pelo áudio). */
   syncOffset?: Seconds;
+  /** 2ª câmera: id da fala a que o `syncOffset` se refere (com várias falas no projeto, cada câmera é de uma). */
+  syncFala?: string;
   /** Miniaturas para a filmstrip da timeline: grade de quadros a cada `interval` segundos. */
   thumbs?: { file: string; interval: number; w: number; h: number; cols: number; count: number };
   /** Caminhos relativos à pasta do projeto, servidos pelo servidor. */
