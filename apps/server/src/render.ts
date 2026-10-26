@@ -427,13 +427,18 @@ export async function fileDuration(file: string): Promise<number> {
  * que a peça, o render falha com a medida em vez de entregar o fim mudo (o `apad` da entrega esconderia a falta).
  */
 export async function normalizeMix(premix: string, out: string, total: number): Promise<void> {
-  await run('ffmpeg', ['-y', '-v', 'error', '-i', premix, '-af', `${LOUDNORM},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo`, '-c:a', 'pcm_f32le', '-t', String(total), out]);
+  // `asetpts=N/SR/TB`: o loudnorm do ffmpeg 9 solta o último bloco curto (10 ms) mas avança o relógio 100 ms; o `-t`
+  // corta pelo relógio e jogava fora os últimos ~90 ms de som real, completados com silêncio na entrega (CH-0037).
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', premix, '-af', `${LOUDNORM},asetpts=N/SR/TB,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo`, '-c:a', 'pcm_f32le', '-t', String(total), out]);
   const got = await fileDuration(out);
   if (got < total - MIX_SLACK) throw new Error(`mixagem saiu com ${got.toFixed(2)} s, a peça tem ${total.toFixed(2)} s`);
 }
 
-/** Folga aceita entre a mix e a peça (s): o loudnorm pode devolver uns 40 ms a menos no fim; o defeito era de segundos. */
-const MIX_SLACK = 0.1;
+/**
+ * Folga aceita entre a mix e a peça (s): até ~1 quadro. Era 0,1 s porque o loudnorm "devolvia uns 40-90 ms a menos",
+ * mas isso era o relógio do último bloco (CH-0037), já corrigido acima; a folga larga escondia o fim mudo.
+ */
+const MIX_SLACK = 0.035;
 
 /** Quadros de vídeo gravados no cabeçalho do arquivo (sem decodificar). */
 export async function countFrames(file: string): Promise<number> {
