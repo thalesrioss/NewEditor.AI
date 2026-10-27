@@ -178,8 +178,13 @@ export function achadoNiveis(m: ReturnType<typeof niveis>): QcAchado {
   return { regra: 'niveis', ok: fora <= LIMITES.niveis, medido: `Y<16 ${pct(m.baixo)} · Y>235 ${pct(m.alto)} (YMIN ${m.ymin}, YMAX ${m.ymax})`, limite: `fora de 16–235 ≤ ${pct(LIMITES.niveis)}` };
 }
 
-/** SATAVG médio (signalstats) do centro do quadro (metade da largura e da altura), ~1 quadro/s. */
-export async function medirSatavg(file: string): Promise<number> {
+/**
+ * SATAVG médio (signalstats) do centro do quadro (metade da largura e da altura), ~1 quadro/s, na escala da faixa tv:
+ * em faixa cheia (pc/yuvj) o croma vai a ±127 em vez de ±112, então a medida é multiplicada por 224/255.
+ */
+export async function medirSatavg(file: string, perfil?: PerfilMedido): Promise<number> {
+  const v = (perfil ?? (await medirPerfil(file))).video;
+  const escala = v?.color_range === 'pc' || /^yuvj/.test(v?.pix_fmt ?? '') ? 224 / 255 : 1;
   const vals: number[] = [];
   let buf = '';
   await run('ffmpeg', ['-v', 'info', '-nostats', '-i', file, '-an', '-vf', 'fps=1,crop=iw/2:ih/2,signalstats,metadata=mode=print:key=lavfi.signalstats.SATAVG', '-f', 'null', '-'], {
@@ -195,7 +200,7 @@ export async function medirSatavg(file: string): Promise<number> {
   });
   const m = /lavfi\.signalstats\.SATAVG=([\d.]+)/.exec(buf);
   if (m) vals.push(Number(m[1]));
-  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  return vals.length ? (escala * vals.reduce((a, b) => a + b, 0)) / vals.length : 0;
 }
 
 export function achadoSaturacao(satavg: number, ass: Assinatura): QcAchado {
@@ -241,7 +246,7 @@ export async function envelopeVoz(file: string): Promise<Float32Array> {
   return env;
 }
 
-/** Trechos com fala: acima de max(−45, p95 − 18) dB, vãos < 0,25 s juntados, trechos < 0,1 s fora. */
+/** Trechos com fala: acima de max(−45, p95 − 18) dB, vãos < 0,12 s juntados (respiro entre frases fica fora), trechos < 0,1 s fora. */
 export function trechosDeFala(db: Float32Array, hop = ENV_HOP): Trecho[] {
   if (!db.length) return [];
   const sorted = Float32Array.from(db).sort();
@@ -254,7 +259,7 @@ export function trechosDeFala(db: Float32Array, hop = ENV_HOP): Trecho[] {
     if (!on && a >= 0) {
       const t = { start: a * hop, end: i * hop };
       const prev = out[out.length - 1];
-      if (prev && t.start - prev.end < 0.25) prev.end = t.end;
+      if (prev && t.start - prev.end < 0.12) prev.end = t.end;
       else out.push(t);
       a = -1;
     }
@@ -604,7 +609,7 @@ export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise
   const avisos: string[] = [];
   const perfil = await medirPerfil(file);
   const achados: QcAchado[] = achadosPerfil(perfil, fps);
-  const [y, satavg, env, freezes, diffs] = await Promise.all([amostrarY(file), medirSatavg(file), envelopeVoz(file), medirFreezes(file), diferencasQuadro(file)]);
+  const [y, satavg, env, freezes, diffs] = await Promise.all([amostrarY(file), medirSatavg(file, perfil), envelopeVoz(file), medirFreezes(file), diferencasQuadro(file)]);
   achados.push(achadoNiveis(niveis(y)));
   const ass = opts.assinatura ?? ASSINATURA_PADRAO;
   if (!opts.assinatura) avisos.push(`saturação contra o ${ASSINATURA_PADRAO.fonte}`);

@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import type { Clip, MediaAsset, OverlayItem, Project } from '@neweditor/core';
-import { achadosPerfil, achadosProjeto, achadosMovimento, amostrarY, assinaturaDe, camaraLenta, clipeSony, cortesDe, escalaClipe, escalaOverlay, niveis, origemDoNome, qcTecnico, trechosDeFala } from './qc-tecnico.ts';
+import { achadosPerfil, achadosProjeto, achadosMovimento, amostrarY, assinaturaDe, medirSatavg, camaraLenta, clipeSony, cortesDe, escalaClipe, escalaOverlay, niveis, origemDoNome, qcTecnico, trechosDeFala } from './qc-tecnico.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-qctec-'));
 const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { stdio: ['ignore', 'ignore', 'inherit'] });
@@ -137,6 +137,13 @@ describe('gate em vídeo sintético', () => {
     const b = niveis(await amostrarY(tv));
     assert.deepEqual([a.ymin, a.ymax], [0, 255]);
     assert.deepEqual([b.ymin, b.ymax], [16, 235]);
+  });
+
+  test('saturação na mesma escala em faixa cheia e limitada (croma pc × 224/255)', { timeout: 60_000 }, async () => {
+    const pc = path.join(tmp, 'bom-pc.mp4');
+    ff(['-i', base, '-vf', 'scale=out_range=pc:out_color_matrix=bt709,format=yuvj420p', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', '-color_range', 'pc', pc]);
+    const [a, b] = [await medirSatavg(bom), await medirSatavg(pc)];
+    assert.ok(Math.abs(a - b) / a < 0.05, `tv ${a} × pc ${b}`);
   });
 
   test('na linha de entrega: aprova (sem projeto, com aviso)', { timeout: 120_000 }, async () => {
