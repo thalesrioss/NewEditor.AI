@@ -5,12 +5,14 @@
 import type { FastifyInstance } from 'fastify';
 import { cutEndAfter, resolveOverlay } from '@neweditor/core';
 import { runCommand } from '../agent.ts';
+import { pedeDesfazer } from '../commands-local.ts';
 import { autoBroll } from '../broll.ts';
 import { autoGrade } from '../color.ts';
 import { enqueue, enqueueJob, isBusy, queuePosition } from '../jobs.ts';
 import { autoMulticam, syncCamera } from '../multicam.ts';
 import { musicAuto } from '../music.ts';
 import { autoReframe } from '../reframe.ts';
+import { canalDaTela, registrarDaTela } from '../registro-tela.ts';
 import { autoFlashes, autoZooms, monotonous } from '../ritmo.ts';
 import { store } from '../store.ts';
 import { facesOf, faceSummary, safeTextY, visionAvailable } from '../vision.ts';
@@ -33,7 +35,21 @@ export async function rotasAgente(app: FastifyInstance): Promise<void> {
     const { id } = req.params;
     const text = req.body.text?.trim();
     if (!text) throw erro('comando vazio');
-    void enqueue(id, 'executando pedido', () => runCommand(id, text, req.body.playhead)).catch((e) => report(id, 'pedido', e));
+    // Pedido digitado na tela = alteração do Thales, gravada com a resposta do agente ("desfaz" não conta).
+    const canal = pedeDesfazer(text) ? null : canalDaTela(req.headers);
+    const ref = `tela:${id}:pedido:${Date.now()}`;
+    void enqueue(id, 'executando pedido', async () => {
+      let resposta = '';
+      try {
+        resposta = await runCommand(id, text, req.body.playhead);
+        return resposta;
+      } catch (e) {
+        resposta = `falhou: ${(e as Error).message}`;
+        throw e;
+      } finally {
+        if (canal) void registrarDaTela(store.get(id), canal, { tipo: 'alteracao', pedido: text, depois: `agente: ${resposta}`, ref });
+      }
+    }).catch((e) => report(id, 'pedido', e));
     return { queued: true, busy: isBusy(id) ?? null };
   });
 
