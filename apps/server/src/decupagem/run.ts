@@ -11,6 +11,7 @@ import { reviewDoubts } from '../review.ts';
 import { planDecupagem, type PlannedRemoval } from './plan.ts';
 import { stepEnd, stepStart } from '../estimate.ts';
 import { profileOf } from '../profiles.ts';
+import { contextoThales } from '../registro-thales.ts';
 
 const KIND_LABEL: Record<string, string> = {
   retake: 'tomada repetida',
@@ -39,6 +40,9 @@ export async function runDecupagem(projectId: string, assetId?: string): Promise
   stepStart(projectId, 'decupar');
   // O perfil do cliente dá as folgas de corte (calibradas pelo benchmark).
   const prof = await profileOf(p);
+  // Briefing + as últimas correções do Thales para o cliente (o cérebro Claude lê; o local ignora o texto).
+  const thales = await contextoThales(p).catch(() => '');
+  const brief = thales ? `${p.brief}\n\n${thales}` : p.brief;
   const before = store.get(projectId).timeline;
   const many = targets.length > 1;
 
@@ -51,7 +55,7 @@ export async function runDecupagem(projectId: string, assetId?: string): Promise
       tr.words,
       env,
       asset.duration,
-      p.brief,
+      brief,
       { onStage: (state, message) => store.setActivity(projectId, { state, message: many ? `${asset.name}: ${message}` : message }) },
       { headPad: prof.corte.headPad, tailPad: prof.corte.tailPad, maxPause: prof.corte.maxPause },
     );

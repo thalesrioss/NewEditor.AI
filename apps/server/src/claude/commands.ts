@@ -152,7 +152,7 @@ function tools(ctx: Ctx) {
   ];
 }
 
-export async function runClaudeCommand(projectId: string, text: string, playhead?: number): Promise<string> {
+export async function runClaudeCommand(projectId: string, text: string, playhead?: number, contextoThales = ''): Promise<string> {
   const p = store.get(projectId);
   const ctx: Ctx = { projectId, transcripts: await loadTranscripts(p) };
   store.log(projectId, 'human', text);
@@ -161,7 +161,7 @@ export async function runClaudeCommand(projectId: string, text: string, playhead
   const history = (recent.get(projectId) ?? []).map((h) => `Pedido anterior: ${h.q}\nVocê respondeu: ${h.a}`).join('\n\n');
   const user = `Projeto: ${p.name}
 Briefing: ${p.brief || '(sem briefing)'}
-Materiais: ${p.assets.map((a) => `${a.id} = ${a.name} (${a.duration.toFixed(1)}s)`).join('; ')}
+${contextoThales ? `${contextoThales}\n` : ''}Materiais: ${p.assets.map((a) => `${a.id} = ${a.name} (${a.duration.toFixed(1)}s)`).join('; ')}
 ${playhead !== undefined ? `O cursor do editor está em ${playhead.toFixed(2)}s da timeline ("aqui" = esse ponto).` : ''}
 ${history ? `\n${history}\n` : ''}
 PEDIDO: ${text}`;
