@@ -15,6 +15,7 @@
 import path from 'node:path';
 import { clipDuration, clipPlayed, clipSpeed, clipStarts, coverCrop, locate, normalizeTimeline, overlayActive, overlaySourceTime, resolveOverlay, timelineDuration, type Clip, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
+import { syncPorTrecho } from './qc-sync.ts';
 
 export interface QcAchado {
   regra: string;
@@ -625,6 +626,10 @@ export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise
     const r = achadosProjeto(opts.project, { fala, cortes: cortesDe(diffs, fpsArq), duracao: perfil.duration });
     achados.push(...r.achados);
     avisos.push(...r.avisos);
+    // Sincronia por trecho: a imagem da entrega contra a fonte no instante da voz (precisa dos brutos no disco).
+    const s = await syncPorTrecho(file, opts.project);
+    achados.push(...s.achados);
+    avisos.push(...s.avisos);
   } else avisos.push('sem projeto: escala, velocidade, cobertura e sincronia da câmera não conferidas');
   return { aprovado: achados.every((a) => a.ok), arquivo: file, achados, avisos };
 }
