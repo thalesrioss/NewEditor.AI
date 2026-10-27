@@ -108,6 +108,29 @@ npm run bench -w @neweditor/server -- <audio16k.wav> <transcript.json> <gabarito
 
 Reporta precisão/recall de tempo, concordância palavra a palavra, erro de borda e lista cada divergência.
 
+## Registro do Thales no Cérebro
+
+Toda aprovação, reprovação ou alteração do Thales vira uma linha (só append) na memória da NewStudios
+(`correcoes.jsonl` ou, se aprovação, `decisoes.jsonl`) e no cofre `_SISTEMA/` no formato do PROTOCOLO_GLOBAL, com
+`"origem": "Thales"` e `"fonte": "newstudios"`. Mesmo `--ref` não grava duas vezes; sem cofre, grava só na NewStudios e avisa.
+Caminhos: `NEWSTUDIOS_MEMORIA` (padrão `~/newstudios/memoria`) e `CEREBRO_COFRE` (padrão `~/Documents/Cérebro do Editor/_SISTEMA`).
+
+Pela tela (pedido com `Origin` da tela, WebSocket) o Editor Brain grava sozinho: aprovar a decupagem, card para Entregue
+(aprovação) ou de volta para Alteração (reprovação), comentário do editor, pedido no chat e um resumo da edição à mão
+(depois de 10 min sem mexer, antes de aprovar, ou em `POST /api/projects/:id/sessao-humana/fechar`). Recado do Slack,
+Trello ou APROVACOES.md, o agente grava:
+
+```bash
+node --import tsx apps/server/src/registro-cli.ts --tipo alteracao --canal slack \
+  --pedido "fala literal do Thales" --antes "o que estava" --depois "o que mudou" \
+  --projeto eq2210-03 --cliente equity-sales --ref <ts da mensagem> [--quando "2026-10-27 00:33"] [--quem <agente>]
+```
+
+`--tipo aprovacao|reprovacao|alteracao`, `--canal slack|trello|aprovacoes|tela-5410|editor-brain`. Com o servidor no ar, o mesmo
+corpo em JSON vai em `POST /api/cerebro/registro`. Leitura antes de editar: `GET /api/cerebro/cliente/<cliente>/thales?limit=20`
+(ou `GET /api/projects/<id>/thales`) devolve as últimas linhas do cliente das duas fontes e o perfil em
+`<dados>/perfis/thales/<cliente>.json`; o agente (cérebro Claude) recebe as últimas correções no pedido e na decupagem.
+
 ## Testes
 
 ```bash
