@@ -1,4 +1,5 @@
 /** Render e entrega: o trabalho de render da fila (com QC do arquivo), presets de entrega e a entrega em si. */
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { entregar, ENTREGAS_DIR, PRESETS, type EntregaOpts } from '../entrega.ts';
@@ -18,6 +19,14 @@ export async function renderJob(id: string): Promise<void> {
   const res = await render(store.get(id), store.dir(id), (pct) => store.setActivity(id, { state: 'analyzing', message: 'Renderizando', progress: pct }));
   stepEnd(id, 'render');
   const qc = await runRenderQc(id, path.join(store.dir(id), res.file)).catch(() => null);
+  // Reprovado no gate técnico (FB-0180): o arquivo ganha _REPROVADO no nome, para não sair como entrega por engano.
+  const tecnico = qc?.issues.filter((i) => i.severidade === 'bloqueia' && i.regra.startsWith('tecnico:')) ?? [];
+  if (tecnico.length) {
+    const novo = res.file.replace(/\.mp4$/i, '_REPROVADO.mp4');
+    await fs.rename(path.join(store.dir(id), res.file), path.join(store.dir(id), novo)).then(() => fs.rename(path.join(store.dir(id), res.file.replace(/\.mp4$/i, '.qc-tecnico.txt')), path.join(store.dir(id), novo.replace(/\.mp4$/i, '.qc-tecnico.txt'))).catch(() => undefined)).catch(() => undefined);
+    res.file = novo;
+    store.log(id, 'agent', `REPROVADO no gate técnico (${tecnico.length}): ${tecnico.map((i) => i.texto.replace(/^Gate técnico: /, '')).join(' · ')}. Não entregue este arquivo; laudo em ${novo.replace(/\.mp4$/i, '.qc-tecnico.txt')}.`);
+  } else if (qc) store.log(id, 'agent', 'Gate técnico: aprovado (perfil de entrega, níveis, saturação, movimento sob fala, escala, cobertura, sincronia).');
   if (qc?.render) store.log(id, 'agent', `QC do render: ${qc.render.lufs?.toFixed(1) ?? '?'} LUFS · pico ${qc.render.truePeak?.toFixed(1) ?? '?'} dBTP${qc.render.blackFrames ? ` · ${qc.render.blackFrames} quadro(s) preto(s)` : ''}${qc.issues.length ? ` · ${qc.issues.length} ponto(s) para conferir` : ' · ok'}`);
   store.log(id, 'agent', `Render pronto: ${res.file}${res.notes.length ? ` · ${res.notes.join(' · ')}` : ''}${res.skipped.length ? ` (fora do export por enquanto: ${res.skipped.join('; ')})` : ''}`);
   store.broadcast(id, { type: 'log', entry: { id: `render_${Date.now()}`, at: new Date().toISOString(), by: 'system', text: `/media/${id}/${res.file}` } });

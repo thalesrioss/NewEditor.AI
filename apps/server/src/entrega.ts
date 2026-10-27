@@ -52,6 +52,15 @@ export async function entregar(projectId: string, opts: EntregaOpts, onProgress?
   p = store.get(projectId);
   const qcR = await runRenderQc(projectId, path.join(store.dir(projectId), res.file)).catch(() => null);
   const renderBlock = qcR?.issues.filter((i) => i.severidade === 'bloqueia' && i.id.startsWith('qcr_')).map((i) => i.texto) ?? [];
+  // Render que reprova no gate técnico não sai como entrega (FB-0180): nada vai para a pasta do cliente.
+  const tecnico = qcR?.issues.filter((i) => i.severidade === 'bloqueia' && i.regra.startsWith('tecnico:')).map((i) => i.texto) ?? [];
+  if (!qcR || tecnico.length) {
+    const motivo = qcR ? tecnico.join(' · ') : 'o QC do render não rodou';
+    store.log(projectId, 'agent', `Entrega NÃO saiu: reprovada no gate técnico (${motivo}). Render para conferência em ${res.file}; laudo em ${res.file.replace(/\.mp4$/i, '')}.qc-tecnico.txt`);
+    if (opts.entregar) throw Object.assign(new Error(`Gate técnico reprovou: ${motivo}`), { statusCode: 409 });
+    onProgress?.(1);
+    return { pasta: '', arquivos: [], versao: p.versions?.at(-1)?.n ?? 0, qcBloqueios: [...bloqueios, ...renderBlock] };
+  }
 
   const versao = (p.versions?.at(-1)?.n ?? 0) + 1;
   const pasta = path.join(ENTREGAS_DIR, slug(p.client ?? 'sem-cliente'), slug(p.name));
