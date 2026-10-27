@@ -2,7 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   applyOp,
+  clipScale,
+  escalaAviso,
   manageGrade,
+  overlayScale,
+  type TimelineOp,
   normalizeTimeline,
   uid,
   type AgentActivity,
@@ -224,6 +228,8 @@ class Store {
     this.schedulePersist(id);
     this.broadcast(id, { type: 'op', envelope: env, version: p.version, timeline: next, history: this.historyState(id) });
     if (env.note) this.log(id, env.by, env.note);
+    const escala = escalaDaOp(p, env.op);
+    if (escala) this.log(id, 'system', escala);
     this.changed(id);
     return p;
   }
@@ -386,3 +392,19 @@ const LABEL: Record<string, string> = {
 };
 
 export const store = new Store();
+
+/** Aviso de escala efetiva na própria operação de zoom/enquadramento (FB-0180 A3). */
+function escalaDaOp(p: Project, op: TimelineOp): string | null {
+  const asset = (id: string | undefined) => p.assets.find((a) => a.id === id);
+  if (op.type === 'set_zoom') {
+    const c = p.timeline.main.find((x) => x.id === op.clipId);
+    const a = c && (asset(c.cam) ?? asset(c.assetId));
+    return c && a ? escalaAviso(clipScale(a, c, p.timeline), `Zoom no clipe ${c.id}`) : null;
+  }
+  if (op.type === 'set_overlay_framing') {
+    const o = p.timeline.overlays.find((x) => x.id === op.id);
+    const a = o?.source.type === 'media' ? asset(o.source.assetId) : undefined;
+    return o && a && a.kind !== 'image' ? escalaAviso(overlayScale(a, o.framing, p.timeline), `Enquadramento do B-roll ${o.id}`) : null;
+  }
+  return null;
+}
