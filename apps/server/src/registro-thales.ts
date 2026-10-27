@@ -16,7 +16,7 @@ import path from 'node:path';
 import type { Project } from '@neweditor/core';
 import { DATA_ROOT } from './config.ts';
 import { slug } from './profiles.ts';
-import { notaRecusado, raizCofre, rodarRegistroPy } from './registro-cofre.ts';
+import { notaRecusado, prepararNewStudios, raizCofre, rodarRegistroPy } from './registro-cofre.ts';
 import { PRODUTORA_DIR } from './videos.ts';
 
 export type TipoThales = 'aprovacao' | 'reprovacao' | 'alteracao';
@@ -69,7 +69,13 @@ export interface LinhaThales {
 
 // Caminhos lidos na hora (os testes trocam por env).
 export const memoriaDir = () => process.env.NEWSTUDIOS_MEMORIA ?? path.join(os.homedir(), 'newstudios', 'memoria');
-export const cofreDir = () => process.env.CEREBRO_COFRE ?? path.join(os.homedir(), 'Documents', 'Cérebro do Editor', '_SISTEMA');
+/**
+ * Onde a NewStudios grava no cofre (Thales 27/10 01:24: "os registros que vierem da NewStudios precisam estar na pasta
+ * NewStudios dentro desse vault"): `Cérebro do Editor/NewStudios/_SISTEMA`. A raiz do cofre (`cofreRaizDir`) é do
+ * Thales e só é lida.
+ */
+export const cofreDir = () => process.env.CEREBRO_COFRE ?? path.join(os.homedir(), 'Documents', 'Cérebro do Editor', 'NewStudios', '_SISTEMA');
+export const cofreRaizDir = () => process.env.CEREBRO_COFRE_RAIZ ?? path.join(os.homedir(), 'Documents', 'Cérebro do Editor', '_SISTEMA');
 export const perfisThalesDir = () => path.join(DATA_ROOT, 'perfis', 'thales');
 
 /** Sob `node --test` sem os env apontados, nunca toca nos arquivos reais. */
@@ -223,6 +229,8 @@ async function gravar(r: RegistroThales): Promise<ResultadoRegistro> {
     { chave: 'newstudios', dir: memoriaDir(), linha: linhaNewstudios(r) },
     { chave: 'cofre', dir: cofreDir(), linha: linhaCofre(r) },
   ];
+  // A pasta NewStudios do cofre nasce aqui na primeira gravação (com o registro.py dela).
+  await prepararNewStudios(cofreDir()).catch((e) => res.avisos.push(`pasta NewStudios do cofre: ${(e as Error).message}`));
   for (const d of destinos) {
     if (!(await existe(d.dir))) {
       res.avisos.push(`${d.chave === 'cofre' ? 'cofre' : 'memória da NewStudios'} não encontrado em ${d.dir}: não gravado lá`);
@@ -309,6 +317,8 @@ export async function linhasThales(clienteBruto: string, limit = 20): Promise<Li
   const fontes: [string, 'newstudios' | 'cofre'][] = [
     [memoriaDir(), 'newstudios'],
     [cofreDir(), 'cofre'],
+    // Em teste, a raiz real do cofre só é lida se o teste apontar uma (CEREBRO_COFRE_RAIZ).
+    ...(process.env.NODE_TEST_CONTEXT && !process.env.CEREBRO_COFRE_RAIZ ? [] : [[cofreRaizDir(), 'cofre'] as [string, 'cofre']]),
   ];
   const vistas = new Map<string, LinhaThales>();
   const ordem: LinhaThales[] = [];

@@ -10,7 +10,53 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { slug } from './profiles.ts';
+
+/** O registro.py da NewStudios (cópia do do cofre sem o mapa histórico de linhas do Thales), versionado aqui. */
+const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'cofre', 'registro-newstudios.py');
+
+const README = `# NewStudios · registros dentro do Cérebro do Editor
+
+Ordem do Thales (27/10/2026 01:24): "os registros que vierem da NewStudios precisam estar na pasta NewStudios dentro
+desse vault". Aqui ficam as aprovações, alterações e recusas do Thales sobre o trabalho da NewStudios, gravadas pelo
+Editor Brain (tela 5410) e pelo CLI \`registro-cli\` dos agentes. A raiz do cofre (\`../_SISTEMA\`) é do Thales.
+
+- \`_SISTEMA/correcoes.jsonl\` · \`_SISTEMA/decisoes.jsonl\`: fonte de verdade (formato do PROTOCOLO_GLOBAL, \`"fonte": "newstudios"\`).
+- \`Registro de Decisões/Alterações/A-NN …\`: geradas por \`python3 _SISTEMA/bin/registro.py\` (roda sozinho a cada registro).
+- \`Registro de Decisões/Recusados/R-NN …\`: peça reprovada pelo Thales.
+- \`Registro de Decisões/Aprovados/\`: peças aprovadas.
+`;
+
+const INDICE = `---
+tipo: índice
+tags: [registro, newstudios]
+---
+# Registro de Decisões · NewStudios
+
+## Alterações (pedidos do Thales), por cliente
+<!-- alteracoes:inicio -->
+<!-- alteracoes:fim -->
+`;
+
+/**
+ * Cria a pasta NewStudios no cofre (só o que falta) e instala o registro.py dela. Precisa do cofre existir: sem a raiz
+ * "Cérebro do Editor", não cria nada e devolve false.
+ */
+export async function prepararNewStudios(sistema: string): Promise<boolean> {
+  const raiz = path.dirname(sistema);
+  if (!(await fs.stat(path.dirname(raiz)).catch(() => null))?.isDirectory()) return false;
+  for (const d of [path.join(sistema, 'bin'), ...['Alterações', 'Recusados', 'Aprovados'].map((x) => path.join(raiz, 'Registro de Decisões', x))]) await fs.mkdir(d, { recursive: true });
+  const novo = async (f: string, txt: string) => fs.writeFile(f, txt, { flag: 'wx' }).catch((e: NodeJS.ErrnoException) => { if (e.code !== 'EEXIST') throw e; });
+  await novo(path.join(sistema, 'correcoes.jsonl'), '');
+  await novo(path.join(sistema, 'decisoes.jsonl'), '');
+  await novo(path.join(raiz, 'README.md'), README);
+  await novo(path.join(raiz, 'Registro de Decisões', 'Registro de Decisões.md'), INDICE);
+  const script = await fs.readFile(SCRIPT, 'utf8');
+  const alvo = path.join(sistema, 'bin', 'registro.py');
+  if ((await fs.readFile(alvo, 'utf8').catch(() => '')) !== script) await fs.writeFile(alvo, script);
+  return true;
+}
 
 /** Raiz do cofre a partir do `_SISTEMA`. */
 export const raizCofre = (sistema: string) => path.dirname(sistema);
@@ -78,7 +124,8 @@ export async function notaRecusado(raiz: string, r: Recusa): Promise<string | nu
   }
   const n = Math.max(0, ...existentes.map((f) => Number(/^R-(\d+)/.exec(path.basename(f))![1]))) + 1;
   const id = `R-${String(n).padStart(2, '0')}`;
-  const cli = r.cliente ? await notaCliente(raiz, r.cliente) : null;
+  // As notas de cliente moram na raiz do cofre (a pasta NewStudios fica dentro dela).
+  const cli = r.cliente ? ((await notaCliente(raiz, r.cliente)) ?? (await notaCliente(path.dirname(raiz), r.cliente))) : null;
   const a = r.linha ? await notaA(raiz, r.linha) : null;
   const nome = limpa(`${id} ${cli ?? r.cliente ?? 'Sem cliente'} - ${r.titulo}`);
   const tags = ['registro', 'recusado', ...(cli ? [`cliente/${slug(cli)}`] : [])];

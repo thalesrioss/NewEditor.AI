@@ -57,7 +57,7 @@ describe('registro do Thales no Cérebro (frente R)', () => {
     const r = await registrarThales({ tipo: 'alteracao', canal: 'slack', pedido: 'Cor e tem uns takes onde o áudio do Leandro está desincronizado', antes: 'v6 com boca de outro momento', depois: 'cortar na pausa', projeto: 'eq2210-03', cliente: 'Equity Sales', ref: '1793072012.038469', quando: '2026-10-27 00:33', quem: 'studio-gestor-1' });
     assert.equal(r.newstudios?.gravado, true);
     assert.equal(r.cofre?.gravado, true);
-    assert.deepEqual(r.avisos, ['registro.py do cofre não encontrado: notas A-NN não geradas']);
+    assert.deepEqual(r.avisos, []);
     assert.ok(fs.readFileSync(path.join(MEM, 'correcoes.jsonl'), 'utf8').startsWith(NS_COR));
     // A linha velha do cofre (sem quebra no fim) continua inteira e a nova vem na linha de baixo.
     assert.equal(linhas(path.join(COFRE, 'correcoes.jsonl'))[0], COFRE_COR);
@@ -105,7 +105,7 @@ describe('registro do Thales no Cérebro (frente R)', () => {
   });
 
   test('cofre ausente: grava só na NewStudios e avisa, sem falhar', async () => {
-    process.env.CEREBRO_COFRE = path.join(tmp, 'nao-existe', '_SISTEMA');
+    process.env.CEREBRO_COFRE = path.join(tmp, 'nao-existe', 'NewStudios', '_SISTEMA');
     try {
       const r = await registrarThales({ tipo: 'reprovacao', canal: 'aprovacoes', pedido: 'formato reprovado', cliente: 'equity-sales', ref: 'apr-1' });
       assert.equal(r.newstudios?.gravado, true);
