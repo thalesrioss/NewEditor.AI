@@ -402,6 +402,12 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     }
     case 'set_sfx_bank':
       return { ...t, sfxBank: op.bank };
+    case 'set_bitrate': {
+      const { maxBitrate: _drop, ...rest } = t;
+      if (op.maxMbps === null) return rest;
+      if (!(op.maxMbps >= 2 && op.maxMbps <= 25)) throw new OpError('set_bitrate: maxMbps entre 2 e 25 (ou null para o padrão)');
+      return { ...rest, maxBitrate: Math.round(op.maxMbps * 10) / 10 };
+    }
     case 'set_format': {
       const w = Math.round(op.width);
       const h = Math.round(op.height);
