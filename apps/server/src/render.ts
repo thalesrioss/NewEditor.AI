@@ -89,7 +89,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const seg = (ext: string) => path.join(work, `${String(i).padStart(4, '0')}.${ext}`);
       if (hasVideo) {
         const cam = c.cam ? assets.get(c.cam) : undefined;
-        await segmentVideo(a, c, frames, fps, W, H, seg('mov'), lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam);
+        await segmentVideo(a, c, frames, fps, W, H, seg('mov'), lutFilter(camLut(a.id, cam?.id, luts, managed.colors)), !!tl.reframe, cam);
         tick();
       }
       await segmentAudio(a, c, seg('wav'), cleanMaster(p, a));
@@ -303,6 +303,16 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
   return { luts, lutFilter: (assetId) => `${luts.has(assetId) ? `,format=gbrp16le,lut3d=file='${luts.get(assetId)}':interp=tetrahedral` : ''}${texFilter(assetId)}` };
 }
 
+/**
+ * De quem é a cor do trecho com 2ª câmera: a da câmera quando ela tem grade ou cor lida do arquivo; a da fala só quando a
+ * fala não é LOG lida do arquivo (projeto antigo, mesma câmera graduada uma vez). Câmera Rec.709 sob fala S-Log3 não
+ * pode receber a conversão da fala.
+ */
+export function camLut(falaId: string, camId: string | undefined, luts: Map<string, string>, colors: Map<string, unknown>): string {
+  if (!camId) return falaId;
+  return luts.has(camId) || colors.has(camId) || colors.has(falaId) ? camId : falaId;
+}
+
 /** Tamanho de entrega do export (lado curto 1080), o mesmo para o render e para o quadro de conferência. */
 export function deliverySize(tl: Pick<Project['timeline'], 'width' | 'height'>): { W: number; H: number } {
   const k = Math.min(1, DELIVERY_SHORT_SIDE / Math.min(tl.width, tl.height));
@@ -311,6 +321,9 @@ export function deliverySize(tl: Pick<Project['timeline'], 'width' | 'height'>):
 
 /** Faixa de níveis do vídeo: 'pc' (cheia, preto 0, bruto de câmera yuvj) ou 'tv' (limitada, preto 16). */
 export type Range = 'pc' | 'tv';
+
+/** Matriz bt709 dita só para fonte HD sem etiqueta (ou bt709): arquivo marcado bt601/bt2020 segue a etiqueta dele. */
+export const forceBt709 = (a: Pick<MediaAsset, 'height' | 'matrix'>): boolean => (a.height ?? 1080) >= 720 && (!a.matrix || a.matrix === 'bt709');
 
 /** Etiquetas de cor da entrega e dos trechos: faixa legal, Rec.709 nas três (matriz, primárias, transferência). */
 export const BT709_TV_TAGS = ['-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
@@ -336,17 +349,23 @@ export const SEGMENT_CODEC = ['-c:v', 'prores_ks', '-profile:v', '3', '-vendor',
  */
 export const BT709_PARAMS = 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709';
 
-/** Passada final → entrega: faixa legal, 4:2:0 8 bits, matriz bt709, escala lanczos. */
-export const DELIVERY_VIDEO_FILTER = `scale=flags=lanczos:out_range=tv:out_color_matrix=bt709,format=yuv420p,${BT709_PARAMS}`;
+/** Passada final → entrega: faixa legal (superbranco de câmera e realce do lanczos cortados em 16–235), 4:2:0 8 bits, matriz bt709, escala lanczos. */
+export const DELIVERY_VIDEO_FILTER = `scale=flags=lanczos:out_range=tv:out_color_matrix=bt709,format=yuv420p,lutyuv=y='clip(val,16,235)':u='clip(val,16,240)':v='clip(val,16,240)',${BT709_PARAMS}`;
 
-/** fps NTSC arredondado (29,97) → o valor exato (30000/1001). */
+/**
+ * fps da timeline → o nominal exato: 29,97 → 30000/1001; celular de fps variável (30,011, 29,981) → o nominal mais perto
+ * (até 0,05), senão a entrega sairia 30011/1000.
+ */
 export function exactFps(fps: number): number {
   for (const base of [24, 30, 60, 120]) if (Math.abs(fps - (base * 1000) / 1001) < 0.005) return (base * 1000) / 1001;
+  for (const base of [24, 25, 30, 50, 60, 120]) if (Math.abs(fps - base) < 0.05) return base;
+  for (const base of [24, 30, 60]) if (Math.abs(fps - (base * 1000) / 1001) < 0.05) return (base * 1000) / 1001;
   return fps;
 }
 
 /** fps da timeline como fração exata (29,97 → 30000/1001): `-r 29.97` gravava 2997/100. */
 export function fpsRational(fps: number): string {
+  fps = exactFps(fps);
   for (const base of [24, 30, 60, 120]) if (Math.abs(fps - (base * 1000) / 1001) < 0.005) return `${base * 1000}/1001`;
   return Number.isInteger(fps) ? String(fps) : String(Math.round(fps * 1000) / 1000);
 }
@@ -407,7 +426,7 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
   } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)*${ax}:y=(ih-oh)*${ay}`);
   // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K). Lanczos, e a
   // matriz bt709 dita: o bruto de câmera vem sem etiqueta e o padrão do swscale (bt601) puxava a pele para o verde.
-  const matrix = (src.height ?? 1080) >= 720 ? ':in_color_matrix=bt709' : '';
+  const matrix = forceBt709(src) ? ':in_color_matrix=bt709' : '';
   parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos${matrix}${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fpsRational(fps)}`);
   if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
   return parts.join(',');
@@ -532,7 +551,7 @@ function slug(s: string): string {
 /** B-roll que preenche o quadro: recorte central, ou o enquadramento (centro e zoom) do overlay (CH-0003). */
 export function coverFilter(a: Pick<MediaAsset, 'width' | 'height'>, W: number, H: number, framing?: Parameters<typeof coverCrop>[4]): string {
   // Lanczos e matriz bt709 dita, como na fala (B-roll de câmera vem sem etiqueta; o padrão bt601 esverdeia).
-  const sc = `flags=lanczos${(a.height ?? 1080) >= 720 ? ':in_color_matrix=bt709' : ''}`;
+  const sc = `flags=lanczos${forceBt709(a) ? ':in_color_matrix=bt709' : ''}`;
   if (!framing || !a.width || !a.height) return `scale=${W}:${H}:force_original_aspect_ratio=increase:${sc},crop=${W}:${H}`;
   const c = coverCrop(a.width, a.height, W, H, framing);
   const f = (n: number) => n.toFixed(5);

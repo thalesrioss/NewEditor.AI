@@ -74,3 +74,24 @@ describe('emenda entre bruto de câmera e intermediário ProRes (CH-0029, CH-003
     assert.ok(px(200).r > 150 && px(200).b < 100, `quadro 200 deveria ser a câmera: ${JSON.stringify(px(200))}`);
   });
 });
+
+describe('cor da 2ª câmera e fps da entrega (revisão FT 27/10)', () => {
+  test('câmera Rec.709 sob fala S-Log3 não recebe a conversão da fala; projeto antigo sem cor lida segue a grade da fala', async () => {
+    const { camLut } = await import('./render.ts');
+    const luts = new Map([['fala', 'g0.cube']]);
+    assert.equal(camLut('fala', 'cam', luts, new Map([['fala', {}]])), 'cam');
+    assert.equal(camLut('fala', 'cam', luts, new Map()), 'fala');
+    assert.equal(camLut('fala', undefined, luts, new Map()), 'fala');
+  });
+
+  test('fps de celular (30,011) sai no nominal; 29,97 sai 30000/1001; o gate espera o mesmo', async () => {
+    const { fpsRational } = await import('./render.ts');
+    const { fpsAlvo } = await import('./qc-tecnico.ts');
+    assert.equal(fpsRational(30.011), '30');
+    assert.equal(fpsRational(29.97), '30000/1001');
+    assert.equal(fpsRational(29.981), '30');
+    assert.equal(fpsAlvo(30.011), '30/1');
+    assert.equal(fpsAlvo(29.97), '30000/1001');
+    assert.equal(fpsAlvo(23.976), '24000/1001');
+  });
+});

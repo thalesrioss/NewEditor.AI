@@ -16,12 +16,12 @@ const delivery = (tl: { width: number; height: number }) => {
 };
 
 /** Clipe da trilha principal: contido no quadro (ou recortado no aspecto do quadro com o reframe) e o zoom por cima. */
-export function clipScale(src: Pick<MediaAsset, 'width' | 'height'>, c: Pick<Clip, 'zoom' | 'zoomTo'>, tl: { width: number; height: number; reframe?: boolean }): number | null {
+export function clipScale(src: Pick<MediaAsset, 'width' | 'height'>, c: Pick<Clip, 'zoom' | 'zoomTo' | 'framing'>, tl: { width: number; height: number; reframe?: boolean }): number | null {
   if (!src.width || !src.height) return null;
   const { W, H } = delivery(tl);
   const z = Math.max(c.zoom ?? 1, c.zoomTo ?? c.zoom ?? 1);
-  // Com reframe, a fonte mais larga que o quadro é recortada na altura inteira; sem, fica contida (com faixas).
-  const crop = tl.reframe && src.width / src.height > W / H + 0.02;
+  // Com reframe (e o x do rosto marcado, como no render), a fonte mais larga é recortada na altura inteira; sem, contida.
+  const crop = tl.reframe && c.framing?.x !== undefined && src.width / src.height > W / H + 0.02;
   const k = crop ? H / src.height : Math.min(W / src.width, H / src.height);
   return k * z;
 }

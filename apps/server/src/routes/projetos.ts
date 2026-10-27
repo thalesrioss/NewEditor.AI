@@ -158,8 +158,9 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
   // --- WebSocket: a timeline ao vivo (ops do humano, desfazer/refazer, eventos do agente) ------------------
   app.get<{ Params: { id: string } }>('/ws/:id', { websocket: true }, (socket, req) => {
     const { id } = req.params;
-    // Só a tela abre o WebSocket: as ops daqui são do Thales (resumo por sessão no registro do Cérebro).
-    const canal = canalDaTela(req.headers) ?? 'editor-brain';
+    // A tela abre o WebSocket com Origin: as ops daqui são do Thales (resumo por sessão no registro do Cérebro).
+    // Sem Origin (script, agente) não é gravado como Thales.
+    const canal = canalDaTela(req.headers);
     try {
       store.attach(id, socket);
     } catch {
@@ -181,7 +182,7 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
             store.log(id, 'system', 'A timeline mudou enquanto você editava, então sua ação não foi aplicada — tente de novo.');
             return;
           }
-          anotarOpHumana(id, msg.envelope.op, canal, msg.envelope.note);
+          if (canal) anotarOpHumana(id, msg.envelope.op, canal, msg.envelope.note);
           store.apply(id, { ...msg.envelope, by: 'human' });
         } else if (msg.type === 'undo') store.undo(id);
         else if (msg.type === 'redo') store.redo(id);

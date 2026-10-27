@@ -30,13 +30,15 @@ export async function rotasAgente(app: FastifyInstance): Promise<void> {
     return { queued: true, posicao: queuePosition(id) };
   });
 
-  app.post<{ Params: { id: string }; Body: { text: string; playhead?: number } }>('/api/projects/:id/command', async (req) => {
+  app.post<{ Params: { id: string }; Body: { text: string; playhead?: number; sugestao?: boolean } }>('/api/projects/:id/command', async (req) => {
     requireBrain();
     const { id } = req.params;
     const text = req.body.text?.trim();
     if (!text) throw erro('comando vazio');
-    // Pedido digitado na tela = alteração do Thales, gravada com a resposta do agente ("desfaz" não conta).
-    const canal = pedeDesfazer(text) ? null : canalDaTela(req.headers);
+    // Pedido digitado na tela = alteração do Thales, gravada com a resposta do agente. Não contam: "desfaz", a reescrita
+    // do LLM aplicada pelo botão (não é a fala literal dele) e pedido que não mudou a timeline (pergunta, "renderiza").
+    const canal = pedeDesfazer(text) || req.body.sugestao ? null : canalDaTela(req.headers);
+    const v0 = store.get(id).version;
     const ref = `tela:${id}:pedido:${Date.now()}`;
     void enqueue(id, 'executando pedido', async () => {
       let resposta = '';
@@ -47,7 +49,7 @@ export async function rotasAgente(app: FastifyInstance): Promise<void> {
         resposta = `falhou: ${(e as Error).message}`;
         throw e;
       } finally {
-        if (canal) void registrarDaTela(store.get(id), canal, { tipo: 'alteracao', pedido: text, depois: `agente: ${resposta}`, ref });
+        if (canal && store.get(id).version !== v0) void registrarDaTela(store.get(id), canal, { tipo: 'alteracao', pedido: text, depois: `agente: ${resposta}`, ref });
       }
     }).catch((e) => report(id, 'pedido', e));
     return { queued: true, busy: isBusy(id) ?? null };

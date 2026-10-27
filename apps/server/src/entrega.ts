@@ -13,6 +13,7 @@ import { stepEnd, stepStart } from './estimate.ts';
 import { run } from './media.ts';
 import { notify } from './notify.ts';
 import { runQc, runRenderQc } from './qc.ts';
+import { marcarReprovado } from './qc-gate.ts';
 import { render } from './render.ts';
 import { store } from './store.ts';
 
@@ -39,7 +40,7 @@ export interface EntregaOpts {
 
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'video';
 
-export async function entregar(projectId: string, opts: EntregaOpts, onProgress?: (pct: number) => void): Promise<{ pasta: string; arquivos: string[]; versao: number; qcBloqueios: string[] }> {
+export async function entregar(projectId: string, opts: EntregaOpts, onProgress?: (pct: number) => void): Promise<{ pasta: string; arquivos: string[]; versao: number; qcBloqueios: string[]; reprovado?: string }> {
   let p = store.get(projectId);
   // QC da edição antes de gastar tempo com render.
   const qcEd = await runQc(projectId);
@@ -56,10 +57,11 @@ export async function entregar(projectId: string, opts: EntregaOpts, onProgress?
   const tecnico = qcR?.issues.filter((i) => i.severidade === 'bloqueia' && i.regra.startsWith('tecnico:')).map((i) => i.texto) ?? [];
   if (!qcR || tecnico.length) {
     const motivo = qcR ? tecnico.join(' · ') : 'o QC do render não rodou';
-    store.log(projectId, 'agent', `Entrega NÃO saiu: reprovada no gate técnico (${motivo}). Render para conferência em ${res.file}; laudo em ${res.file.replace(/\.mp4$/i, '')}.qc-tecnico.txt`);
+    const reprovado = await marcarReprovado(store.dir(projectId), res.file).catch(() => res.file);
+    store.log(projectId, 'agent', `Entrega NÃO saiu: reprovada no gate técnico (${motivo}). Render para conferência em ${reprovado}; laudo em ${reprovado.replace(/\.mp4$/i, '')}.qc-tecnico.txt`);
     if (opts.entregar) throw Object.assign(new Error(`Gate técnico reprovou: ${motivo}`), { statusCode: 409 });
     onProgress?.(1);
-    return { pasta: '', arquivos: [], versao: p.versions?.at(-1)?.n ?? 0, qcBloqueios: [...bloqueios, ...renderBlock] };
+    return { pasta: '', arquivos: [], versao: p.versions?.at(-1)?.n ?? 0, qcBloqueios: [...bloqueios, ...renderBlock], reprovado };
   }
 
   const versao = (p.versions?.at(-1)?.n ?? 0) + 1;

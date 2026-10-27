@@ -12,7 +12,7 @@ import path from 'node:path';
 import { clipDuration, clipStarts, normalizeGradeLut, overlayActive, overlaySourceTime, overlaysInDrawOrder, resolveOverlay, resolveRegionFx, TIMELINE_ANCHOR, type ColorGrade, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
 import { regionFxGraph } from './region-fx.ts';
-import { DELIVERY_VIDEO_FILTER, deliverySize, gradeFilters, overlayFit, overlayFrames, segmentVideo } from './render.ts';
+import { camLut, DELIVERY_VIDEO_FILTER, deliverySize, gradeFilters, overlayFit, overlayFrames, segmentVideo } from './render.ts';
 import { managedGrades } from './color-source.ts';
 
 export interface QuadroSinal {
@@ -136,10 +136,11 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
   const work = await fs.mkdtemp(path.join(outDir, '.work-'));
   try {
     // A mesma cor do render: color management por clipe (entrada lida do arquivo) por cima da grade de teste.
-    const { luts, lutFilter } = await gradeFilters((await managedGrades(p, merged)).grades, work);
+    const managedC = await managedGrades(p, merged);
+    const { luts, lutFilter } = await gradeFilters(managedC.grades, work);
     const seg = path.join(work, 'seg.mov');
     // Do início do clipe até o quadro pedido: zoom animado e congelamento saem iguais ao render.
-    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam);
+    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(camLut(a.id, cam?.id, luts, managedC.colors)), !!tl.reframe, cam);
     const name = `q_${Math.round(t * 1000)}_${Date.now().toString(36)}.png`;
     const png = path.join(outDir, name);
     const probe = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=color_range', '-of', 'default=nw=1:nk=1', seg])).toString().trim();

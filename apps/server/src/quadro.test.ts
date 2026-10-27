@@ -21,9 +21,10 @@ const { run } = await import('./media.ts');
 const { clipNoTempo, lerSinal, limparQuadros, renderQuadro } = await import('./quadro.ts');
 const { DELIVERY_VIDEO_FILTER, deliverySize, gradeFilters, segmentVideo } = await import('./render.ts');
 
-// Bruto full range (yuvj420p, color_range=pc), 2 s, 30 fps, gradiente com preto de verdade.
+// Bruto full range (yuvj420p, color_range=pc), 2 s, 30 fps, degradê preto → branco determinístico (o `gradients` do
+// ffmpeg sorteia cores e tipo a cada execução: o teste oscilava).
 const bruto = path.join(tmp, 'bruto.mp4');
-await run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'gradients=s=640x360:d=2:r=30:c0=black:c1=white:x0=0:y0=0:x1=640:y1=0:speed=0', '-pix_fmt', 'yuvj420p', '-color_range', 'pc', '-c:v', 'libx264', '-crf', '12', '-y', bruto]);
+await run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "nullsrc=s=640x360:d=2:r=30,geq=lum='X*255/W':cb=128:cr=128", '-pix_fmt', 'yuvj420p', '-color_range', 'pc', '-c:v', 'libx264', '-crf', '12', '-y', bruto]);
 
 const grade = { ...NEUTRAL_GRADE, blacks: 0.45, contrast: 0.2 };
 const projeto = (): Project =>

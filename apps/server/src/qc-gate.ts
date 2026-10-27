@@ -20,6 +20,18 @@ export async function assinaturaDoCliente(p: Pick<Project, 'name' | 'client' | '
   return undefined;
 }
 
+/**
+ * Render reprovado ganha `_REPROVADO` no nome (e o laudo junto), para não sair como entrega por engano. Devolve o
+ * caminho relativo novo; o QC do projeto passa a apontar para ele.
+ */
+export async function marcarReprovado(dir: string, rel: string): Promise<string> {
+  const novo = rel.replace(/\.mp4$/i, '_REPROVADO.mp4');
+  const abs = (f: string) => path.join(dir, f);
+  await fs.rename(abs(rel), abs(novo));
+  await fs.rename(abs(rel.replace(/\.mp4$/i, '.qc-tecnico.txt')), abs(novo.replace(/\.mp4$/i, '.qc-tecnico.txt'))).catch(() => undefined);
+  return novo;
+}
+
 /** Roda o gate e grava o laudo; falha de medida vira reprovação com o motivo (nunca aprova sem medir). */
 export async function gateTecnico(p: Project, file: string): Promise<QcTecnico> {
   let r: QcTecnico;

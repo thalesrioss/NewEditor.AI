@@ -108,8 +108,8 @@ export const clipStem = (name: string | undefined): string | null => (name ? (/^
 
 /**
  * Cor de cada vídeo do projeto: a gravada no asset, a do XML do arquivo, ou herdada do bruto com o mesmo clipe (outro
- * asset do projeto, ou o bruto na pasta das falas). A câmera derivada converte como o bruto e com o código direto
- * (o recorte em ProRes leva a faixa cheia do bruto para a legal, que a decodificação expande de volta).
+ * asset do projeto, ou o bruto na pasta das falas). A câmera derivada converte como o bruto e com a faixa do bruto
+ * (o recorte em ProRes leva a faixa cheia do bruto para a legal, que a decodificação expande de volta ao código).
  */
 export async function projectColors(p: Pick<Project, 'assets'>): Promise<Map<string, SourceColor>> {
   const out = new Map<string, SourceColor>();
@@ -123,20 +123,25 @@ export async function projectColors(p: Pick<Project, 'assets'>): Promise<Map<str
     if (out.has(a.id)) continue;
     const stem = clipStem(a.name || a.path);
     if (!stem) continue;
-    const pai = videos.find((b) => b.id !== a.id && out.get(b.id)?.fonte === 'xml' && clipStem(b.name || b.path) === stem);
+    // Só com UM candidato: dois corpos Sony recomeçam a numeração e o C0012 de uma câmera não é o da outra.
+    const pais = videos.filter((b) => b.id !== a.id && out.get(b.id)?.fonte === 'xml' && clipStem(b.name || b.path) === stem);
+    const pai = pais.length === 1 ? pais[0] : undefined;
+    if (pais.length > 1) continue;
     let c: SourceColor | null = pai ? out.get(pai.id)! : null;
     let de = pai ? pai.name || path.basename(pai.path) : undefined;
     if (!c) {
       for (const dir of rawDirs) {
         const names = await fs.readdir(dir).catch(() => [] as string[]);
-        const raw = names.find((n) => clipStem(n) === stem && /\.(mp4|mxf|mov)$/i.test(n) && path.basename(n, path.extname(n)).toUpperCase() === stem);
+        const raws = names.filter((n) => /\.(mp4|mxf|mov)$/i.test(n) && path.basename(n, path.extname(n)).toUpperCase() === stem);
+        const raw = raws.length === 1 ? raws[0] : undefined;
         if (raw && (c = await readSourceColor(path.join(dir, raw)))) {
           de = raw;
           break;
         }
       }
     }
-    if (c && c.input !== 'rec709') out.set(a.id, { ...c, fonte: 'herdado', de, codeRange: 'full' });
+    // A faixa é a do bruto: o recorte feito direito (pc→tv) volta ao código na decodificação; bruto tv segue tv.
+    if (c && c.input !== 'rec709') out.set(a.id, { ...c, fonte: 'herdado', de });
   }
   return out;
 }

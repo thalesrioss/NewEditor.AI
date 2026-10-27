@@ -5,7 +5,7 @@ import { clipScale, escalaAviso, overlayScale } from './escala.ts';
 const tl = { width: 1080, height: 1920 };
 
 test('4K deitado recortado em 9:16 (reframe): 1215 px de largura, zoom 1,5 amplia 1,33× (FB-0180 A3)', () => {
-  const s = clipScale({ width: 3840, height: 2160 }, { zoom: 1.5 }, { ...tl, reframe: true })!;
+  const s = clipScale({ width: 3840, height: 2160 }, { zoom: 1.5, framing: { x: 0.5 } }, { ...tl, reframe: true })!;
   assert.ok(Math.abs(s - (1920 / 2160) * 1.5) < 1e-9);
   assert.match(escalaAviso(s, 'Zoom')!, /gate técnico reprova/);
 });

@@ -10,7 +10,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import type { Clip, MediaAsset, OverlayItem, Project } from '@neweditor/core';
-import { achadosPerfil, achadosProjeto, achadosMovimento, amostrarY, assinaturaDe, medirSatavg, camaraLenta, clipeSony, cortesDe, escalaClipe, escalaOverlay, niveis, origemDoNome, qcTecnico, trechosDeFala } from './qc-tecnico.ts';
+import { clipScale, overlayScale } from '@neweditor/core';
+const TL = { width: 1080, height: 1920 };
+import { achadosPerfil, achadosProjeto, achadosMovimento, amostrarY, assinaturaDe, medirSatavg, camaraLenta, clipeSony, cortesDe, niveis, origemDoNome, qcTecnico, trechosDeFala } from './qc-tecnico.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-qctec-'));
 const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { stdio: ['ignore', 'ignore', 'inherit'] });
@@ -82,11 +84,11 @@ describe('regras puras', () => {
 
   test('escala efetiva: bruto vertical 2160 a zoom 3 = 1,5×; recorte 9:16 do 4K deitado = 1080/1215 × zoom', () => {
     const c = (zoom: number, extra: Partial<Clip> = {}): Clip => ({ id: 'c', assetId: 'a', in: 0, out: 1, by: 'agent', zoom, ...extra });
-    assert.equal(escalaClipe({ width: 2160, height: 3840 }, c(3), 1080, 1920), 1.5);
-    assert.ok(Math.abs(escalaClipe({ width: 3840, height: 2160 }, c(1.5, { framing: { x: 0.5 } }), 1080, 1920, true) - (1080 / 1215) * 1.5) < 0.01);
-    assert.equal(escalaClipe({ width: 2160, height: 3840 }, c(2, { zoomTo: 2.6 }), 1080, 1920), 1.3);
-    assert.ok(Math.abs(escalaOverlay({ width: 2160, height: 3840 }, { framing: { x: 0.5, y: 0.5, zoom: 2.2 } }, 1080, 1920) - 1.1) < 1e-9);
-    assert.equal(escalaOverlay({ width: 1080, height: 1920 }, {}, 1080, 1920), 1);
+    assert.equal(clipScale({ width: 2160, height: 3840 }, c(3), TL), 1.5);
+    assert.ok(Math.abs(clipScale({ width: 3840, height: 2160 }, c(1.5, { framing: { x: 0.5 } }), { ...TL, reframe: true })! - (1080 / 1215) * 1.5) < 0.01);
+    assert.equal(clipScale({ width: 2160, height: 3840 }, c(2, { zoomTo: 2.6 }), TL), 1.3);
+    assert.ok(Math.abs(overlayScale({ width: 2160, height: 3840 }, { x: 0.5, y: 0.5, zoom: 2.2 }, TL)! - 1.1) < 1e-9);
+    assert.equal(overlayScale({ width: 1080, height: 1920 }, {}, TL), 1);
   });
 
   test('projeto: escala, velocidade, boca de outro momento, cobertura embutida e câmera sem sincronia medida', () => {

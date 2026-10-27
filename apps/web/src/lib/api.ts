@@ -96,7 +96,7 @@ export const api = {
     return req<{ queued: boolean }>('POST', `/api/projects/${id}/upload`, fd);
   },
   decupar: (id: string, assetId?: string) => req<{ queued: boolean }>('POST', `/api/projects/${id}/decupagem`, { assetId }),
-  command: (id: string, text: string, playhead?: number) => req<{ queued: boolean }>('POST', `/api/projects/${id}/command`, { text, playhead }),
+  command: (id: string, text: string, playhead?: number, sugestao?: boolean) => req<{ queued: boolean }>('POST', `/api/projects/${id}/command`, { text, playhead, ...(sugestao ? { sugestao } : {}) }),
   undo: (id: string) => req<{ ok: boolean }>('POST', `/api/projects/${id}/undo`),
   music: () => req<MusicTrack[]>('GET', '/api/library/music'),
   musicAudioUrl: (path: string) => `/api/library/music/audio?path=${encodeURIComponent(path)}`,

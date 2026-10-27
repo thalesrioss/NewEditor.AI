@@ -13,9 +13,10 @@
  * Fala = energia da voz na própria entrega (passa-faixa 150–4000 Hz, acima do p95 − 18 dB): trilha alta conta.
  */
 import path from 'node:path';
-import { clipDuration, clipPlayed, clipSpeed, clipStarts, coverCrop, locate, normalizeTimeline, overlayActive, overlaySourceTime, resolveOverlay, timelineDuration, type Clip, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
+import { clipScale, overlayScale, clipDuration, clipPlayed, clipSpeed, clipStarts, coverCrop, locate, normalizeTimeline, overlayActive, overlaySourceTime, resolveOverlay, timelineDuration, type Clip, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
 import { syncPorTrecho } from './qc-sync.ts';
+import { fpsRational } from './render.ts';
 
 export interface QcAchado {
   regra: string;
@@ -97,11 +98,12 @@ export async function medirPerfil(file: string): Promise<PerfilMedido> {
   return { video: v as PerfilMedido['video'], audio: a as PerfilMedido['audio'], duration: Number(j.format.duration ?? 0), bitRate: Number(j.format.bit_rate ?? 0) || undefined };
 }
 
-const NTSC: [number, string][] = [[23.976, '24000/1001'], [29.97, '30000/1001'], [59.94, '60000/1001']];
-/** fps nominal da entrega como fração (29,97 → 30000/1001). */
+/** fps da entrega como fração reduzida, a MESMA conta do render (29,97 → 30000/1001; celular 30,011 → 30/1). */
 export function fpsAlvo(fps = 29.97): string {
-  for (const [v, r] of NTSC) if (Math.abs(fps - v) < 0.01) return r;
-  return `${Math.round(fps)}/1`;
+  const r = fpsRational(fps);
+  if (r.includes('/')) return r;
+  const x = Number(r);
+  return Number.isInteger(x) ? `${x}/1` : reduz(`${Math.round(x * 1000)}/1000`);
 }
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 function reduz(s?: string): string {
@@ -361,25 +363,6 @@ export function origemDoNome(file: string): number | null {
 const ehBruto = (file: string) => /^C\d{4}\.(mp4|mov|mxf)$/i.test(path.basename(file));
 const ehCob = (file: string) => /(^|[_\-. ])cob/i.test(path.basename(file));
 
-/**
- * Escala efetiva de um clipe da trilha principal: o recorte do zoom (e do reframe) até o quadro de entrega. Mesma conta
- * do `clipScale` do núcleo (branch da cor): reframe = H/srcH × zoom; contido = min(W/srcW, H/srcH) × zoom.
- */
-export function escalaClipe(src: Pick<MediaAsset, 'width' | 'height'>, c: Clip, W: number, H: number, reframe = false): number {
-  if (!src.width || !src.height) return 0;
-  const z = Math.max(c.zoom ?? 1, c.zoomTo ?? c.zoom ?? 1);
-  const re = reframe && c.framing?.x !== undefined && src.width / src.height > W / H + 0.02;
-  const w = re ? Math.min(src.width, src.height * (W / H)) : src.width;
-  return Math.min(W / (w / z), H / (src.height / z));
-}
-
-/** Escala efetiva de um B-roll que preenche o quadro (recorte do `coverCrop` com o zoom do enquadramento). */
-export function escalaOverlay(src: Pick<MediaAsset, 'width' | 'height'>, o: Pick<OverlayItem, 'framing'>, W: number, H: number): number {
-  if (!src.width || !src.height) return 0;
-  const k = coverCrop(src.width, src.height, W, H, o.framing ?? null);
-  return Math.max(W / (k.kx * src.width), H / (k.ky * src.height));
-}
-
 /** Instante do bruto (clipe Sony e segundos) mostrado no tempo `t` de um arquivo; null = não dá para saber. */
 function instanteBruto(a: MediaAsset, t: number, assets: Map<string, MediaAsset>): { sony: string | null; t: number } | null {
   const sony = clipeSony(a.path) ?? clipeSony(a.name);
@@ -406,8 +389,6 @@ export interface MedidasRender {
 export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, med: MedidasRender = {}): { achados: QcAchado[]; avisos: string[] } {
   const tl = normalizeTimeline(project.timeline);
   const assets = new Map(project.assets.map((a) => [a.id, a]));
-  const W = tl.width;
-  const H = tl.height;
   const fps = tl.fps || 29.97;
   const quadro = 1 / fps;
   const starts = clipStarts(tl);
@@ -448,7 +429,8 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
   tl.main.forEach((c, i) => {
     const src = assets.get(c.cam ?? c.assetId) ?? assets.get(c.assetId);
     if (!src || src.kind === 'audio') return;
-    const e = escalaClipe(src, c, W, H, !!tl.reframe);
+    // Sobre o tamanho de ENTREGA (lado curto 1080), a mesma conta do aviso da operação (`clipScale` do núcleo).
+    const e = clipScale(src, c, tl) ?? 0;
     piorEscala = Math.max(piorEscala, e);
     if (e > LIMITES.escala) out.push({ regra: 'escala', ok: false, medido: `${n(e, 2)}× (zoom ${n(Math.max(c.zoom ?? 1, c.zoomTo ?? 1), 2)} sobre ${src.width}×${src.height})`, limite: `≤ ${n(LIMITES.escala, 2)}×`, onde: `clipe ${i + 1} (${nome(src.id)}) em ${tt(starts[i]!)}`, at: starts[i] });
   });
@@ -457,7 +439,7 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
     const a = assets.get(o.source.assetId);
     const pos = resolveOverlay(tl, o);
     if (!a || !pos || a.alpha || a.kind === 'audio') continue;
-    const e = escalaOverlay(a, o, W, H);
+    const e = overlayScale(a, o.framing, tl) ?? 0;
     piorEscala = Math.max(piorEscala, e);
     if (e > LIMITES.escala) out.push({ regra: 'escala', ok: false, medido: `${n(e, 2)}× (B-roll${o.framing ? ` zoom ${n(o.framing.zoom, 2)}` : ''} sobre ${a.width}×${a.height})`, limite: `≤ ${n(LIMITES.escala, 2)}×`, onde: `${o.id} (${nome(a.id)}) em ${trecho(pos.start, pos.end)}`, at: pos.start });
   }
@@ -515,7 +497,7 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
     const onde = `${o.id} (${nome(a.id)}) em ${trecho(pos.start, pos.end)}`;
     if (pior && pior.dt > quadro + 1e-3)
       out.push({ regra: 'boca-outro-momento', ok: false, medido: pior.outro ? `imagem de outro clipe: ${pior.outro}` : `imagem do bruto em ${tt(pior.img)} sob a voz de ${tt(pior.voz)} (Δ ${n(pior.dt, 2)} s = ${Math.round(pior.dt * fps)} quadros)`, limite: '≤ 1 quadro', onde, at: pos.start });
-    else if (desconhecido) out.push({ regra: 'boca-outro-momento', ok: false, medido: 'cobertura do mesmo falante sem instante verificável (arquivo sem tempo de origem no nome nem syncOffset)', limite: '≤ 1 quadro', onde, at: pos.start });
+    else if (desconhecido) avisos.push(`cobertura do mesmo falante sem instante verificável pelo projeto em ${onde} (arquivo sem tempo de origem no nome nem syncOffset): a sincronia por trecho confere pela imagem`);
   }
   // Cobertura embutida: arquivo do falante com "cob" no nome na trilha principal (a troca de imagem está dentro dele).
   // Com os cortes da entrega, acusa o clipe onde a troca aparece; sem corte em nenhum clipe do arquivo, acusa todos.
@@ -554,7 +536,7 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
     const outraFala = idx.some((i) => cam.syncFala && tl.main[i]!.assetId !== cam.syncFala);
     let medido = '';
     if (cam.syncOffset === undefined) medido = 'sem syncOffset';
-    else if (conf === undefined) medido = `offset ${n(cam.syncOffset, 2)} s manual (sem syncConfianca)`;
+    else if (conf === undefined) medido = `offset ${n(cam.syncOffset, 2)} s sem medida pelo áudio (manual, ou sincronizada antes de 27/10): refaça "2ª câmera → alinhar pelo áudio"`;
     else if (conf < 0.8) medido = `confiança ${n(conf, 2)}`;
     else if (outraFala) medido = 'sincronizada com outra fala (syncFala)';
     out.push({ regra: 'sync-camera', ok: !medido, medido: medido || `offset ${n(cam.syncOffset ?? 0, 2)} s, confiança ${n(conf ?? 0, 2)}`, limite: 'alinhada pelo áudio, confiança ≥ 0,8', onde, at: starts[idx[0]!] });
@@ -608,6 +590,18 @@ function cobertosPorOutro(project: Pick<Project, 'assets' | 'timeline'>): Trecho
   return out;
 }
 
+/** Trechos da peça cuja imagem vem de fonte com fps diferente do da timeline (> 1%). */
+function fpsConvertidos(project: Pick<Project, 'assets' | 'timeline'>): Trecho[] {
+  const tl = normalizeTimeline(project.timeline);
+  const assets = new Map(project.assets.map((a) => [a.id, a]));
+  const fps = tl.fps || 29.97;
+  const starts = clipStarts(tl);
+  return tl.main.flatMap((c, i) => {
+    const src = assets.get(c.cam ?? c.assetId);
+    return src?.fps && Math.abs(src.fps / fps - 1) > 0.01 ? [{ start: starts[i]!, end: starts[i]! + clipDuration(c) }] : [];
+  });
+}
+
 export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise<QcTecnico> {
   const fps = opts.project?.timeline.fps ?? opts.fps ?? 29.97;
   const avisos: string[] = [];
@@ -617,11 +611,18 @@ export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise
   achados.push(achadoNiveis(niveis(y)));
   const ass = opts.assinatura ?? ASSINATURA_PADRAO;
   if (!opts.assinatura) avisos.push(`saturação contra o ${ASSINATURA_PADRAO.fonte}`);
-  achados.push(achadoSaturacao(satavg, ass));
+  // Sem a assinatura do cliente a régua do Leandro não vale para outro cliente: a saturação só avisa.
+  const sat = achadoSaturacao(satavg, ass);
+  if (!opts.assinatura && !sat.ok) avisos.push(`saturação baixa contra o padrão (${sat.medido}); sem assinatura do cliente, não reprova`);
+  achados.push(opts.assinatura ? sat : { ...sat, ok: true });
   const fala = trechosDeFala(env);
   const fpsArq = valor(perfil.video?.avg_frame_rate) || valor(perfil.video?.r_frame_rate) || fps;
   for (const f of freezes) if (Number.isNaN(f.end)) f.end = perfil.duration;
-  achados.push(...achadosMovimento(freezes, camaraLenta(diffs, fpsArq), fala, opts.project ? cobertosPorOutro(opts.project) : []));
+  // Fonte em outro fps (23,976 numa timeline 29,97): o `fps=` do render repete 1 quadro a cada 4, cadência que não é
+  // câmera lenta. Esses clipes ficam fora da regra de cadência (o freeze continua valendo).
+  const conversao = opts.project ? fpsConvertidos(opts.project) : [];
+  const lentas = camaraLenta(diffs, fpsArq).filter((l) => !conversao.some((c) => overlap(c, l) >= (l.end - l.start) * 0.5));
+  achados.push(...achadosMovimento(freezes, lentas, fala, opts.project ? cobertosPorOutro(opts.project) : []));
   if (opts.project) {
     const r = achadosProjeto(opts.project, { fala, cortes: cortesDe(diffs, fpsArq), duracao: perfil.duration });
     achados.push(...r.achados);

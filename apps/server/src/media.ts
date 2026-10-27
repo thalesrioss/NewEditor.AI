@@ -79,6 +79,7 @@ export function run(cmd: string, args: string[], opts: { onStderr?: (line: strin
 interface ProbeStream {
   codec_type: string;
   pix_fmt?: string;
+  color_space?: string;
   width?: number;
   height?: number;
   avg_frame_rate?: string;
@@ -110,6 +111,7 @@ export async function probe(file: string): Promise<Omit<MediaAsset, 'id' | 'name
     fps: fps ? Math.round(fps * 1000) / 1000 : undefined,
     hasAudio: !!a,
     ...(v && /yuva|rgba|argb|abgr|bgra|gbrap|ya8|ya16/.test(v.pix_fmt ?? '') ? { alpha: true } : {}),
+    ...(v?.color_space && v.color_space !== 'unknown' ? { matrix: v.color_space } : {}),
   };
 }
 
