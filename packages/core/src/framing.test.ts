@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, coverCrop, OpError } from './timeline.ts';
+import { applyOp, coverCrop, framingAt, OpError } from './timeline.ts';
 import { DEFAULT_TRACKS, type Timeline } from './types.ts';
 
 const tl = (): Timeline => ({
@@ -55,4 +55,59 @@ test('set_overlay_framing grava, mescla campos e limita; null ou padrão limpa',
 test('set_overlay_framing em overlay que não é mídia ou inexistente é erro', () => {
   assert.throws(() => applyOp(tl(), { type: 'set_overlay_framing', id: 't1', framing: { x: 0 } }, 'human'), OpError);
   assert.throws(() => applyOp(tl(), { type: 'set_overlay_framing', id: 'nada', framing: { x: 0 } }, 'human'), OpError);
+});
+
+test('CH-0032: anchor clip lê x/y como o clipe principal (mesmo x, mesmo zoom, mesmo recorte)', () => {
+  const k = 1 / 1.85;
+  const a = coverCrop(1080, 1920, 1080, 1920, { x: 0.72, y: 0.3, zoom: 1.85, anchor: 'clip' });
+  // clipe principal: crop=iw/z:ih/z:x=(iw-ow)*ax:y=(ih-oh)*ay
+  near(a.u0, (1 - k) * 0.72);
+  near(a.v0, (1 - k) * 0.3);
+  near(a.kx, k);
+  // o contorno do chamado (centro 0,601) dá o mesmo recorte no modo de sempre
+  near(coverCrop(1080, 1920, 1080, 1920, { x: (1 - k) * 0.72 + k / 2, zoom: 1.85 }).u0, a.u0);
+  // B-roll 16:9 em 9:16: âncora 0 e 1 encostam nas bordas
+  near(coverCrop(1920, 1080, 1080, 1920, { x: 0, anchor: 'clip' }).u0, 0);
+  const d = coverCrop(1920, 1080, 1080, 1920, { x: 1, anchor: 'clip' });
+  near(d.u0 + d.kx, 1);
+});
+
+test('CH-0032: set_overlay_framing guarda anchor clip entre edições; center volta ao padrão', () => {
+  let t = applyOp(tl(), { type: 'set_overlay_framing', id: 'b1', framing: { x: 0.72, zoom: 1.85, anchor: 'clip' } }, 'human');
+  assert.deepEqual(t.overlays[0]!.framing, { x: 0.72, y: 0.5, zoom: 1.85, anchor: 'clip' });
+  t = applyOp(t, { type: 'set_overlay_framing', id: 'b1', framing: { y: 0.3 } }, 'human');
+  assert.equal(t.overlays[0]!.framing?.anchor, 'clip');
+  t = applyOp(t, { type: 'set_overlay_framing', id: 'b1', framing: { anchor: 'center' } }, 'human');
+  assert.deepEqual(t.overlays[0]!.framing, { x: 0.72, y: 0.3, zoom: 1.85 });
+  t = applyOp(t, { type: 'set_overlay_framing', id: 'b1', framing: { x: 0.5, y: 0.5, zoom: 1, anchor: 'clip' } }, 'human');
+  assert.equal(t.overlays[0]!.framing?.anchor, 'clip');
+});
+
+test('CH-0036: set_framing com to grava a rampa, mescla campos, valida e null tira', () => {
+  let t = applyOp(tl(), { type: 'set_framing', clipId: 'c1', y: 0.36, to: { y: 0.24, start: 0.2, dur: 0.7 } }, 'human');
+  assert.deepEqual(t.main[0]!.framing, { y: 0.36 });
+  assert.deepEqual(t.main[0]!.framingTo, { y: 0.24, start: 0.2, dur: 0.7 });
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', to: { x: 1.3, ease: 'linear' } }, 'human');
+  assert.deepEqual(t.main[0]!.framingTo, { y: 0.24, start: 0.2, dur: 0.7, x: 1, ease: 'linear' });
+  // set_framing sem `to` mantém a rampa.
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', x: 0.4 }, 'human');
+  assert.equal(t.main[0]!.framingTo?.y, 0.24);
+  assert.throws(() => applyOp(t, { type: 'set_framing', clipId: 'c1', to: { dur: 0 } }, 'human'), OpError);
+  assert.throws(() => applyOp(t, { type: 'set_framing', clipId: 'c1', to: { start: -1 } }, 'human'), OpError);
+  assert.throws(() => applyOp(t, { type: 'set_framing', clipId: 'c1', to: { ease: 'bounce' as 'out' } }, 'human'), OpError);
+  t = applyOp(t, { type: 'set_framing', clipId: 'c1', to: null }, 'human');
+  assert.equal('framingTo' in t.main[0]!, false);
+});
+
+test('CH-0036: framingAt anda só dentro da janela (ease-out padrão, linear opcional)', () => {
+  const c = { id: 'c', assetId: 'a', in: 0, out: 2, by: 'human' as const, framing: { y: 0.36 }, framingTo: { y: 0, start: 0.3, dur: 0.7, ease: 'linear' as const } };
+  assert.equal(framingAt(c, 0).y, 0.36);
+  assert.equal(framingAt(c, 0.3).y, 0.36);
+  assert.ok(Math.abs(framingAt(c, 0.65).y! - 0.18) < 1e-9);
+  assert.equal(framingAt(c, 1.5).y, 0);
+  assert.equal(framingAt(c, 1.5).x, undefined);
+  const out = { ...c, framingTo: { y: 0, start: 0.3, dur: 0.7 } };
+  assert.ok(framingAt(out, 0.65).y! < 0.18, 'ease-out anda mais no começo');
+  // Sem dur vai até o fim do clipe; x sem framing parte do centro.
+  assert.ok(Math.abs(framingAt({ ...c, framing: undefined, framingTo: { x: 0, ease: 'linear' as const } }, 1).x! - 0.25) < 1e-9);
 });

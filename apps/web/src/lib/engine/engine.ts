@@ -6,7 +6,7 @@
  *   rampas de 5 ms do export — o corte é exato por amostra. Trilha e SFX entram no mesmo relógio, com volume,
  *   fades e o "abaixa quando você fala".
  */
-import { frameCenter, clipDuration, clipPlayed, clipSpeed, clipStarts, DEFAULT_MUSIC_MIX, overlayActive, overlaySourceTime, trackFlag, zoomAt, locate, resolveOverlay, timelineDuration, type ColorGrade, type MediaAsset, type Timeline } from '@neweditor/core';
+import { frameCenter, clipDuration, clipPlayed, clipSpeed, clipStarts, DEFAULT_MUSIC_MIX, overlayActive, overlaySourceTime, trackFlag, zoomAt, framingAt, locate, resolveOverlay, timelineDuration, type ColorGrade, type MediaAsset, type Timeline } from '@neweditor/core';
 import { Compositor, type Layer } from './compositor.ts';
 import { AudioStream, MediaFile, VideoStream } from './media.ts';
 
@@ -169,7 +169,9 @@ export class Engine {
         const srcT = cam ? loc.sourceTime + (cam.syncOffset ?? 0) : loc.sourceTime;
         const f = this.video(a.id)?.frameAt(srcT, this.playing ? 10 : 2);
         const reframe = !!tl.reframe && loc.clip.framing?.x !== undefined && !!a.width && !!a.height && a.width / a.height > tl.width / tl.height + 0.02;
-        if (f) layers.push({ frame: f, fit: reframe ? 'reframe' : 'contain', zoom: zoomAt(loc.clip, loc.local), cx: loc.clip.framing?.x, cy: loc.clip.framing?.y, grade: gradeOf(loc.clip.assetId) });
+        // Rampa de enquadramento (CH-0036); no reframe o x é o centro do recorte e não anda, igual ao render.
+        const fr = framingAt(loc.clip, loc.local);
+        if (f) layers.push({ frame: f, fit: reframe ? 'reframe' : 'contain', zoom: zoomAt(loc.clip, loc.local), cx: reframe ? loc.clip.framing?.x : fr.x, cy: fr.y, grade: gradeOf(loc.clip.assetId) });
         else complete = false;
       }
     }

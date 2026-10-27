@@ -23,8 +23,8 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const item = (p: Partial<OverlayItem>): OverlayItem => ({ id: 'b', trackId: 'V2', role: 'broll', anchor: { assetId: 'a', at: 0 }, duration: 2.62, source: { type: 'media', assetId: 'br', in: 0 }, by: 'human', ...p });
 
 /** Quadros do overlay (64×64 rgb24) como sai do filtro, a 30 fps, com início em 0. */
-function quadros(o: OverlayItem): ('r' | 'b')[] {
-  const vf = `${overlayTiming(o, 0, 0, o.duration)},fps=30,format=rgb24`;
+function quadros(o: OverlayItem, srcIn = 0): ('r' | 'b')[] {
+  const vf = `${overlayTiming(o, srcIn, 0, o.duration)},fps=30,format=rgb24`;
   const buf = execFileSync('ffmpeg', ['-v', 'error', '-i', src, '-vf', vf, '-f', 'rawvideo', '-']);
   const n = 64 * 64 * 3;
   const out: ('r' | 'b')[] = [];
@@ -50,4 +50,20 @@ test('congelar 2 s: anda 0,62 s (vermelho) e fica parado no vermelho até o fim'
   assert.ok(q.length >= Math.floor(2.62 * 30), `${q.length} quadros`);
   assert.equal(at(q, 0.3), 'r');
   assert.equal(at(q, 2.5), 'r');
+});
+
+test('CH-0032: congelar a duração inteira (0,40 s) segura o quadro de entrada em vez de sumir', () => {
+  for (const srcIn of [0.8, 0.7833, 0.81]) {
+    const q = quadros(item({ duration: 0.4, freeze: 0.4, source: { type: 'media', assetId: 'br', in: srcIn } }), srcIn);
+    assert.ok(q.length >= 12, `in ${srcIn}: ${q.length} quadros`);
+    assert.ok(q.every((c) => c === 'b'), `in ${srcIn}: ${q.join('')}`);
+  }
+  // Entrada no vermelho, logo antes da troca: fica vermelho parado, não anda para o azul.
+  const r = quadros(item({ duration: 0.4, freeze: 0.4, source: { type: 'media', assetId: 'br', in: 0.7 } }), 0.7);
+  assert.ok(r.length >= 12 && r.every((c) => c === 'r'), r.join(''));
+});
+
+test('CH-0032: trecho em movimento menor que 1 quadro também não some', () => {
+  const q = quadros(item({ duration: 0.4, freeze: 0.39, source: { type: 'media', assetId: 'br', in: 0.81 } }), 0.81);
+  assert.ok(q.length >= 12 && q.every((c) => c === 'b'), q.join(''));
 });

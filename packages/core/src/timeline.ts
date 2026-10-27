@@ -1,4 +1,4 @@
-import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type OverlayItem, type Pin, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
+import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { normalizeGradeLut } from './color.ts';
 import { DEFAULT_CAPTIONS } from './text.ts';
@@ -35,6 +35,26 @@ export function zoomAt(c: Clip, local: Seconds): number {
   if (z1 === z0) return z0;
   const p = Math.min(1, Math.max(0, local / Math.max(0.01, clipPlayed(c))));
   return z0 + (z1 - z0) * (1 - Math.pow(1 - p, 3));
+}
+/** Janela da rampa de enquadramento no tempo local do clipe (CH-0036): início e duração, limitados ao clipe. */
+export function framingRampWindow(c: Clip): { start: Seconds; dur: Seconds } | null {
+  const r = c.framingTo;
+  if (!r || (r.x === undefined && r.y === undefined)) return null;
+  const played = clipPlayed(c);
+  const start = Math.min(Math.max(0, r.start ?? 0), played);
+  return { start, dur: Math.max(0.01, Math.min(r.dur ?? played - start, played - start)) };
+}
+/** Enquadramento no instante `local`: `framing`, ou a caminho de `framingTo` dentro da janela da rampa. */
+export function framingAt(c: Clip, local: Seconds): { x?: number; y?: number } {
+  const w = framingRampWindow(c);
+  if (!w) return c.framing ?? {};
+  const r = c.framingTo!;
+  const p = Math.min(1, Math.max(0, (local - w.start) / w.dur));
+  const e = r.ease === 'linear' ? p : 1 - Math.pow(1 - p, 3);
+  const lerp = (a: number | undefined, b: number | undefined) => (b === undefined ? a : (a ?? 0.5) + (b - (a ?? 0.5)) * e);
+  const x = lerp(c.framing?.x, r.x);
+  const y = lerp(c.framing?.y, r.y);
+  return { ...(x !== undefined ? { x } : {}), ...(y !== undefined ? { y } : {}) };
 }
 /** Duração do flash de entrada (2 quadros). */
 export const FLASH_FRAMES = 2;
@@ -349,6 +369,31 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
           }
           if (framing.x === undefined && framing.y === undefined) delete next.framing;
           else next.framing = framing;
+          if (op.to === null) delete next.framingTo;
+          else if (op.to !== undefined) {
+            const to: FramingRamp = { ...c.framingTo };
+            for (const k of ['x', 'y'] as const) {
+              const v = op.to[k];
+              if (v === null) delete to[k];
+              else if (v !== undefined) {
+                if (!Number.isFinite(v)) throw new OpError(`set_framing: to.${k} entre 0 e 1`);
+                to[k] = Math.min(1, Math.max(0, v));
+              }
+            }
+            for (const k of ['start', 'dur'] as const) {
+              const v = op.to[k];
+              if (v === null) delete to[k];
+              else if (v !== undefined) {
+                if (!Number.isFinite(v) || v < 0 || (k === 'dur' && v === 0)) throw new OpError(`set_framing: to.${k} em segundos (${k === 'dur' ? '> 0' : '>= 0'})`);
+                to[k] = v;
+              }
+            }
+            if (op.to.ease === null || op.to.ease === 'out') delete to.ease;
+            else if (op.to.ease === 'linear') to.ease = 'linear';
+            else if (op.to.ease !== undefined) throw new OpError("set_framing: to.ease 'out' ou 'linear'");
+            if (to.x === undefined && to.y === undefined) delete next.framingTo;
+            else next.framingTo = to;
+          }
           return next;
         }),
       };
@@ -470,6 +515,18 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'set_overlay_keep_captions':
       if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
       return { ...t, overlays: t.overlays.map((o) => (o.id !== op.id ? o : op.keep ? { ...o, keepCaptions: true } : (({ keepCaptions: _k, ...rest }) => rest)(o))) };
+    case 'set_region_fx': {
+      const list = t.regionFx ?? [];
+      const prev = op.id ? list.find((r) => r.id === op.id) : undefined;
+      if (op.id && !prev && op.fx === null) throw new OpError(`set_region_fx: ${op.id} não existe`);
+      const rest = (l: RegionFx[]) => {
+        const { regionFx: _drop, ...r } = t;
+        return l.length ? { ...r, regionFx: l } : r;
+      };
+      if (op.fx === null) return rest(list.filter((r) => r.id !== op.id));
+      const fx = buildRegionFx(t, prev, op.fx, op.id ?? uid('rfx'), by);
+      return rest(prev ? list.map((r) => (r.id === prev.id ? fx : r)) : [...list, fx]);
+    }
     case 'set_lettering_ref': {
       const { letteringRef: _drop, ...rest } = t;
       return op.refId ? { ...rest, letteringRef: op.refId } : rest;
@@ -530,12 +587,74 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
   throw new OpError(`operação desconhecida: ${String((op as { type?: unknown }).type)}`);
 }
 
+// ---------------------------------------------------------------------------
+// Efeito por região (CH-0033)
+// ---------------------------------------------------------------------------
+
+
+/** Monta (ou altera) um efeito por região a partir dos campos enviados, validando e limitando os valores. */
+function buildRegionFx(t: Timeline, prev: RegionFx | undefined, p: RegionFxPatch, id: string, by: Actor): RegionFx {
+  const num = (v: unknown, name: string) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw new OpError(`set_region_fx: ${name} precisa ser número`);
+    return v;
+  };
+  let anchor = p.anchor ?? prev?.anchor;
+  let duration = p.duration ?? prev?.duration;
+  if (p.start !== undefined) {
+    const a = anchorAt(t, num(p.start, 'start'));
+    if (!a) throw new OpError('set_region_fx: start fora da timeline');
+    anchor = a;
+  }
+  if (p.end !== undefined) {
+    const start = anchor ? resolveRegionFx(t, { anchor, duration: 0 })?.start : undefined;
+    if (start === undefined) throw new OpError('set_region_fx: end sem início (mande start ou anchor)');
+    duration = num(p.end, 'end') - start;
+  }
+  if (!anchor) throw new OpError('set_region_fx: falta o início (start em segundos da timeline, ou anchor)');
+  if (!anchorValid(t, anchor.assetId, anchor.at)) throw new OpError('set_region_fx: o ponto de âncora não está na timeline');
+  if (duration === undefined || !(num(duration, 'duration') >= MIN_CLIP)) throw new OpError('set_region_fx: duração curta demais (mande end ou duration)');
+  const r0 = { x: 0, y: 0, w: 1, h: 1, ...prev?.rect };
+  const rr = { ...r0, ...p.rect };
+  const x = clamp01(num(rr.x, 'rect.x'));
+  const y = clamp01(num(rr.y, 'rect.y'));
+  const w = Math.min(1 - x, Math.max(0, num(rr.w, 'rect.w')));
+  const h = Math.min(1 - y, Math.max(0, num(rr.h, 'rect.h')));
+  if (w < 0.005 || h < 0.005) throw new OpError('set_region_fx: retângulo vazio (rect.w e rect.h entre 0 e 1, fração do quadro)');
+  if (!prev && !p.rect) throw new OpError('set_region_fx: falta rect { x, y, w, h } (fração do quadro)');
+  const mode = p.mode ?? prev?.mode ?? 'blur';
+  if (mode !== 'blur' && mode !== 'clean') throw new OpError("set_region_fx: mode 'blur' ou 'clean'");
+  const fx: RegionFx = {
+    id,
+    anchor,
+    duration: r4(duration),
+    rect: { x: r4(x), y: r4(y), w: r4(w), h: r4(h) },
+    feather: r4(Math.max(0, Math.min(0.2, num(p.feather ?? prev?.feather ?? 0.015, 'feather')))),
+    mode,
+    strength: r4(clamp01(num(p.strength ?? prev?.strength ?? 0.6, 'strength'))),
+    by: by === 'human' || !prev ? by : prev.by,
+  };
+  const dark = p.protectDark === undefined ? prev?.protectDark : p.protectDark;
+  if (dark !== undefined && dark !== null && num(dark, 'protectDark') > 0) fx.protectDark = r4(clamp01(dark));
+  const fade = p.fade === undefined ? prev?.fade : p.fade;
+  if (fade !== undefined && fade !== null && num(fade, 'fade') > 0) fx.fade = r4(Math.min(fade, duration / 2));
+  const reason = p.reason ?? prev?.reason;
+  if (reason) fx.reason = reason;
+  return fx;
+}
+
+/** Trecho de um efeito por região na timeline; null = o instante da fala onde ele estava foi cortado. */
+export function resolveRegionFx(t: Timeline, fx: Pick<RegionFx, 'anchor' | 'duration'>): { start: Seconds; end: Seconds } | null {
+  const start = fx.anchor.assetId === TIMELINE_ANCHOR ? fx.anchor.at : sourceToTimeline(t, fx.anchor.assetId, fx.anchor.at);
+  if (start === null) return null;
+  return { start, end: Math.min(start + fx.duration, timelineDuration(t)) };
+}
+
 /** Junta clipes vizinhos que são continuação exata um do outro na fonte. */
 export function coalesce(main: Clip[]): Clip[] {
   const out: Clip[] = [];
   for (const c of main) {
     const prev = out[out.length - 1];
-    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y;
+    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y && !a.framingTo && !b.framingTo;
     if (prev && prev.assetId === c.assetId && Math.abs(prev.out - c.in) < 1e-3 && same(prev, c)) {
       out[out.length - 1] = { ...prev, out: c.out };
     } else out.push(c);
@@ -661,13 +780,15 @@ export const MAX_CLIP_ZOOM = MAX_FRAMING_ZOOM;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
-export function normalizeFraming(f: Partial<import('./types.ts').OverlayFraming>): import('./types.ts').OverlayFraming {
+export function normalizeFraming(f: Partial<Omit<import('./types.ts').OverlayFraming, 'anchor'>> & { anchor?: unknown }): import('./types.ts').OverlayFraming {
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-  return { x: r4(clamp01(num(f.x, 0.5))), y: r4(clamp01(num(f.y, 0.5))), zoom: r4(Math.min(MAX_FRAMING_ZOOM, Math.max(1, num(f.zoom, 1)))) };
+  const out: import('./types.ts').OverlayFraming = { x: r4(clamp01(num(f.x, 0.5))), y: r4(clamp01(num(f.y, 0.5))), zoom: r4(Math.min(MAX_FRAMING_ZOOM, Math.max(1, num(f.zoom, 1)))) };
+  if (f.anchor === 'clip') out.anchor = 'clip';
+  return out;
 }
 
 export function isDefaultFraming(f: import('./types.ts').OverlayFraming): boolean {
-  return f.x === 0.5 && f.y === 0.5 && f.zoom === 1;
+  return f.x === 0.5 && f.y === 0.5 && f.zoom === 1 && !f.anchor;
 }
 
 /**
@@ -676,12 +797,14 @@ export function isDefaultFraming(f: import('./types.ts').OverlayFraming): boolea
  * crop) e no preview (WebGL), para o quadro sair igual nos dois. O recorte nunca sai da fonte: centro
  * perto da borda encosta na borda.
  */
-export function coverCrop(sw: number, sh: number, W: number, H: number, framing?: Partial<import('./types.ts').OverlayFraming> | null): { u0: number; v0: number; kx: number; ky: number } {
+export function coverCrop(sw: number, sh: number, W: number, H: number, framing?: Parameters<typeof normalizeFraming>[0] | null): { u0: number; v0: number; kx: number; ky: number } {
   const f = normalizeFraming(framing ?? {});
   const ar = sw / sh;
   const AR = W / H;
   const kx = Math.min(1, AR / ar) / f.zoom;
   const ky = Math.min(1, ar / AR) / f.zoom;
+  // Âncora (CH-0032): x/y lidos como no clipe principal, o recorte desliza de borda a borda.
+  if (f.anchor === 'clip') return { u0: (1 - kx) * f.x, v0: (1 - ky) * f.y, kx, ky };
   const cx = Math.min(1 - kx / 2, Math.max(kx / 2, f.x));
   const cy = Math.min(1 - ky / 2, Math.max(ky / 2, f.y));
   return { u0: cx - kx / 2, v0: cy - ky / 2, kx, ky };

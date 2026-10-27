@@ -16,6 +16,8 @@ export interface MediaAsset {
   name: string;
   /** Caminho absoluto do arquivo original (nunca é alterado). */
   path: string;
+  /** Tamanho e mtime (ms) do arquivo quando foi lido: registrar o mesmo caminho com o arquivo mudado mede de novo (CH-0031). */
+  file?: { size: number; mtime: number };
   kind: 'video' | 'audio' | 'image';
   duration: Seconds;
   width?: number;
@@ -28,6 +30,8 @@ export interface MediaAsset {
   alpha?: boolean;
   /** 2ª câmera: tempo nesta gravação = tempo na fala + syncOffset (alinhado pelo áudio). */
   syncOffset?: Seconds;
+  /** 2ª câmera: id da fala a que o `syncOffset` se refere (com várias falas no projeto, cada câmera é de uma). */
+  syncFala?: string;
   /** Miniaturas para a filmstrip da timeline: grade de quadros a cada `interval` segundos. */
   thumbs?: { file: string; interval: number; w: number; h: number; cols: number; count: number };
   /** Caminhos relativos à pasta do projeto, servidos pelo servidor. */
@@ -72,6 +76,20 @@ export interface Clip {
    * na fonte) do zoom: o ponto nessa altura fica parado na tela ao ampliar. Sem `y`, o zoom amplia pelo centro.
    */
   framing?: { x?: number; y?: number };
+  /**
+   * Rampa de enquadramento (CH-0036): `framing` vai até este `x`/`y` de `start` a `start + dur` (s desde o início do
+   * clipe, tempo de saída; sem `dur`, até o fim do clipe), ease-out ou linear. Só a imagem; o áudio não é tocado.
+   * Fora do reframe, como o `framing` (âncora do zoom: precisa de zoom > 1 para mover).
+   */
+  framingTo?: FramingRamp;
+}
+
+export interface FramingRamp {
+  x?: number;
+  y?: number;
+  start?: Seconds;
+  dur?: Seconds;
+  ease?: 'out' | 'linear';
 }
 
 /** Trecho da fonte que foi descartado — fica visível para o humano poder restaurar. */
@@ -199,6 +217,52 @@ export interface OverlayFraming {
   x: number;
   y: number;
   zoom: number;
+  /**
+   * Como ler x/y (CH-0032). Ausente = centro do recorte (padrão do B-roll). `clip` = âncora, como o
+   * `framing` do clipe principal: 0 encosta o recorte na borda esquerda/de cima, 1 na direita/de baixo,
+   * e o mesmo x/y com o mesmo zoom dá o mesmo recorte do clipe.
+   */
+  anchor?: 'clip';
+}
+
+/**
+ * Efeito por região no V1 (CH-0033): desfoque ou limpeza num retângulo da TELA (0–1 do quadro de entrega),
+ * com borda suave, num trecho ancorado na fala como os overlays. Entra na imagem da fala (já com a cor) antes
+ * do B-roll, dos motions, dos letterings e da legenda: o título fixo fica por cima, nítido.
+ */
+export interface RegionFx {
+  id: string;
+  anchor: Anchor;
+  duration: Seconds;
+  /** Canto superior esquerdo e tamanho, em fração do quadro de entrega. */
+  rect: { x: number; y: number; w: number; h: number };
+  /** Borda suave, em fração da altura do quadro (0,02 = ~38 px em 1920). 0 = borda seca. */
+  feather: number;
+  /** blur = desfoque; clean = some com texto e detalhe fino (mediana larga + desfoque leve), mantém a cor de fundo. */
+  mode: 'blur' | 'clean';
+  /** Intensidade 0–1. */
+  strength: number;
+  /** Protege pixels escuros (luma 0–1 abaixo deste valor ficam intactos: cabelo, roupa, contorno da pessoa). */
+  protectDark?: number;
+  /** Entra e sai em rampa (s), além da borda no espaço. */
+  fade?: Seconds;
+  reason?: string;
+  by: Actor;
+}
+
+/** Campos de `set_region_fx`: `start`/`end` em tempo da timeline viram âncora e duração; null tira o opcional. */
+export interface RegionFxPatch {
+  anchor?: Anchor;
+  start?: Seconds;
+  end?: Seconds;
+  duration?: Seconds;
+  rect?: Partial<RegionFx['rect']>;
+  feather?: number;
+  mode?: RegionFx['mode'];
+  strength?: number;
+  protectDark?: number | null;
+  fade?: Seconds | null;
+  reason?: string;
 }
 
 export interface Timeline {
@@ -237,6 +301,8 @@ export interface Timeline {
   formatoManual?: boolean;
   /** Banco dos SFX dos motions, letterings e flashes: foley sintetizado ou amostras reais do CinePRO. */
   sfxBank?: import('./sfx.ts').SfxBank;
+  /** Efeitos por região no V1 (CH-0033). */
+  regionFx?: RegionFx[];
 }
 
 /**
@@ -408,7 +474,7 @@ export type TimelineOp =
   | { type: 'set_speed'; clipId: string; speed?: number | null; freeze?: number | null }
   | { type: 'set_cam'; clipId: string; assetId: string | null }
   /** `x`/`y` ausentes mantêm o valor; `null` tira. */
-  | { type: 'set_framing'; clipId: string; x?: number | null; y?: number | null }
+  | { type: 'set_framing'; clipId: string; x?: number | null; y?: number | null; /** Rampa (CH-0036): campos ausentes mantêm, `null` tira a rampa. */ to?: { x?: number | null; y?: number | null; start?: Seconds | null; dur?: Seconds | null; ease?: 'out' | 'linear' | null } | null }
   | { type: 'set_reframe'; on: boolean }
   /** Formato da entrega em pixels (e fps): presets ou livre. Fica no histórico. */
   | { type: 'set_format'; width: number; height: number; fps?: number }
@@ -420,7 +486,7 @@ export type TimelineOp =
   | { type: 'set_captions'; captions: import('./text.ts').CaptionSettings }
   | { type: 'set_overlay_mix'; id: string; mix: AudioMix; sourceIn?: Seconds }
   /** Posição e zoom do B-roll (CH-0003); campos ausentes ficam como estão, null volta ao recorte central. */
-  | { type: 'set_overlay_framing'; id: string; framing: Partial<OverlayFraming> | null }
+  | { type: 'set_overlay_framing'; id: string; framing: (Partial<Omit<OverlayFraming, 'anchor'>> & { anchor?: 'clip' | 'center' | null }) | null }
   /** Velocidade e congelamento do B-roll (CH-0004); null ou ausente = como estava (null volta ao normal). */
   | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
@@ -438,6 +504,8 @@ export type TimelineOp =
   /** Liga/desliga a convivência com a legenda (título fixo; CH-0022). */
   | { type: 'set_overlay_keep_captions'; id: string; keep: boolean }
   | { type: 'set_lettering_ref'; refId: string | null }
+  /** Efeito por região (CH-0033): sem `id` cria; com `id` altera só os campos enviados; `fx: null` apaga. */
+  | { type: 'set_region_fx'; id?: string; fx: RegionFxPatch | null }
   /** Corrige a grafia de palavras (texto vazio desfaz a correção). */
   | { type: 'fix_words'; fixes: WordFix[] }
   /** Ajusta legendas em lote (patch null volta ao automático naquela palavra). */

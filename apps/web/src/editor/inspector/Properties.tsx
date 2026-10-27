@@ -625,7 +625,15 @@ function TemplateCliente({ spec, commit }: { spec: LetteringSpec; commit: (next:
       <RangeField label="Espaço entre letras" value={tp.tracking} min={-0.2} max={0.3} step={0.01} unit=" em" resetTo={0} onCommit={(v) => set({ tracking: v }, `Tracking ${v} em no lettering`)} />
       <RangeField label="Tamanho" value={tp.size} min={2} max={16} step={0.1} unit="%" resetTo={6} onCommit={(v) => set({ size: v }, `Lettering em ${v}% da altura`)} />
       <Toggle label="Caixa alta" on={tp.upper} onChange={(v) => set({ upper: v }, v ? 'Lettering em caixa alta' : 'Lettering em caixa mista')} />
-      <Toggle label="Sombra" on={tp.shadow} onChange={(v) => set({ shadow: v }, v ? 'Sombra no lettering' : 'Lettering sem sombra')} />
+      <RangeField label="Sombra" value={tp.shadow} min={0} max={3} step={0.1} unit="×" resetTo={1} onCommit={(v) => set({ shadow: v }, v ? `Sombra ${v}× no lettering` : 'Lettering sem sombra')} hint="1 = sombra padrão; acima de 1 reforça (2 = como duplicar a camada). Para texto claro sobre fundo claro." />
+      {tp.shadow > 0 && <RangeField label="Desfoque da sombra" value={tp.shadowBlur} min={0} max={2} step={0.05} unit=" em" resetTo={0.3} onCommit={(v) => set({ shadowBlur: v }, `Desfoque da sombra ${v} em`)} />}
+      <RangeField label="Contorno" value={tp.stroke} min={0} max={0.2} step={0.005} unit=" em" resetTo={0} onCommit={(v) => set({ stroke: v || undefined }, v ? `Contorno ${v} em no lettering` : 'Lettering sem contorno')} hint="Fino (0,02 a 0,04 em) segura a cor sobre janela clara sem mudar a cor do padrão." />
+      {(tp.shadow > 0 || tp.stroke > 0) && (
+        <label className="flex items-center justify-between text-ui-xs text-ink-300">
+          Cor da sombra e do contorno
+          <input type="color" value={tp.strokeColor.length === 4 ? `#${[...tp.strokeColor.slice(1)].map((c) => c + c).join('')}` : tp.strokeColor} onChange={(e) => set({ shadowColor: e.target.value.toUpperCase(), strokeColor: e.target.value.toUpperCase() }, 'Mudou a cor da sombra e do contorno')} className="h-6 w-8 cursor-pointer rounded border border-ink-600 bg-transparent" />
+        </label>
+      )}
     </div>
   );
 }
@@ -634,7 +642,7 @@ function TemplateCliente({ spec, commit }: { spec: LetteringSpec; commit: (next:
 function CameraControls({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)!;
   const sendOp = useEditor((s) => s.sendOp);
-  const cams = project.assets.filter((a) => a.role === 'cam' && a.syncOffset !== undefined);
+  const cams = project.assets.filter((a) => a.role === 'cam' && a.syncOffset !== undefined && (!a.syncFala || a.syncFala === clip.assetId));
   const fala = project.assets.find((a) => a.id === clip.assetId);
   const wide = !!fala?.width && !!fala?.height && fala.width / fala.height > project.timeline.width / project.timeline.height + 0.02;
   const [busy, setBusy] = useState('');

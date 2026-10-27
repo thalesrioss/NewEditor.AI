@@ -18,17 +18,53 @@ import { store } from './store.ts';
 export async function ingest(projectId: string, filePath: string, role?: MediaAsset['role']): Promise<MediaAsset> {
   await fs.access(filePath);
   const meta = await probe(filePath);
+  const file = await fingerprint(filePath);
   const p0 = store.get(projectId);
+  // Mesmo caminho já no projeto (CH-0031): não duplica; se o arquivo mudou, mede de novo no mesmo asset (os clipes seguem).
+  const same = p0.assets.find((a) => a.path === filePath);
+  if (same) return refresh(projectId, same, meta, file);
   const hasFala = p0.assets.some((a) => a.role === 'fala' || a.transcript);
   // Segunda bruta: vídeo longo com áudio, chegando antes de qualquer decupagem, é fala também (não B-roll).
   const segundaBruta = hasFala && meta.kind === 'video' && meta.hasAudio && meta.duration >= 60 && isRaw(p0.timeline);
-  const asset: MediaAsset = { id: uid('ast'), name: path.basename(filePath), path: filePath, ...meta, role: role ?? ((!hasFala && meta.hasAudio) || segundaBruta ? 'fala' : 'broll') };
+  const asset: MediaAsset = { id: uid('ast'), name: path.basename(filePath), path: filePath, file, ...meta, role: role ?? ((!hasFala && meta.hasAudio) || segundaBruta ? 'fala' : 'broll') };
   await fs.mkdir(path.join(store.dir(projectId), asset.id), { recursive: true });
   saveAsset(projectId, asset);
   // Formato e fps já na leitura do arquivo, não no fim da preparação: o ASR leva minutos (ou falha) — CH-0005.
   if (asset.role === 'fala') inheritFormat(projectId, asset);
   store.log(projectId, 'agent', `Recebi ${asset.name} (${fmtDur(asset.duration)}${asset.width ? `, ${asset.width}×${asset.height}` : ''}) como ${asset.role === 'fala' ? (segundaBruta ? 'fala (2ª bruta — entra na decupagem junto)' : 'fala principal') : asset.role === 'motion' ? 'motion' : 'B-roll'}`);
   return prepare(projectId, asset);
+}
+
+export async function fingerprint(filePath: string): Promise<NonNullable<MediaAsset['file']>> {
+  const st = await fs.stat(filePath);
+  return { size: st.size, mtime: Math.round(st.mtimeMs) };
+}
+
+/** O arquivo no disco não é mais o que foi lido (regravado no mesmo caminho). Asset antigo sem `file`: compara a medida. */
+export function fileChanged(a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' | 'path'>, file: NonNullable<MediaAsset['file']>): boolean {
+  if (a.file) return a.file.size !== file.size || a.file.mtime !== file.mtime;
+  return Math.abs(a.duration - meta.duration) > 0.001 || a.width !== meta.width || a.height !== meta.height || a.fps !== meta.fps || a.hasAudio !== meta.hasAudio;
+}
+
+/**
+ * Registro de novo de um caminho que já está no projeto. Arquivo igual: só completa o que faltar. Arquivo mudado:
+ * mede de novo (duração, tamanho, fps) e refaz proxy, miniaturas e áudio de análise, mantendo id, papel e
+ * transcrição (a transcrição é do arquivo antigo: o log avisa para importar de novo se a fala mudou).
+ */
+async function refresh(projectId: string, a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' | 'path'>, file: NonNullable<MediaAsset['file']>): Promise<MediaAsset> {
+  if (!fileChanged(a, meta, file)) {
+    if (!a.file) store.upsertAsset(projectId, { ...a, file });
+    store.log(projectId, 'agent', `${a.name} já está no projeto e não mudou.`);
+    return prepare(projectId, { ...a, file });
+  }
+  const next: MediaAsset = { ...a, ...meta, file };
+  for (const k of ['proxy', 'thumbs', 'wav16k', 'envelope', 'clean'] as const) delete next[k];
+  if (!meta.alpha) delete next.alpha;
+  store.upsertAsset(projectId, next);
+  const tl = store.get(projectId).timeline;
+  const alem = tl.main.filter((c) => c.assetId === a.id && c.out > meta.duration + 0.001).length;
+  store.log(projectId, 'agent', `${a.name} mudou no disco: ${fmtDur(a.duration)} (${a.duration.toFixed(3)} s) → ${meta.duration.toFixed(3)} s; refazendo a preparação no mesmo arquivo do projeto${a.transcript ? '; a transcrição é a do arquivo antigo (importe de novo se a fala mudou)' : ''}${alem ? `; ${alem} clipe(s) passam do novo fim` : ''}.`);
+  return prepare(projectId, next);
 }
 
 /**
@@ -54,7 +90,7 @@ export async function setRole(projectId: string, assetId: string, role: 'fala' |
   const a = p.assets.find((x) => x.id === assetId);
   if (!a) throw Object.assign(new Error('arquivo não existe'), { statusCode: 404 });
   if (a.role === role) return a;
-  store.upsertAsset(projectId, { ...a, role, syncOffset: undefined });
+  store.upsertAsset(projectId, { ...a, role, syncOffset: undefined, syncFala: undefined });
   if (role === 'broll') {
     if (isRaw(p.timeline) && p.timeline.main.some((c) => c.assetId === assetId)) store.apply(projectId, { by: 'system', op: { type: 'set_main', clips: p.timeline.main.filter((c) => c.assetId !== assetId), removals: [] } });
     store.log(projectId, 'agent', `${a.name} agora é B-roll.`);
@@ -66,10 +102,13 @@ export async function setRole(projectId: string, assetId: string, role: 'fala' |
   return store.get(projectId).assets.find((x) => x.id === assetId)!;
 }
 
-/** Grava o asset preparado sem apagar o que mudou enquanto isso (2ª câmera, limpeza de voz, papel). */
+/**
+ * Grava o asset preparado sem apagar o que mudou enquanto isso (2ª câmera, limpeza de voz, papel, transcrição
+ * importada pelo editor no meio da preparação — CH-0031: o fim do proxy regravava o asset sem `transcript`).
+ */
 function saveAsset(projectId: string, asset: MediaAsset): void {
   const cur = store.get(projectId).assets.find((a) => a.id === asset.id);
-  store.upsertAsset(projectId, cur ? { ...asset, role: cur.role ?? asset.role, syncOffset: cur.syncOffset ?? asset.syncOffset, clean: cur.clean ?? asset.clean } : asset);
+  store.upsertAsset(projectId, cur ? { ...asset, role: cur.role ?? asset.role, syncOffset: cur.syncOffset ?? asset.syncOffset, syncFala: cur.syncFala ?? asset.syncFala, clean: cur.clean ?? asset.clean, transcript: cur.transcript ?? asset.transcript } : asset);
 }
 
 /** O que ainda falta preparar neste asset (vazio = pronto). */
@@ -120,12 +159,23 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
     act('Transcrevendo palavra por palavra');
     const t0 = Date.now();
     const trFile = path.join(dir, 'transcript.json');
+    // O ASR escreve ao lado: se o editor importar a transcrição enquanto ele roda, a importada fica (CH-0031).
+    const asrFile = path.join(dir, 'transcript.asr.json');
     // Trecho a trecho (ver speechChunks): o texto de cada trecho é o que foi dito nele — retake aparece como retake.
     const env = await readEnvelope(path.join(dir, 'envelope.f32'));
     // Nomes e marcas do glossário do cliente (BL-0081) entram no prompt da transcrição.
     const glossario = (await profileOf(store.get(projectId)).catch(() => undefined))?.glossario;
-    const tr = await transcribe(path.join(dir, 'audio16k.wav'), trFile, 'pt', speechChunks(env), glossario);
-    await writeCenters(trFile, tr, analyze(tr.words, env).centers);
+    const tr = await transcribe(path.join(dir, 'audio16k.wav'), asrFile, 'pt', speechChunks(env), glossario);
+    await writeCenters(asrFile, tr, analyze(tr.words, env).centers);
+    if (store.get(projectId).assets.find((x) => x.id === asset.id)?.transcript) {
+      await fs.rename(asrFile, path.join(dir, 'transcript.asr-original.json')).catch(() => {});
+      asset.transcript = rel('transcript.json');
+      progress.audio = 1;
+      saveAsset(projectId, asset);
+      store.log(projectId, 'agent', `Transcrevi ${tr.words.length} palavras, mas a transcrição importada fica; a do ASR está em transcript.asr-original.json`);
+      return;
+    }
+    await fs.rename(asrFile, trFile);
     asset.transcript = rel('transcript.json');
     progress.audio = 1;
     saveAsset(projectId, asset);

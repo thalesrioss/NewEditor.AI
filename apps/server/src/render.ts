@@ -2,13 +2,15 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, coverCrop, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
+import { buildCues, buildLut, clipPlayed, coverCrop, framingRampWindow, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
 import { DELIVERY, deliverAudio } from './loudness.ts';
 import { atomic, run, filterGraphArgs, NO_INPUT_META } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
+import { regionFxGraph } from './region-fx.ts';
+import { captionsWithoutWords } from './legenda-vazia.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 
 /** Logo usada no fundo de peças só de áudio. */
@@ -146,6 +148,17 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     }
     // Com fala em vídeo, a imagem base é a própria entrada 0; overlays encadeiam a partir dela.
     let vCur = hasVideo ? '0:v' : 'v0';
+    let videoTouched = !hasVideo;
+    // Efeito por região (CH-0033): na imagem da fala, já com a cor, antes de B-roll, motion, lettering e legenda.
+    if (hasVideo && !trackFlag(tl, 'V1', 'hidden')) {
+      const rfx = regionFxGraph(tl, W, H, fps, vCur);
+      if (rfx.parts.length) {
+        parts.push(...rfx.parts);
+        vCur = rfx.out;
+        videoTouched = true;
+        notes.push(`${tl.regionFx!.length} efeito(s) por região`);
+      }
+    }
     // A fala vira gatilho do ducking: uma cópia vai para a mixagem, as outras para os compressores.
     const ducked = placed.filter(({ o, a }) => (o.role === 'music' || o.role === 'sfx') && a.hasAudio && (o.mix?.duck ?? o.role === 'music'));
     const speech = hasVideo ? '[1:a]' : '[a1]';
@@ -160,7 +173,6 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       audio[0] = '[spmute]';
     }
     let duckN = 0;
-    let videoTouched = !hasVideo;
     // O obturador só nos flashes com som (flashSfx false = o editor põe a amostra dele no A2).
     const flashCues: { at: number; c: SfxCue }[] = flashShutterCues(tl).map(({ at, cue }) => ({ at, c: cue }));
     // SFX dos motions do Motion Studio (cues do film.js), no tempo da timeline.
@@ -207,6 +219,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     const transcripts: Record<string, TextWord[]> = {};
     for (const a of p.assets) if (a.transcript) transcripts[a.id] = (await readTranscript(path.join(dir, a.transcript))).words;
     const cues = tl.captions?.enabled ? buildCues(tl, transcripts, tl.captions) : [];
+    const semLegenda = captionsWithoutWords(p, cues.length || (tl.captions?.enabled ? buildCues(tl, transcripts, tl.captions, { includeHidden: true }).length : 0));
+    if (semLegenda) notes.push(`ATENÇÃO: ${semLegenda}`);
     const textMov = await renderTextLayer({ W, H, fps, total, cues, captions: tl.captions, letterings, motions }, work, (x) => onProgress?.(0.88 + 0.04 * x));
     if (textMov) {
       const t = inputs.push(textMov) - 1;
@@ -344,7 +358,19 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
   const ay = (c.framing?.y ?? 0.5).toFixed(4);
   // Âncora horizontal (CH-0023): fora do reframe, `framing.x` segura o ponto nessa largura parado na tela, como o y.
   const ax = (useReframe ? 0.5 : (c.framing?.x ?? 0.5)).toFixed(4);
-  if (z1 !== z0) {
+  // Rampa de enquadramento (CH-0036): a âncora anda de `framing` até `framingTo` dentro da janela, quadro a quadro.
+  const ramp = framingRampWindow(c);
+  const rampTo = (a: string, b: number | undefined): string => {
+    if (!ramp || b === undefined || Number(a) === b) return a;
+    const f0 = (ramp.start * fps).toFixed(3);
+    const fd = Math.max(1, ramp.dur * fps).toFixed(3);
+    const p = `min(1\\,max(0\\,(on-${f0})/${fd}))`;
+    const e = c.framingTo?.ease === 'linear' ? p : `(1-pow(1-${p}\\,3))`;
+    return `(${a}+(${(b - Number(a)).toFixed(4)})*${e})`;
+  };
+  const rx = useReframe ? ax : rampTo(ax, c.framingTo?.x);
+  const ry = rampTo(ay, c.framingTo?.y);
+  if (z1 !== z0 || rx !== ax || ry !== ay) {
     // Tamanho "contido" da fonte no quadro (o zoompan entrega direto nesse tamanho).
     const ar = useReframe ? W / H : (src.width ?? W) / (src.height ?? H);
     const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
@@ -353,7 +379,7 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
     // O zoompan (d=1) entrega 1 quadro por quadro de entrada: a fonte entra já no fps da timeline, senão um bruto
     // 23,976 numa timeline 29,97 sai 1,25× mais rápido que o áudio (CH-0017).
     parts.push(`fps=${fps}`);
-    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${ax}':y='(ih-ih/zoom)*${ay}':d=1:s=${sw}x${sh}:fps=${fps}`);
+    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${rx}':y='(ih-ih/zoom)*${ry}':d=1:s=${sw}x${sh}:fps=${fps}`);
   } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)*${ax}:y=(ih-oh)*${ay}`);
   // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
   parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
@@ -405,13 +431,18 @@ export async function fileDuration(file: string): Promise<number> {
  * que a peça, o render falha com a medida em vez de entregar o fim mudo (o `apad` da entrega esconderia a falta).
  */
 export async function normalizeMix(premix: string, out: string, total: number): Promise<void> {
-  await run('ffmpeg', ['-y', '-v', 'error', '-i', premix, '-af', `${LOUDNORM},aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo`, '-c:a', 'pcm_f32le', '-t', String(total), out]);
+  // `asetpts=N/SR/TB`: o loudnorm do ffmpeg 9 solta o último bloco curto (10 ms) mas avança o relógio 100 ms; o `-t`
+  // corta pelo relógio e jogava fora os últimos ~90 ms de som real, completados com silêncio na entrega (CH-0037).
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', premix, '-af', `${LOUDNORM},asetpts=N/SR/TB,aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo`, '-c:a', 'pcm_f32le', '-t', String(total), out]);
   const got = await fileDuration(out);
   if (got < total - MIX_SLACK) throw new Error(`mixagem saiu com ${got.toFixed(2)} s, a peça tem ${total.toFixed(2)} s`);
 }
 
-/** Folga aceita entre a mix e a peça (s): o loudnorm pode devolver uns 40 ms a menos no fim; o defeito era de segundos. */
-const MIX_SLACK = 0.1;
+/**
+ * Folga aceita entre a mix e a peça (s): até ~1 quadro. Era 0,1 s porque o loudnorm "devolvia uns 40-90 ms a menos",
+ * mas isso era o relógio do último bloco (CH-0037), já corrigido acima; a folga larga escondia o fim mudo.
+ */
+const MIX_SLACK = 0.035;
 
 /** Quadros de vídeo gravados no cabeçalho do arquivo (sem decodificar). */
 export async function countFrames(file: string): Promise<number> {
@@ -497,5 +528,9 @@ export function overlayTiming(o: Parameters<typeof overlayPlayback>[0], srcIn: n
   const pts = pb.speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${r(pb.speed)}`;
   // Clona o último quadro também sem congelamento: fonte que acaba um quadro antes não mostra a fala por baixo.
   const pad = `,tpad=stop_mode=clone:stop_duration=${r(hold + 0.1)}`;
-  return `trim=start=${r(srcIn)}:end=${r(srcIn + moving * pb.speed)},${pts}${pad},setpts=PTS+${start}/TB`;
+  // Congelado do começo ao fim (freeze = duração) ou trecho menor que 1 quadro: a janela da fonte pode não ter
+  // quadro nenhum e o B-roll sumia (CH-0032). O primeiro quadro a partir do início sempre entra e é ele que congela.
+  const span = moving * pb.speed;
+  const cut = `trim=start=${r(srcIn)},setpts=PTS-STARTPTS,trim=end=${r(Math.max(span, 0.001))}`;
+  return `${cut},${pts}${pad},setpts=PTS+${start}/TB`;
 }
