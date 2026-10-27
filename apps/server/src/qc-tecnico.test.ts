@@ -1,0 +1,168 @@
+/**
+ * QC técnico (gate de entrega, frente Q3 de 27/10/2026): regras puras com números conhecidos e o gate inteiro em
+ * vídeos sintéticos curtos (lavfi): um na linha de entrega, um fora dela (faixa cheia sem etiqueta, imagem parada e
+ * câmera lenta sob tom contínuo) e um cinza.
+ */
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { after, before, describe, test } from 'node:test';
+import type { Clip, MediaAsset, OverlayItem, Project } from '@neweditor/core';
+import { achadosPerfil, achadosProjeto, achadosMovimento, amostrarY, assinaturaDe, camaraLenta, clipeSony, cortesDe, escalaClipe, escalaOverlay, niveis, origemDoNome, qcTecnico, trechosDeFala } from './qc-tecnico.ts';
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-qctec-'));
+const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { stdio: ['ignore', 'ignore', 'inherit'] });
+const bom = path.join(tmp, 'bom.mp4');
+const ruim = path.join(tmp, 'ruim.mp4');
+const cinza = path.join(tmp, 'cinza.mp4');
+const base = path.join(tmp, 'base.mov');
+const TAGS = ['-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
+const TOM = 'sine=f=300:r=48000:d=4';
+// No FFmpeg 9 o `-color_primaries`/`-color_trc` da saída perde para a etiqueta do quadro (unknown): só o setparams grava.
+const BT709 = 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709';
+
+function sinteticos(): void {
+  // Imagem colorida com ruído temporal (todo quadro mexe, como câmera), 4 s.
+  ff(['-f', 'lavfi', '-i', 'testsrc2=s=180x320:r=30000/1001:d=4', '-vf', 'noise=alls=12:allf=t+u', '-c:v', 'ffv1', base]);
+  ff(['-i', base, '-f', 'lavfi', '-i', TOM, '-vf', `scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,${BT709}`, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', ...TAGS, '-r', '30000/1001', '-c:a', 'aac', '-ar', '48000', '-shortest', bom]);
+  // Fora da linha: faixa cheia sem etiqueta, quadros 30–44 parados (0,5 s) e 1,0–2,6 s em câmera lenta 1,5× (setpts + fps).
+  const fc = '[0:v]split[a][b];[a]trim=end_frame=75,setpts=PTS-STARTPTS,split[a0][ar];[a0][ar]freezeframes=first=30:last=44:replace=29[a1];[b]trim=start_frame=75:end_frame=107,setpts=(PTS-STARTPTS)*1.5,fps=30000/1001[b1];[a1][b1]concat=n=2:v=1:a=0,scale=out_range=pc,format=yuvj420p[v]';
+  ff(['-i', base, '-f', 'lavfi', '-i', TOM, '-filter_complex', fc, '-map', '[v]', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0', '-r', '30', '-c:a', 'aac', '-ar', '44100', '-shortest', ruim]);
+  ff(['-i', base, '-vf', 'hue=s=0.05,scale=out_range=tv,format=yuv420p', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', ...TAGS, cinza]);
+}
+after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+describe('regras puras', () => {
+  test('perfil: cada etiqueta fora da linha vira um achado; 2997/100 não é 30000/1001', () => {
+    const ok = achadosPerfil({ duration: 1, video: { codec_name: 'h264', pix_fmt: 'yuv420p', color_range: 'tv', color_space: 'bt709', color_primaries: 'bt709', color_transfer: 'bt709', r_frame_rate: '30000/1001', avg_frame_rate: '30000/1001' }, audio: { codec_name: 'aac', sample_rate: '48000' } });
+    assert.ok(ok.every((a) => a.ok), JSON.stringify(ok.filter((a) => !a.ok)));
+    const r = achadosPerfil({ duration: 1, video: { codec_name: 'h264', pix_fmt: 'yuvj420p', color_range: 'pc', r_frame_rate: '2997/100', avg_frame_rate: '2997/100' }, audio: { codec_name: 'aac', sample_rate: '44100' } });
+    assert.deepEqual(r.filter((a) => !a.ok).map((a) => a.regra).sort(), ['perfil:audio_rate', 'perfil:color_primaries', 'perfil:color_range', 'perfil:color_transfer', 'perfil:colorspace', 'perfil:fps', 'perfil:pix_fmt']);
+    // fps da timeline manda: 25 → 25/1.
+    assert.ok(achadosPerfil({ duration: 1, video: { r_frame_rate: '25/1', avg_frame_rate: '25/1' } }, 25).find((a) => a.regra === 'perfil:fps')!.ok);
+  });
+
+  test('níveis: fração de Y fora de 16–235', () => {
+    const y = new Uint8Array(1000).fill(128);
+    y.fill(5, 0, 4);
+    assert.equal(niveis(y).baixo, 0.004);
+    y.fill(250, 4, 8);
+    assert.equal(niveis(y).ymax, 250);
+    assert.equal(Math.round((niveis(y).baixo + niveis(y).alto) * 1000), 8);
+  });
+
+  test('fala pela energia, cortes e cadência de quadro repetido', () => {
+    const db = new Float32Array(400).fill(-80);
+    db.fill(-20, 100, 200); // 1,0–2,0 s
+    db.fill(-20, 210, 300); // vão de 0,1 s junta
+    assert.deepEqual(trechosDeFala(db).map((t) => [t.start, t.end]), [[1, 3]]);
+    const d = Array.from({ length: 120 }, () => 4);
+    d[60] = 40; // corte
+    for (let i = 70; i < 100; i += 3) d[i] = 0.05; // 1,5× por repetição
+    assert.deepEqual(cortesDe(d, 30), [2]);
+    const l = camaraLenta(d, 30);
+    assert.equal(l.length, 1);
+    assert.ok(l[0]!.start < 2.34 && l[0]!.end > 3.2);
+    // Chicote (diferença alta dos dois lados) não é corte.
+    assert.deepEqual(cortesDe(Array.from({ length: 30 }, (_, i) => (i > 10 && i < 20 ? 25 : 4)), 30), []);
+    const m = achadosMovimento([{ start: 1, end: 1.3 }, { start: 3.5, end: 3.9 }], l, [{ start: 0, end: 3.2 }]);
+    assert.deepEqual(m.filter((a) => !a.ok).map((a) => a.regra), ['freeze-sob-fala', 'camera-lenta']);
+  });
+
+  test('nome: clipe Sony e tempo de origem', () => {
+    assert.equal(clipeSony('/x/C3050_B_86s3_cob2.mov'), 'C3050');
+    assert.equal(origemDoNome('C3050_B_86s3_cob2.mov'), 86.3);
+    assert.equal(origemDoNome('C3100_cob_43s60_b.mov'), 43.6);
+    assert.equal(origemDoNome('C3100_66s_punchin_v2.mov'), 66);
+    assert.equal(origemDoNome('v3_A.mov'), null);
+    assert.equal(clipeSony('titulo.mov'), null);
+  });
+
+  test('escala efetiva: bruto vertical 2160 a zoom 3 = 1,5×; recorte 9:16 do 4K deitado = 1080/1215 × zoom', () => {
+    const c = (zoom: number, extra: Partial<Clip> = {}): Clip => ({ id: 'c', assetId: 'a', in: 0, out: 1, by: 'agent', zoom, ...extra });
+    assert.equal(escalaClipe({ width: 2160, height: 3840 }, c(3), 1080, 1920), 1.5);
+    assert.ok(Math.abs(escalaClipe({ width: 3840, height: 2160 }, c(1.5, { framing: { x: 0.5 } }), 1080, 1920, true) - (1080 / 1215) * 1.5) < 0.01);
+    assert.equal(escalaClipe({ width: 2160, height: 3840 }, c(2, { zoomTo: 2.6 }), 1080, 1920), 1.3);
+    assert.ok(Math.abs(escalaOverlay({ width: 2160, height: 3840 }, { framing: { x: 0.5, y: 0.5, zoom: 2.2 } }, 1080, 1920) - 1.1) < 1e-9);
+    assert.equal(escalaOverlay({ width: 1080, height: 1920 }, {}, 1080, 1920), 1);
+  });
+
+  test('projeto: escala, velocidade, boca de outro momento, cobertura embutida e câmera sem sincronia medida', () => {
+    const v = (id: string, p: string, extra: Partial<MediaAsset> = {}): MediaAsset => ({ id, name: path.basename(p), path: p, kind: 'video', duration: 100, width: 2160, height: 3840, fps: 29.97, hasAudio: true, ...extra });
+    const assets = [
+      v('fala', '/b/C3039.MP4', { role: 'fala' }),
+      v('camA', '/e/C3039_cam9x16_A.mov', { role: 'cam', width: 1350, height: 2400, syncOffset: 0 }),
+      v('camB', '/e/C3039_cam9x16_B.mov', { role: 'cam', width: 1350, height: 2400, syncOffset: -2, syncConfianca: 0.93, syncFala: 'fala' }),
+      v('cob', '/i/C3039_B_40s0_cob.mov', { role: 'broll', width: 1080, height: 1920 }),
+      v('ins', '/i/insert.mp4', { role: 'broll', width: 1080, height: 1920 }),
+    ];
+    const main: Clip[] = [
+      { id: 'c1', assetId: 'fala', in: 10, out: 14, by: 'agent', zoom: 3 }, // 0–4: 1,5×
+      { id: 'c2', assetId: 'fala', in: 20, out: 22, by: 'agent', cam: 'camA' }, // 4–6
+      { id: 'c3', assetId: 'fala', in: 30, out: 32, by: 'agent', cam: 'camB', speed: 0.5 }, // 6–10
+      { id: 'c4', assetId: 'cob', in: 0, out: 3, by: 'agent' }, // 10–13
+    ];
+    const ov = (id: string, assetId: string, at: number, srcIn: number, d: number): OverlayItem => ({ id, trackId: 'V2', role: 'broll', anchor: { assetId: 'fala', at }, duration: d, source: { type: 'media', assetId, in: srcIn }, by: 'agent' });
+    const overlays = [ov('mesmo', 'fala', 11, 11, 0.5), ov('outro', 'fala', 12, 50, 0.5), ov('ins', 'ins', 21, 0, 0.5)];
+    const p = { assets, timeline: { fps: 29.97, width: 1080, height: 1920, main, removals: [], pins: [], tracks: [], overlays } } as unknown as Project;
+    const { achados } = achadosProjeto(p, { cortes: [11.5], fala: [{ start: 0, end: 13 }] });
+    const falhas = achados.filter((a) => !a.ok);
+    const de = (r: string) => falhas.filter((a) => a.regra === r);
+    assert.equal(de('escala').length, 1);
+    assert.match(de('escala')[0]!.onde!, /clipe 1/);
+    assert.equal(de('velocidade').length, 1);
+    const boca = de('boca-outro-momento');
+    assert.equal(boca.length, 2, JSON.stringify(boca));
+    assert.ok(boca.some((a) => a.onde!.startsWith('outro') && /Δ 38,00 s/.test(a.medido)));
+    assert.ok(boca.some((a) => /clipe 4/.test(a.onde!) && /11,50/.test(a.medido)));
+    // camA: offset 0 sem confiança reprova; camB (medida, 0,93) passa.
+    const sync = achados.filter((a) => a.regra === 'sync-camera');
+    assert.deepEqual(sync.map((a) => [a.onde!.split(' ')[0], a.ok]), [['C3039_cam9x16_A.mov', false], ['C3039_cam9x16_B.mov', true]]);
+    // Sem fala embaixo, a cobertura de outro momento não reprova.
+    assert.equal(achadosProjeto(p, { fala: [{ start: 3, end: 13 }] }).achados.filter((a) => a.regra === 'boca-outro-momento' && !a.ok && a.onde!.startsWith('outro')).length, 0);
+  });
+});
+
+describe('gate em vídeo sintético', () => {
+  before(sinteticos);
+  test('Y lido é o código gravado: faixa cheia tem 0 e 255, faixa tv fica em 16–235', async () => {
+    const pc = path.join(tmp, 'pc.mp4');
+    const tv = path.join(tmp, 'tv.mp4');
+    const bw = 'color=black:s=64x64:d=1,format=yuv420p[a];color=white:s=64x64:d=1,format=yuv420p[b];[a][b]hstack';
+    ff(['-f', 'lavfi', '-i', bw, '-vf', 'scale=out_range=pc,format=yuvj420p', '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0', pc]);
+    ff(['-f', 'lavfi', '-i', bw, '-vf', 'scale=out_range=tv,format=yuv420p', '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0', '-color_range', 'tv', tv]);
+    const a = niveis(await amostrarY(pc));
+    const b = niveis(await amostrarY(tv));
+    assert.deepEqual([a.ymin, a.ymax], [0, 255]);
+    assert.deepEqual([b.ymin, b.ymax], [16, 235]);
+  });
+
+  test('na linha de entrega: aprova (sem projeto, com aviso)', { timeout: 120_000 }, async () => {
+    const r = await qcTecnico(bom);
+    assert.ok(r.aprovado, JSON.stringify(r.achados.filter((a) => !a.ok), null, 1));
+    assert.ok(r.avisos.some((a) => /sem projeto/.test(a)));
+    assert.ok(r.avisos.some((a) => /padrão/.test(a)));
+  });
+
+  test('fora da linha: perfil, níveis, imagem parada e câmera lenta sob fala, com o tempo', { timeout: 120_000 }, async () => {
+    const r = await qcTecnico(ruim);
+    assert.equal(r.aprovado, false);
+    const f = new Set(r.achados.filter((a) => !a.ok).map((a) => a.regra));
+    for (const regra of ['perfil:pix_fmt', 'perfil:color_range', 'perfil:color_primaries', 'perfil:fps', 'perfil:audio_rate', 'niveis', 'freeze-sob-fala', 'camera-lenta']) assert.ok(f.has(regra), `${regra} não acusou: ${[...f].join(', ')}`);
+    const fr = r.achados.find((a) => a.regra === 'freeze-sob-fala' && !a.ok)!;
+    assert.ok(Math.abs(fr.at! - 29 / 29.97) < 0.1, String(fr.onde));
+    const cl = r.achados.find((a) => a.regra === 'camera-lenta' && !a.ok)!;
+    assert.ok(cl.at! > 2.3 && cl.at! < 2.8, String(cl.onde));
+  });
+
+  test('cinza: saturação abaixo de 0,7× a assinatura (medida dos aprovados)', { timeout: 120_000 }, async () => {
+    const ass = await assinaturaDe([bom]);
+    assert.ok(ass.satavg > 10, `SATAVG do colorido ${ass.satavg}`);
+    const r = await qcTecnico(cinza, { assinatura: ass });
+    const s = r.achados.find((a) => a.regra === 'saturacao')!;
+    assert.equal(s.ok, false, s.medido);
+    assert.ok(!r.avisos.some((a) => /padrão/.test(a)));
+  });
+});

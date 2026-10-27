@@ -32,6 +32,8 @@ export interface MediaAsset {
   syncOffset?: Seconds;
   /** 2ª câmera: id da fala a que o `syncOffset` se refere (com várias falas no projeto, cada câmera é de uma). */
   syncFala?: string;
+  /** 2ª câmera: confiança (0..1) do alinhamento pelo áudio; manual = ausente. */
+  syncConfianca?: number;
   /** Miniaturas para a filmstrip da timeline: grade de quadros a cada `interval` segundos. */
   thumbs?: { file: string; interval: number; w: number; h: number; cols: number; count: number };
   /** Caminhos relativos à pasta do projeto, servidos pelo servidor. */
