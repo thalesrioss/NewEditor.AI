@@ -74,10 +74,12 @@ export interface SourceColor {
 /**
  * Color management por clipe (como o DaVinci): arquivo LOG converte sempre pela entrada do arquivo, nunca como Rec.709.
  * Sem grade, devolve uma neutra só com a conversão. Arquivo Rec.709 (ou sem cor lida): a grade passa igual.
+ * Grade feita em outra entrada (Rec.709 sobre o LOG lavado, ou copiada do reel vizinho): contraste, saturação, curvas e
+ * rodas eram compensação da imagem sem conversão e dobrariam sobre a LUT; ficam o balanço de branco, o look e a textura.
  */
 export function manageGrade(g: ColorGrade | undefined, color: SourceColor | undefined): ColorGrade | undefined {
   if (!color || color.input === 'rec709') return g;
-  const base = g ?? NEUTRAL_GRADE;
+  const base: ColorGrade = !g ? NEUTRAL_GRADE : g.input === color.input ? g : { ...NEUTRAL_GRADE, temperature: g.temperature ?? 0, tint: g.tint ?? 0, ...(g.lut ? { lut: g.lut } : {}), ...(g.sharpen ? { sharpen: g.sharpen } : {}), ...(g.vignette ? { vignette: g.vignette } : {}), ...(g.grain ? { grain: g.grain } : {}) };
   const out: ColorGrade = { ...base, input: color.input, codeRange: color.codeRange };
   if (color.inputLut) out.inputLut = color.inputLut;
   else delete out.inputLut;

@@ -112,7 +112,9 @@ describe('cor de entrada lida do arquivo (color management por clipe)', () => {
     const m = manageGrade(g, color)!;
     assert.equal(m.input, 'slog3');
     assert.equal(m.codeRange, 'full');
-    assert.equal(m.contrast, 0.3);
+    assert.equal(m.contrast, 0, 'contraste feito sobre o LOG lavado não dobra sobre a LUT');
+    assert.equal(manageGrade({ ...g, input: 'slog3', temperature: 0.2 }, color)?.contrast, 0.3, 'grade já na entrada certa passa igual');
+    assert.equal(manageGrade({ ...g, temperature: 0.2 }, color)?.temperature, 0.2, 'balanço de branco fica');
     assert.equal(m.inputLut?.id, 'local:/x.cube');
     assert.ok(gradeWasForced(g, color));
     assert.equal(manageGrade(undefined, color)?.input, 'slog3', 'sem grade: só a conversão');

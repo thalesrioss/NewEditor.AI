@@ -160,7 +160,7 @@ export async function managedGrades(p: Pick<Project, 'assets' | 'timeline'>, gra
     conv.add(`${c.gamma ?? c.input}${c.inputLut ? ' pela LUT oficial' : ' pela conversão da casa (LUT oficial não achada)'}`);
   }
   if (conv.size) notes.push(`cor: entrada lida do arquivo, ${[...conv].join('; ')}`);
-  if (forced.length) notes.push(`ATENÇÃO: grade feita como Rec.709 em arquivo LOG (${forced.slice(0, 4).join(', ')}${forced.length > 4 ? '…' : ''}): convertida pela entrada certa; revise os ajustes`);
+  if (forced.length) notes.push(`ATENÇÃO: grade feita como Rec.709 em arquivo LOG (${forced.slice(0, 4).join(', ')}${forced.length > 4 ? '…' : ''}): convertida pela entrada do arquivo; contraste, saturação e curvas daquela grade foram zerados (eram compensação do LOG lavado), ficou o balanço de branco: revise a cor sobre a imagem convertida`);
   return { grades: out, colors, notes };
 }
 
