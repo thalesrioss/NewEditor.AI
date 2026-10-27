@@ -12,6 +12,7 @@ import { ingest, rebuild, setRole } from '../ingest.ts';
 import { cancelJobsFor, enqueue } from '../jobs.ts';
 import { houseProfile } from '../profiles.ts';
 import { runQc } from '../qc.ts';
+import { anotarOpHumana, canalDaTela, fecharSessaoHumana, registrarDaTela } from '../registro-tela.ts';
 import { reviewDoubts } from '../review.ts';
 import { store } from '../store.ts';
 import { cutWords, restoreWords } from '../transcript-edit.ts';
@@ -54,6 +55,14 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
     }
     const patch = Object.fromEntries(Object.entries({ name, brief, status, client, dueAt, profileId: profileId === null ? undefined : profileId }).filter(([, v]) => v !== undefined));
     if (profileId === null) store.get(req.params.id).profileId = undefined;
+    // Card movido pela tela: para Entregue = o Thales aprovou; de Editado/Entregue de volta para Alteração = reprovou.
+    const canal = canalDaTela(req.headers);
+    const aprovou = status === 'entregue' && cur.status !== 'entregue';
+    const reprovou = status === 'alteracao' && (cur.status === 'editado' || cur.status === 'entregue');
+    if (canal && (aprovou || reprovou)) {
+      await fecharSessaoHumana(cur.id);
+      void registrarDaTela(cur, canal, { tipo: aprovou ? 'aprovacao' : 'reprovacao', pedido: aprovou ? 'Aprovou a entrega (card para Entregue no Editor Brain)' : `Reprovou a versão: card de ${cur.status === 'editado' ? 'Editado' : 'Entregue'} de volta para Alteração`, antes: `status ${cur.status}`, depois: `status ${status}`, ref: `tela:${cur.id}:status:${status}:${cur.version}` });
+    }
     return store.update(req.params.id, patch);
   });
   /** Apagar projeto (Kanban): cancela o que estiver na fila e move a pasta para data/_lixeira (reversível à mão). */
@@ -120,6 +129,9 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
     }
     // Op inválida ou de tipo desconhecido = 400 com o motivo; a timeline fica como estava (CH-0025).
     try {
+      // Op pela tela (⌘K) entra na sessão de edição à mão do Thales; agente por curl, não.
+      const canal = canalDaTela(req.headers);
+      if (canal && (req.body.by ?? 'human') === 'human') anotarOpHumana(req.params.id, req.body.op, canal, req.body.note);
       store.apply(req.params.id, { by: req.body.by ?? 'human', op: req.body.op, note: req.body.note });
     } catch (e) {
       if (e instanceof OpError) throw erro(e.message);
@@ -146,6 +158,8 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
   // --- WebSocket: a timeline ao vivo (ops do humano, desfazer/refazer, eventos do agente) ------------------
   app.get<{ Params: { id: string } }>('/ws/:id', { websocket: true }, (socket, req) => {
     const { id } = req.params;
+    // Só a tela abre o WebSocket: as ops daqui são do Thales (resumo por sessão no registro do Cérebro).
+    const canal = canalDaTela(req.headers) ?? 'editor-brain';
     try {
       store.attach(id, socket);
     } catch {
@@ -167,6 +181,7 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
             store.log(id, 'system', 'A timeline mudou enquanto você editava, então sua ação não foi aplicada — tente de novo.');
             return;
           }
+          anotarOpHumana(id, msg.envelope.op, canal, msg.envelope.note);
           store.apply(id, { ...msg.envelope, by: 'human' });
         } else if (msg.type === 'undo') store.undo(id);
         else if (msg.type === 'redo') store.redo(id);

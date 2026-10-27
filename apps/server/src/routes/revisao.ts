@@ -6,6 +6,7 @@ import { stepEnd } from '../estimate.ts';
 import { approveDecupagem } from '../finalize.ts';
 import { enqueueJob, queuePosition } from '../jobs.ts';
 import { listNotifications, markRead } from '../notify.ts';
+import { canalDaTela, fecharSessaoHumana, registrarDaTela } from '../registro-tela.ts';
 import { reviewDoubts } from '../review.ts';
 import { store } from '../store.ts';
 import { erro, report } from './_comum.ts';
@@ -34,7 +35,12 @@ export async function rotasRevisao(app: FastifyInstance): Promise<void> {
   });
   app.post<{ Params: { id: string } }>('/api/projects/:id/approve', async (req) => {
     const { id } = req.params;
+    const canal = canalDaTela(req.headers);
+    // Pela tela = o Thales aprovou: fecha a edição à mão dele (resumo) e grava a aprovação no Cérebro.
+    if (canal) await fecharSessaoHumana(id);
+    const versao = store.get(id).version;
     const r = await approveDecupagem(id);
+    if (canal) void registrarDaTela(store.get(id), canal, { tipo: 'aprovacao', pedido: 'Aprovou a decupagem no Editor Brain', depois: `decupagem aprovada (${store.get(id).timeline.main.length} clipe(s)); o agente finaliza`, ref: `tela:${id}:aprovou-decupagem:${versao}` });
     stepEnd(id, 'revisao');
     await saveGabarito(store.get(id), 'aprovado');
     void enqueueJob(id, 'finalizar').catch((e) => report(id, 'finalização', e));
@@ -44,7 +50,11 @@ export async function rotasRevisao(app: FastifyInstance): Promise<void> {
   // --- Ciclo de alteração: comentários com tempo → o agente faz → versão nova -----------------------
   app.post<{ Params: { id: string }; Body: { at: number; text: string; by?: 'editor' | 'cliente' } }>('/api/projects/:id/comments', async (req) => {
     if (!req.body.text?.trim()) throw erro('comentário vazio');
-    return addComment(req.params.id, req.body);
+    const c = addComment(req.params.id, req.body);
+    // Comentário do editor pela tela = pedido de alteração do Thales (o do cliente, repassado, não é dele).
+    const canal = canalDaTela(req.headers);
+    if (canal && c.by === 'editor') void registrarDaTela(store.get(req.params.id), canal, { tipo: 'alteracao', pedido: c.text, ref: `tela:${req.params.id}:${c.id}` });
+    return c;
   });
   app.patch<{ Params: { id: string; cid: string }; Body: { text?: string; at?: number; status?: 'aberto' | 'feito' | 'manual' | 'descartado' } }>('/api/projects/:id/comments/:cid', async (req) => patchComment(req.params.id, req.params.cid, req.body));
   app.delete<{ Params: { id: string; cid: string } }>('/api/projects/:id/comments/:cid', async (req) => (removeComment(req.params.id, req.params.cid), { ok: true }));
