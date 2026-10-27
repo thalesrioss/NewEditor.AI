@@ -131,7 +131,7 @@ export class Compositor {
     if (!t) {
       const gl = this.gl;
       t = this.texture(gl.TEXTURE_3D, 1);
-      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, N, N, N, 0, gl.RGB, gl.FLOAT, buildLut(g, N, g.lut ? (this.cubes.get(g.lut.id) ?? null) : null));
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, N, N, N, 0, gl.RGB, gl.FLOAT, buildLut(g, N, g.lut ? (this.cubes.get(g.lut.id) ?? null) : null, g.inputLut ? (this.cubes.get(g.inputLut.id) ?? null) : null));
       this.luts.set(key, t);
       if (this.luts.size > 12) {
         const [k0, t0] = this.luts.entries().next().value!;

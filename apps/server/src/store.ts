@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   applyOp,
+  manageGrade,
   normalizeTimeline,
   uid,
   type AgentActivity,
@@ -211,6 +212,11 @@ class Store {
   /** Aplica uma operação. Lança OpError se inválida (nada muda). */
   apply(id: string, env: OpEnvelope): Project {
     const p = this.get(id);
+    // Color management por clipe: arquivo LOG (cor lida do XML da câmera) nunca recebe grade como Rec.709 (FB-0180).
+    if (env.op.type === 'set_grade' && env.op.grade) {
+      const color = p.assets.find((a) => a.id === (env.op as { assetId: string }).assetId)?.color;
+      env = { ...env, op: { ...env.op, grade: manageGrade(env.op.grade, color)! } };
+    }
     const next = applyOp(p.timeline, env.op, env.by);
     if (!this.openTx.has(id)) this.pushStep(id, env.note ?? LABEL[env.op.type] ?? 'Alteração', p.timeline);
     p.timeline = next;

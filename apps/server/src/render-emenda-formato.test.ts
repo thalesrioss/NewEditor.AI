@@ -37,17 +37,13 @@ after(async () => {
 });
 
 describe('emenda entre bruto de câmera e intermediário ProRes (CH-0029, CH-0030)', () => {
-  test('faixa do projeto = a do 1º clipe de vídeo; todo trecho sai nela, com as mesmas etiquetas', async () => {
-    const { mainRange, segmentFormat, sourceRange } = await import('./render.ts');
+  test('todo trecho sai em faixa legal, 4:2:2 10 bits, com as mesmas etiquetas bt709 (FB-0180)', async () => {
+    const { segmentFormat, sourceRange, SEGMENT_CODEC } = await import('./render.ts');
     assert.equal(await sourceRange(camera), 'pc');
     assert.equal(await sourceRange(prores), 'tv');
-    const v = (id: string, file: string) => ({ id, name: id, path: file, kind: 'video' as const, duration: 3 });
-    const c = (assetId: string) => ({ id: assetId, assetId, in: 0, out: 1, by: 'human' as const });
-    const assets = [v('cam', camera), v('pr', prores)];
-    assert.equal(await mainRange({ assets, timeline: { main: [c('cam'), c('pr')] } } as never), 'pc');
-    assert.equal(await mainRange({ assets, timeline: { main: [c('pr'), c('cam')] } } as never), 'tv');
-    assert.match(segmentFormat('pc').filter, /out_range=pc,format=yuv420p$/);
-    assert.deepEqual(segmentFormat('tv').tags.slice(0, 2), ['-color_range', 'tv']);
+    assert.match(segmentFormat().filter, /out_range=tv:out_color_matrix=bt709,format=yuv422p10le,setparams=/);
+    assert.deepEqual(segmentFormat().tags, ['-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709']);
+    assert.ok(SEGMENT_CODEC.includes('prores_ks'));
   });
 
   test('B-roll atravessando a emenda aparece inteiro e a fala não perde nada', { timeout: 120_000 }, async () => {

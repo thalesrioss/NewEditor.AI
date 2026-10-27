@@ -11,6 +11,7 @@ import { atomic, run, filterGraphArgs } from './media.ts';
 import { renderTextLayer } from './textlayer.ts';
 import { regionFxGraph } from './region-fx.ts';
 import { captionsWithoutWords } from './legenda-vazia.ts';
+import { managedGrades } from './color-source.ts';
 import { projectSpeechDb, renderSfxTrack, sfxBusDb } from './sfx-track.ts';
 
 /** Logo usada no fundo de peças só de áudio. */
@@ -50,7 +51,9 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
   // Voz limpa (se ligada): o export lê o MESMO áudio limpo que o preview toca.
   await syncVoiceClean(p.id);
   const assets = new Map(p.assets.map((a) => [a.id, a]));
-  const fps = tl.fps || 30;
+  // fps exato (29,97 = 30000/1001): o tempo de cada quadro no grafo bate com o dos trechos, senão o 1º quadro de um
+  // B-roll chegava microssegundos depois do quadro da fala e ela aparecia nele (CH-0008).
+  const fps = exactFps(tl.fps || 30);
   // Entrega no padrão registrado no Cérebro do Editor (04_EDITOR: base 1080×1920).
   const { W, H } = deliverySize(tl);
   const total = timelineDuration(tl);
@@ -70,13 +73,14 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
   if (tl.voiceDenoise && clips.some((c) => cleanMaster(p, assets.get(c.assetId)!))) notes.push(`voz limpa ${Math.round(tl.voiceDenoise * 100)}%`);
   try {
     // --- 0. Cor: um LUT por arquivo (câmera), o mesmo que o preview usa --------------------------
-    const { luts, lutFilter } = await gradeFilters(tl.grades, work);
+    // Color management por clipe (como o DaVinci): a entrada sai do arquivo (XML da câmera), LOG converte sempre.
+    const managed = await managedGrades(p);
+    notes.push(...managed.notes);
+    const { luts, lutFilter } = await gradeFilters(managed.grades, work);
 
     // --- 1. Trechos ---------------------------------------------------------------------------
     const starts = clipStarts(tl);
     const frameAt = (t: number) => Math.round(t * fps);
-    // Uma faixa de níveis para todos os trechos (CH-0029/CH-0030).
-    const range = await mainRange(p);
     const jobs = clips.map((c, i) => ({ c, i, a: assets.get(c.assetId)!, frames: frameAt(starts[i]! + clipDuration(c)) - frameAt(starts[i]!) }));
     let done = 0;
     const tick = () => onProgress?.(Math.min(0.85, (++done / (jobs.length * (hasVideo ? 2 : 1))) * 0.85));
@@ -85,7 +89,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const seg = (ext: string) => path.join(work, `${String(i).padStart(4, '0')}.${ext}`);
       if (hasVideo) {
         const cam = c.cam ? assets.get(c.cam) : undefined;
-        await segmentVideo(a, c, frames, fps, W, H, seg('mp4'), lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam, range);
+        await segmentVideo(a, c, frames, fps, W, H, seg('mov'), lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam);
         tick();
       }
       await segmentAudio(a, c, seg('wav'), cleanMaster(p, a));
@@ -100,8 +104,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     };
     const mainA = path.join(work, 'main.wav');
     await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('wav'), '-c', 'copy', mainA]);
-    const mainV = path.join(work, 'main.mp4');
-    if (hasVideo) await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('mp4'), '-c', 'copy', mainV]);
+    const mainV = path.join(work, 'main.mov');
+    if (hasVideo) await run('ffmpeg', ['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', await list('mov'), '-c', 'copy', mainV]);
     onProgress?.(0.88);
 
     // --- 3. Passada final: overlays, mixagem, loudness ---------------------------------------
@@ -137,23 +141,21 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       // Fala só em áudio (VO): a peça AINDA sai em vídeo — fundo + logo + forma de onda; B-roll cobre por cima.
       const waveW = Math.round((W * 0.8) / 2) * 2;
       const waveH = Math.round((H * 0.12) / 2) * 2;
-      parts.push(`color=c=0x0b0d12:s=${W}x${H}:r=${fps},trim=duration=${total}[bg]`);
+      parts.push(`color=c=0x0b0d12:s=${W}x${H}:r=${fpsRational(fps)},trim=duration=${total}[bg]`);
       parts.push(`[0:v]scale=${Math.round(W * 0.16)}:-1,format=rgba[logo]`);
       parts.push(`[1:a]asplit=2[a1][awave]`);
-      parts.push(`[awave]aformat=channel_layouts=mono,showwaves=s=${waveW}x${waveH}:mode=cline:draw=full:rate=${fps}:colors=0x4f84ff:scale=sqrt,format=rgba,colorkey=0x000000:0.02:0[wave]`);
+      parts.push(`[awave]aformat=channel_layouts=mono,showwaves=s=${waveW}x${waveH}:mode=cline:draw=full:rate=${fpsRational(fps)}:colors=0x4f84ff:scale=sqrt,format=rgba,colorkey=0x000000:0.02:0[wave]`);
       parts.push(`[bg][logo]overlay=(W-w)/2:H*0.34[bg1]`);
       parts.push(`[bg1][wave]overlay=(W-w)/2:H*0.48:shortest=1,format=yuv420p[v0]`);
     }
     // Com fala em vídeo, a imagem base é a própria entrada 0; overlays encadeiam a partir dela.
     let vCur = hasVideo ? '0:v' : 'v0';
-    let videoTouched = !hasVideo;
     // Efeito por região (CH-0033): na imagem da fala, já com a cor, antes de B-roll, motion, lettering e legenda.
     if (hasVideo && !trackFlag(tl, 'V1', 'hidden')) {
       const rfx = regionFxGraph(tl, W, H, fps, vCur);
       if (rfx.parts.length) {
         parts.push(...rfx.parts);
         vCur = rfx.out;
-        videoTouched = true;
         notes.push(`${tl.regionFx!.length} efeito(s) por região`);
       }
     }
@@ -179,14 +181,13 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const d = end - start;
       if (d <= 0.02) return;
       // Imagem (frame, PNG com alfa, GIF): entra como stream em loop pela duração da camada.
-      const idx = inputs.push(a.kind === 'image' ? { path: a.path, pre: ['-loop', '1', '-framerate', String(fps), '-t', (d + 0.1).toFixed(3)] } : a.path) - 1;
+      const idx = inputs.push(a.kind === 'image' ? { path: a.path, pre: ['-loop', '1', '-framerate', fpsRational(fps), '-t', (d + 0.1).toFixed(3)] } : a.path) - 1;
       if ((o.role === 'broll' || o.role === 'motion') && (a.kind === 'video' || a.kind === 'image')) {
         const fit = overlayFit(a, W, H, o.framing, lutFilter);
         const w = overlayFrames(start, end, fps);
-        parts.push(`[${idx}:v:0]${overlayTiming(o, srcIn, w.at, d)},${fit},setsar=1,fps=${fps},tpad=stop_mode=clone:stop_duration=${(2 / fps).toFixed(4)}[ov${n}]`);
+        parts.push(`[${idx}:v:0]${overlayTiming(o, srcIn, w.at, d)},${fit},setsar=1,fps=${fpsRational(fps)},tpad=stop_mode=clone:stop_duration=${(2 / fps).toFixed(4)}[ov${n}]`);
         parts.push(`[${vCur}][ov${n}]overlay=enable='${w.enable}':eof_action=pass[vo${n}]`);
         vCur = `vo${n}`;
-        videoTouched = true;
       } else if ((o.role === 'sfx' || o.role === 'music') && a.hasAudio) {
         const ms = Math.round(start * 1000);
         const mix = o.mix;
@@ -210,7 +211,6 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const en = flashes.map((t) => `between(t\\,${t.toFixed(4)}\\,${(t + fd).toFixed(4)})`).join('+');
       parts.push(`[${vCur}]negate=enable='${en}',hue=s=0:enable='${en}'[vflash]`);
       vCur = 'vflash';
-      videoTouched = true;
     }
     // Texto por cima de tudo (legenda nunca fica escondida atrás de B-roll).
     const transcripts: Record<string, TextWord[]> = {};
@@ -223,7 +223,6 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const t = inputs.push(textMov) - 1;
       parts.push(`[${vCur}][${t}:v]${TEXT_OVERLAY}[vtext]`);
       vCur = 'vtext';
-      videoTouched = true;
     }
     // SFX dos motions: os mesmos efeitos do preview, abaixo da fala (nível calibrado pelo envelope da voz).
     const sfxWav = !trackFlag(tl, MOTION_SFX_TRACK, 'muted') && (motions.length || letterings.length || flashCues.length) ? await renderSfxTrack(motions, letterings, total, sfxBusDb(await projectSpeechDb(p, dir), tl.motionSfxDb ?? 0), work, flashCues, tl.sfxBank ?? 'sintetizado') : null;
@@ -234,6 +233,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     }
     // O loudnorm vai numa passada só dele (`normalizeMix`, CH-0030): aqui, com duas saídas (vídeo e mix), o ffmpeg 9
     // encerrava o grafo sem o loudnorm devolver o que segura de lookahead, e a mix saía 6 a 9 s curta (fim mudo).
+    // Um só encode com perda, aqui: entrega em faixa legal, 4:2:0, matriz bt709 (os trechos chegam em ProRes 10 bits).
+    parts.push(`[${vCur}]${DELIVERY_VIDEO_FILTER}[vout]`);
     parts.push(`${audio.join('')}amix=inputs=${audio.length}:duration=first:normalize=0,aformat=sample_rates=48000:channel_layouts=stereo[aout]`);
     const graph = path.join(work, 'final.txt');
     await fs.writeFile(graph, parts.join(';\n'));
@@ -247,9 +248,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     if (!hasVideo) args.push('-loop', '1');
     for (const f of inputs) (typeof f === 'string' ? args.push('-i', f) : args.push(...f.pre, '-i', f.path));
     args.push(...(await filterGraphArgs(graph)));
-    // Sem overlay de vídeo, a imagem já está pronta: só copia (não recodifica duas vezes).
-    if (videoTouched) args.push('-map', `[${vCur}]`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(fps));
-    else args.push('-map', '0:v', '-c:v', 'copy');
+    args.push('-map', '[vout]', ...deliveryVideoArgs(fps));
     // Imagem num arquivo, mixagem em WAV no outro: o AAC só é feito depois, já no alvo de loudness (`deliverAudio`).
     const videoOnly = path.join(work, 'video.mp4');
     const premix = path.join(work, 'premix.wav');
@@ -284,7 +283,11 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
     const f = path.join(work, `grade-${luts.size}.cube`);
     // Look (LUT .cube do CinePRO) entra depois da conversão e das primárias — a mesma composição do preview.
     const cube = grade.lut ? await cineproCube(grade.lut.id).catch(() => null) : null;
-    await fs.writeFile(f, lutToCube(buildLut(grade, 33, cube), 33));
+    // Conversão pela LUT oficial do fabricante: sem ela no disco, o render falha (não sai LOG lavado em silêncio).
+    const inCube = grade.inputLut ? await cineproCube(grade.inputLut.id) : null;
+    // Com a LUT oficial, 65 pontos: a composição com a do fabricante (33) não perde a curva nas sombras.
+    const n = inCube ? 65 : 33;
+    await fs.writeFile(f, lutToCube(buildLut(grade, n, cube, inCube), n));
     luts.set(assetId, f);
   }
   // Textura (nitidez, vinheta, grão) do grade: filtros espaciais, com os mesmos valores do shader do preview.
@@ -296,7 +299,8 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
     if (t.grain > 0) f.push(`noise=alls=${Math.round(t.grain * 40)}:allf=t+u`);
     return f.length ? `,${f.join(',')}` : '';
   };
-  return { luts, lutFilter: (assetId) => `${luts.has(assetId) ? `,lut3d=file='${luts.get(assetId)}':interp=tetrahedral` : ''}${texFilter(assetId)}` };
+  // LUT em RGB de 16 bits (o bruto LOG de 8 bits não ganha degrau a mais na conversão).
+  return { luts, lutFilter: (assetId) => `${luts.has(assetId) ? `,format=gbrp16le,lut3d=file='${luts.get(assetId)}':interp=tetrahedral` : ''}${texFilter(assetId)}` };
 }
 
 /** Tamanho de entrega do export (lado curto 1080), o mesmo para o render e para o quadro de conferência. */
@@ -308,33 +312,57 @@ export function deliverySize(tl: Pick<Project['timeline'], 'width' | 'height'>):
 /** Faixa de níveis do vídeo: 'pc' (cheia, preto 0, bruto de câmera yuvj) ou 'tv' (limitada, preto 16). */
 export type Range = 'pc' | 'tv';
 
+/** Etiquetas de cor da entrega e dos trechos: faixa legal, Rec.709 nas três (matriz, primárias, transferência). */
+export const BT709_TV_TAGS = ['-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
+
 /**
  * Todo trecho da faixa principal sai no mesmo formato e com as mesmas etiquetas de cor, venha de bruto de câmera (yuvj,
- * faixa cheia, sem etiqueta) ou de intermediário ProRes (faixa limitada, bt709). Misturados, o main.mp4 trocava de
+ * faixa cheia, sem etiqueta) ou de intermediário ProRes (faixa limitada, bt709). Misturados, o main trocava de
  * formato na emenda e o ffmpeg 9 refazia ali o grafo da passada final: o B-roll por cima sumia ou o render travava
- * (CH-0029) e o loudnorm perdia o que segurava, tirando segundos da fala (CH-0030).
+ * (CH-0029) e o loudnorm perdia o que segurava, tirando segundos da fala (CH-0030). Sempre faixa legal (a de entrega;
+ * herdar a do 1º clipe deu 9 reels pc e 11 tv na mesma série, FB-0180) e 4:2:2 10 bits: o trecho é intermediário
+ * (ProRes 422 HQ), o único encode com perda é o da entrega.
  */
-export function segmentFormat(range: Range): { filter: string; tags: string[] } {
-  return { filter: `scale=out_range=${range},format=yuv420p`, tags: ['-color_range', range, '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'] };
+export function segmentFormat(): { filter: string; tags: string[] } {
+  return { filter: `scale=out_range=tv:out_color_matrix=bt709,format=yuv422p10le,${BT709_PARAMS}`, tags: BT709_TV_TAGS };
+}
+
+/** Trecho intermediário: ProRes 422 HQ 10 bits (sem perda visível; o x264 veryfast crf 17 era uma 2ª geração). */
+export const SEGMENT_CODEC = ['-c:v', 'prores_ks', '-profile:v', '3', '-vendor', 'apl0', '-pix_fmt', 'yuv422p10le'];
+
+/**
+ * Etiquetas no próprio quadro: o ffmpeg 7+ leva as do quadro ao encoder por cima das opções `-color_*` (sem isto,
+ * primárias e transferência saíam `unknown`, como nas 55 entregas medidas).
+ */
+export const BT709_PARAMS = 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709';
+
+/** Passada final → entrega: faixa legal, 4:2:0 8 bits, matriz bt709, escala lanczos. */
+export const DELIVERY_VIDEO_FILTER = `scale=flags=lanczos:out_range=tv:out_color_matrix=bt709,format=yuv420p,${BT709_PARAMS}`;
+
+/** fps NTSC arredondado (29,97) → o valor exato (30000/1001). */
+export function exactFps(fps: number): number {
+  for (const base of [24, 30, 60, 120]) if (Math.abs(fps - (base * 1000) / 1001) < 0.005) return (base * 1000) / 1001;
+  return fps;
+}
+
+/** fps da timeline como fração exata (29,97 → 30000/1001): `-r 29.97` gravava 2997/100. */
+export function fpsRational(fps: number): string {
+  for (const base of [24, 30, 60, 120]) if (Math.abs(fps - (base * 1000) / 1001) < 0.005) return `${base * 1000}/1001`;
+  return Number.isInteger(fps) ? String(fps) : String(Math.round(fps * 1000) / 1000);
+}
+
+/**
+ * O único encode com perda (FB-0180 A2): x264 High 4.2 slow, crf 16 com teto de 25 Mb/s, aq-mode 3 (degradê de parede e
+ * pele), CFR no fps exato, as quatro etiquetas bt709/tv. Os aprovados do cliente são yuv420p/tv/bt709.
+ */
+export function deliveryVideoArgs(fps: number): string[] {
+  return ['-c:v', 'libx264', '-preset', 'slow', '-tune', 'film', '-crf', '16', '-maxrate', '25M', '-bufsize', '50M', '-profile:v', 'high', '-level:v', '4.2', '-x264-params', 'aq-mode=3', '-pix_fmt', 'yuv420p', '-fps_mode', 'cfr', '-r', fpsRational(fps), ...BT709_TV_TAGS];
 }
 
 /** Faixa de níveis de um arquivo de vídeo (cabeçalho). */
 export async function sourceRange(file: string): Promise<Range> {
   const raw = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt,color_range', '-of', 'csv=p=0', file]).catch(() => Buffer.from(''))).toString();
   return /yuvj|\bpc\b/.test(raw) ? 'pc' : 'tv';
-}
-
-/**
- * Faixa dos trechos de um projeto: a do 1º clipe de vídeo da faixa principal. Projeto só de bruto sai como antes (a
- * escala do /quadro e do QC não muda); o que vier na outra faixa é convertido.
- */
-export async function mainRange(p: Pick<Project, 'assets' | 'timeline'>): Promise<Range> {
-  const assets = new Map(p.assets.map((a) => [a.id, a]));
-  for (const c of p.timeline.main) {
-    const a = assets.get(c.cam ?? c.assetId) ?? assets.get(c.assetId);
-    if (a?.kind === 'video') return sourceRange(a.path);
-  }
-  return 'tv';
 }
 
 /**
@@ -374,11 +402,13 @@ export function segmentVideoFilter(src: Pick<MediaAsset, 'width' | 'height'>, c:
     const sh = even(Math.min(H, W / ar));
     // O zoompan (d=1) entrega 1 quadro por quadro de entrada: a fonte entra já no fps da timeline, senão um bruto
     // 23,976 numa timeline 29,97 sai 1,25× mais rápido que o áudio (CH-0017).
-    parts.push(`fps=${fps}`);
-    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${rx}':y='(ih-ih/zoom)*${ry}':d=1:s=${sw}x${sh}:fps=${fps}`);
+    parts.push(`fps=${fpsRational(fps)}`);
+    parts.push(`zoompan=z='${z0}+(${(z1 - z0).toFixed(4)})*(1-pow(1-min(1\\,on/${framesPlayed})\\,3))':x='(iw-iw/zoom)*${rx}':y='(ih-ih/zoom)*${ry}':d=1:s=${sw}x${sh}:fps=${fpsRational(fps)}`);
   } else if (z0 > 1) parts.push(`crop=iw/${z0}:ih/${z0}:x=(iw-ow)*${ax}:y=(ih-oh)*${ay}`);
-  // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K).
-  parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}`);
+  // A cor entra depois de reduzir para o tamanho de entrega (mesmo resultado, 4× menos pixels que no 4K). Lanczos, e a
+  // matriz bt709 dita: o bruto de câmera vem sem etiqueta e o padrão do swscale (bt601) puxava a pele para o verde.
+  const matrix = (src.height ?? 1080) >= 720 ? ':in_color_matrix=bt709' : '';
+  parts.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease:flags=lanczos${matrix}${lut},pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fpsRational(fps)}`);
   if (c.freeze) parts.push(`tpad=stop_mode=clone:stop_duration=${c.freeze}`);
   return parts.join(',');
 }
@@ -405,15 +435,17 @@ export function overlayFrames(start: number, end: number, fps: number): { f0: nu
  * reframe em volta do rosto, zoom fixo (crop) ou animado (zoompan, ease-out), congelamento (tpad) e a 2ª câmera
  * (mesmo trecho, deslocado pelo `syncOffset`).
  */
-export async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset, range: Range = 'tv'): Promise<void> {
+export async function segmentVideo(a: MediaAsset, c: Clip, frames: number, fps: number, W: number, H: number, out: string, lut = '', reframe = false, cam?: MediaAsset): Promise<void> {
   const src = cam ?? a;
   const off = cam ? (cam.syncOffset ?? 0) : 0;
-  const fmt = segmentFormat(range);
+  const fmt = segmentFormat();
   const vf = `${segmentVideoFilter(src, c, fps, W, H, lut, reframe)},${fmt.filter}`;
   const limit = c.freeze ? ['-t', String(c.out - c.in + 0.05)] : [];
   const want = Math.max(1, frames);
-  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(want), '-vf', vf, '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-pix_fmt', 'yuv420p', ...fmt.tags, '-r', String(fps), out];
-  await encodeExactFrames([['-hwaccel', 'videotoolbox', ...base], base], out, want);
+  // Decodificação na CPU: o VideoToolbox perdia quadros sem erro (CH-0027, 7-8 quadros no 04 v1) e a contagem não
+  // pega quadro trocado. `out` em .mov (ProRes).
+  const base = ['-y', '-v', 'error', '-ss', String(c.in + off), ...limit, '-i', src.path, '-frames:v', String(want), '-vf', vf, '-an', ...SEGMENT_CODEC, ...fmt.tags, '-r', fpsRational(fps), out];
+  await encodeExactFrames([base], out, want);
 }
 
 /** Duração do arquivo (s) pelo cabeçalho. */

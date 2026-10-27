@@ -9,6 +9,8 @@ import { readEnvelope } from './media.ts';
 import { store } from './store.ts';
 
 const HOP = 0.01;
+/** Confiança mínima do alinhamento pelo áudio para a câmera entrar na entrega (FB-0180 A6). */
+export const SYNC_MIN = 0.8;
 
 /** Correlação cruzada normalizada entre dois envelopes (dBFS/10 ms). Devolve o atraso de `b` em relação a `a`. */
 function bestLag(a: Float32Array, b: Float32Array, maxLagS: number): { lag: number; score: number } {
@@ -107,8 +109,10 @@ export async function syncCamera(projectId: string, camId: string, opts: { fala?
     res = { offset: best.lag, confianca: Math.max(0, Math.min(1, best.score / 60)), fala: best.fala };
   }
   const offset = Math.round(res.offset * 1000) / 1000;
-  store.upsertAsset(projectId, { ...cam, role: 'cam', syncOffset: offset, syncFala: res.fala.id });
-  const como = opts.offset !== undefined ? 'deslocamento manual' : `alinhada pelo áudio, confiança ${Math.round(res.confianca * 100)}%`;
+  // A confiança só existe quando o áudio mediu (FB-0180 A6): offset digitado fica sem ela e o qc-tecnico reprova.
+  const manual = opts.offset !== undefined;
+  store.upsertAsset(projectId, { ...cam, role: 'cam', syncOffset: offset, syncFala: res.fala.id, syncConfianca: manual ? undefined : Math.round(res.confianca * 1000) / 1000 });
+  const como = manual ? 'deslocamento manual, sem medida: o gate técnico reprova câmera sem sincronia pelo áudio' : `alinhada pelo áudio, confiança ${Math.round(res.confianca * 100)}%${res.confianca < SYNC_MIN ? ` (abaixo de ${SYNC_MIN * 100}%: o gate técnico reprova; confira a câmera)` : ''}`;
   store.log(projectId, 'agent', `2ª câmera: ${cam.name} com a fala ${res.fala.name} (${offset >= 0 ? '+' : ''}${offset.toFixed(2)} s, ${como}).`);
   return { offset, confianca: res.confianca, fala: res.fala.id };
 }

@@ -70,8 +70,11 @@ export function EnginePlayer() {
   // Looks do CinePRO nas correções (ou no rascunho): baixa o .cube e entrega ao compositor, que refaz a LUT.
   useEffect(() => {
     const ids = new Set<string>();
-    for (const g of Object.values(timeline?.grades ?? {})) if (g.lut) ids.add(g.lut.id);
-    if (gradeDraft?.grade.lut) ids.add(gradeDraft.grade.lut.id);
+    // A LUT oficial de entrada (S-Log3 da Sony, color management por clipe) vem pelo mesmo caminho dos looks.
+    for (const g of [...Object.values(timeline?.grades ?? {}), ...(gradeDraft ? [gradeDraft.grade] : [])]) {
+      if (g.lut) ids.add(g.lut.id);
+      if (g.inputLut) ids.add(g.inputLut.id);
+    }
     for (const id of ids) {
       const comp = engine.current?.compositor;
       if (!comp || comp.hasCube(id)) continue;
