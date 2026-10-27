@@ -57,7 +57,7 @@ describe('registro do Thales no Cérebro (frente R)', () => {
     const r = await registrarThales({ tipo: 'alteracao', canal: 'slack', pedido: 'Cor e tem uns takes onde o áudio do Leandro está desincronizado', antes: 'v6 com boca de outro momento', depois: 'cortar na pausa', projeto: 'eq2210-03', cliente: 'Equity Sales', ref: '1793072012.038469', quando: '2026-10-27 00:33', quem: 'studio-gestor-1' });
     assert.equal(r.newstudios?.gravado, true);
     assert.equal(r.cofre?.gravado, true);
-    assert.deepEqual(r.avisos, []);
+    assert.deepEqual(r.avisos, ['registro.py do cofre não encontrado: notas A-NN não geradas']);
     assert.ok(fs.readFileSync(path.join(MEM, 'correcoes.jsonl'), 'utf8').startsWith(NS_COR));
     // A linha velha do cofre (sem quebra no fim) continua inteira e a nova vem na linha de baixo.
     assert.equal(linhas(path.join(COFRE, 'correcoes.jsonl'))[0], COFRE_COR);
@@ -88,7 +88,7 @@ describe('registro do Thales no Cérebro (frente R)', () => {
     assert.equal(ns.tipo, 'aprovacao');
     assert.equal(ns.pedido_literal, 'card movido para Aprovado');
     const cf = ultima(path.join(COFRE, 'decisoes.jsonl'));
-    assert.deepEqual(Object.keys(cf).slice(0, 15), ['skill', 'projeto', 'data', 'decision', 'level', 'context', 'justification', 'evidence', 'confidence', 'alternatives', 'result', 'learning', 'origem', 'fonte', 'registrado_por']);
+    assert.deepEqual(Object.keys(cf).slice(0, 16), ['skill', 'projeto', 'data', 'titulo', 'decision', 'level', 'context', 'justification', 'evidence', 'confidence', 'alternatives', 'result', 'learning', 'origem', 'fonte', 'registrado_por']);
     assert.equal(cf.decision, 'eq2210-15 v4 aprovada');
     assert.equal(cf.justification, 'decisão do Thales: card movido para Aprovado');
     assert.equal(cf.fonte, 'newstudios');

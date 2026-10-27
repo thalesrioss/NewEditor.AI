@@ -16,6 +16,7 @@ import path from 'node:path';
 import type { Project } from '@neweditor/core';
 import { DATA_ROOT } from './config.ts';
 import { slug } from './profiles.ts';
+import { notaRecusado, raizCofre, rodarRegistroPy } from './registro-cofre.ts';
 import { PRODUTORA_DIR } from './videos.ts';
 
 export type TipoThales = 'aprovacao' | 'reprovacao' | 'alteracao';
@@ -47,6 +48,8 @@ export interface RegistroThales {
 export interface ResultadoRegistro {
   newstudios: { arquivo: string; gravado: boolean; duplicado?: boolean } | null;
   cofre: { arquivo: string; gravado: boolean; duplicado?: boolean } | null;
+  /** R4: saída do registro.py do cofre e a nota R-NN criada (reprovação). */
+  cofreNotas?: { registro?: string; recusado?: string };
   avisos: string[];
 }
 
@@ -123,9 +126,12 @@ export function linhaCofre(r: RegistroThales): string {
   const evidencia = `Thales (${r.canal}, ${horaDe(d)})`;
   const comum = { skill: r.skill ?? '06-editor', projeto: projetoDe(r), data: dataDe(d) };
   const fim = { origem: 'Thales', fonte: 'newstudios', registrado_por: r.quem ?? 'editor-brain', tipo: r.tipo, canal: r.canal, cliente: r.cliente ? slug(r.cliente) : '', ref: r.ref ?? '' };
+  // R4: toda linha do cofre leva um título curto (o registro.py usa no nome da nota).
+  const titulo = r.titulo ?? `${r.tipo === 'aprovacao' ? 'Aprovou: ' : r.tipo === 'reprovacao' ? 'Reprovou: ' : ''}${curto(r.pedido, 70)}`;
   if (r.tipo === 'aprovacao') {
     return linhaJson({
       ...comum,
+      titulo,
       decision: r.depois || `aprovado pelo Thales: ${r.pedido}`,
       level: 'PREFERÊNCIA',
       context: r.antes ?? '',
@@ -138,7 +144,6 @@ export function linhaCofre(r: RegistroThales): string {
       ...fim,
     });
   }
-  const titulo = r.titulo ?? `${r.tipo === 'reprovacao' ? 'Reprovou: ' : ''}${curto(r.pedido, 70)}`;
   return linhaJson({
     ...comum,
     titulo,
@@ -231,9 +236,33 @@ async function gravar(r: RegistroThales): Promise<ResultadoRegistro> {
     await anexar(arq, d.linha);
     res[d.chave] = { arquivo: arq, gravado: true };
   }
+  if (res.cofre?.gravado) await notasDoCofre(r, res).catch((e) => res.avisos.push(`notas do cofre: ${(e as Error).message}`));
   const cliente = r.cliente ? slug(r.cliente) : clienteDoTexto(projetoDe(r));
   if (cliente && (res.newstudios?.gravado || res.cofre?.gravado)) await atualizarPerfil(cliente).catch((e) => res.avisos.push(`perfil do cliente: ${(e as Error).message}`));
   return res;
+}
+
+/**
+ * R4: depois da linha no cofre, o registro.py do cofre gera a nota A-NN e a lista na nota do cliente; reprovação de
+ * peça inteira vira também a nota R-NN em Recusados/.
+ */
+async function notasDoCofre(r: RegistroThales, res: ResultadoRegistro): Promise<void> {
+  const raiz = raizCofre(cofreDir());
+  res.cofreNotas = {};
+  let linha: number | undefined;
+  if (r.tipo !== 'aprovacao') linha = (await fs.readFile(path.join(cofreDir(), 'correcoes.jsonl'), 'utf8')).replace(/\n+$/, '').split('\n').length;
+  if (await existe(path.join(cofreDir(), 'bin', 'registro.py'))) {
+    try {
+      res.cofreNotas.registro = await rodarRegistroPy(raiz);
+    } catch (e) {
+      res.avisos.push(`registro.py do cofre falhou: ${(e as Error).message}`);
+    }
+  } else res.avisos.push('registro.py do cofre não encontrado: notas A-NN não geradas');
+  if (r.tipo === 'reprovacao') {
+    const d = quandoDe(r);
+    const f = await notaRecusado(raiz, { pedido: r.pedido, antes: r.antes, depois: r.depois, projeto: projetoDe(r), cliente: r.cliente, titulo: r.titulo ?? curto(r.pedido, 70), data: dataDe(d), ref: r.ref, linha });
+    if (f) res.cofreNotas.recusado = f;
+  }
 }
 
 // --- Leitura ---------------------------------------------------------------------------------------------
