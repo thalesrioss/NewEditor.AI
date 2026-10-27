@@ -531,10 +531,12 @@ function slug(s: string): string {
 
 /** B-roll que preenche o quadro: recorte central, ou o enquadramento (centro e zoom) do overlay (CH-0003). */
 export function coverFilter(a: Pick<MediaAsset, 'width' | 'height'>, W: number, H: number, framing?: Parameters<typeof coverCrop>[4]): string {
-  if (!framing || !a.width || !a.height) return `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
+  // Lanczos e matriz bt709 dita, como na fala (B-roll de câmera vem sem etiqueta; o padrão bt601 esverdeia).
+  const sc = `flags=lanczos${(a.height ?? 1080) >= 720 ? ':in_color_matrix=bt709' : ''}`;
+  if (!framing || !a.width || !a.height) return `scale=${W}:${H}:force_original_aspect_ratio=increase:${sc},crop=${W}:${H}`;
   const c = coverCrop(a.width, a.height, W, H, framing);
   const f = (n: number) => n.toFixed(5);
-  return `crop=w='iw*${f(c.kx)}':h='ih*${f(c.ky)}':x='iw*${f(c.u0)}':y='ih*${f(c.v0)}',scale=${W}:${H}`;
+  return `crop=w='iw*${f(c.kx)}':h='ih*${f(c.ky)}':x='iw*${f(c.u0)}':y='ih*${f(c.v0)}',scale=${W}:${H}:${sc}`;
 }
 
 /** Encaixe de um overlay de imagem no quadro: motion do Studio (alfa) sem cortar, fundo transparente; B-roll preenche e leva a cor. */
