@@ -1,6 +1,6 @@
 /**
  * Loudness de entrega (CH-0007): o QC mede o MP4 final (AAC já codificado), então a conferência é feita nele.
- * Alvo: −14 LUFS integrado (±0,5) e pico real ≤ −1 dBTP.
+ * Alvo: −14 LUFS integrado (±0,5) e pico real ≤ −1,5 dBTP (ficha técnica B3 da série Equity, CH-0038; era −1).
  *
  * A mixagem (já com a 1ª passada do loudnorm) sai em WAV junto do vídeo; daqui: ganho calculado pela medida, limitador
  * com 4× de sobreamostragem (aproxima o pico real), AAC UMA vez, mede o MP4. Se ainda estiver fora (o AAC passa o
@@ -10,7 +10,13 @@
 import fs from 'node:fs/promises';
 import { NO_INPUT_META, run } from './media.ts';
 
-export const DELIVERY = { I: -14, TP: -1.5, LRA: 11, tolI: 0.5, maxTP: -1 } as const;
+export const DELIVERY = { I: -14, TP: -1.5, LRA: 11, tolI: 0.5, maxTP: -1.5 } as const;
+/**
+ * CH-0038: o `ebur128` mostra o pico com 1 casa e o revisor mede com 2 (loudnorm `input_tp`): −1,42 aparecia como
+ * −1,4. A entrega mira 0,1 dB abaixo do teto, e o limitador já começa com margem para o que o AAC passa (~0,1 dB).
+ */
+const TP_TARGET = DELIVERY.maxTP - 0.1;
+const FIRST_CEILING = DELIVERY.maxTP - 0.2;
 
 export interface Loudness {
   /** Integrado (LUFS). */
@@ -32,7 +38,7 @@ export async function measureLoudness(file: string): Promise<Loudness> {
 }
 
 export function withinDelivery(m: Loudness): boolean {
-  return Math.abs(m.i - DELIVERY.I) <= DELIVERY.tolI && m.tp <= DELIVERY.maxTP;
+  return Math.abs(m.i - DELIVERY.I) <= DELIVERY.tolI && m.tp <= TP_TARGET;
 }
 
 const AAC = ['-c:a', 'aac', '-b:a', '256k'];
@@ -57,7 +63,7 @@ export async function deliverAudio(video: string, wav: string, out: string, dura
   };
   const clamp = (g: number) => Math.max(-MAX_GAIN, Math.min(MAX_GAIN, g));
   let gain = audible ? clamp(DELIVERY.I - before.i) : 0;
-  let ceiling: number = DELIVERY.TP;
+  let ceiling: number = FIRST_CEILING;
   let best: { m: Loudness; gain: number; ceiling: number; miss: number } | null = null;
   let after: Loudness = before;
   let passes = 0;
@@ -70,7 +76,7 @@ export async function deliverAudio(video: string, wav: string, out: string, dura
     if (!best || m < best.miss) best = { m: after, gain, ceiling, miss: m };
     // Ajuste fino: o que faltou no integrado vira ganho; o que o AAC passou do pico abaixa o teto.
     gain = clamp(gain + DELIVERY.I - after.i);
-    if (after.tp > DELIVERY.maxTP) ceiling -= after.tp - DELIVERY.maxTP + 0.1;
+    if (after.tp > TP_TARGET) ceiling -= after.tp - TP_TARGET + 0.1;
   }
   // Não fechou (material muito denso, o AAC passa o pico de forma irregular): fica a passada mais perto do alvo.
   if (best && best.m !== after) {
@@ -82,7 +88,7 @@ export async function deliverAudio(video: string, wav: string, out: string, dura
 
 /** Quanto falta para o alvo (0 = dentro): LU fora da tolerância + dB acima do pico. */
 export function miss(m: Loudness): number {
-  return Math.max(0, Math.abs(m.i - DELIVERY.I) - DELIVERY.tolI) + Math.max(0, m.tp - DELIVERY.maxTP);
+  return Math.max(0, Math.abs(m.i - DELIVERY.I) - DELIVERY.tolI) + Math.max(0, m.tp - TP_TARGET);
 }
 
 /** Mesmo processo para um MP4 já renderizado (contorno de entrega antiga): extrai o áudio uma vez e refaz. */

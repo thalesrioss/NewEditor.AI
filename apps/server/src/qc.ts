@@ -216,9 +216,9 @@ export async function runRenderQc(projectId: string, file: string, opts: { expec
   const frame = 1 / (p.timeline.fps || 30);
   const issues: QcIssue[] = [];
   const push = (i: Omit<QcIssue, 'id'>) => issues.push({ id: `qcr_${issues.length + 1}`, ...i });
-  // Mesmo alvo do QC da NewStudios (CH-0007): −14 LUFS ±0,5 e pico real ≤ −1 dBTP, medidos no MP4.
+  // Mesmo alvo do QC da NewStudios (CH-0007, CH-0038): −14 LUFS ±0,5 e pico real ≤ −1,5 dBTP, medidos no MP4.
   if (lufs !== undefined && Math.abs(lufs - DELIVERY.I) > DELIVERY.tolI) push({ severidade: 'bloqueia', regra: 'loudness', texto: `Loudness ${lufs.toFixed(1)} LUFS (alvo −14 ±0,5)` });
-  if (tp !== undefined && tp > DELIVERY.maxTP) push({ severidade: 'bloqueia', regra: 'pico', texto: `Pico real ${tp.toFixed(1)} dBTP (alvo ≤ −1)` });
+  if (tp !== undefined && tp > DELIVERY.maxTP) push({ severidade: 'bloqueia', regra: 'pico', texto: `Pico real ${tp.toFixed(1)} dBTP (alvo ≤ −1,5)` });
   const semLegenda = await captionsWithoutWordsOf(p);
   if (semLegenda) push({ severidade: 'bloqueia', regra: 'legenda-sem-palavras', texto: `Legenda ${semLegenda}` });
   if (black) push({ severidade: 'avisa', regra: 'quadro-preto', texto: `${black} trecho(s) de quadro preto no vídeo` });

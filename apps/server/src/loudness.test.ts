@@ -1,6 +1,6 @@
 /**
  * CH-0007: o render v063 saiu com −15,0 LUFS e −0,9 dBTP medidos no MP4 (o AAC passa o pico da 1ª passada).
- * A entrega precisa de −14 LUFS (±0,5) e ≤ −1 dBTP medidos no arquivo final. Aqui a medida é do `ebur128`
+ * A entrega precisa de −14 LUFS (±0,5) e ≤ −1,5 dBTP medidos no arquivo final (CH-0038: era −1; o v5 do eq2210-15 saiu −1,42). Aqui a medida é do `ebur128`
  * (independente do loudnorm, a mesma que o QC usa). Fixtures geradas pelo FFmpeg.
  */
 import assert from 'node:assert/strict';
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, test } from 'node:test';
-import { deliverAudio, fixDeliveredFile, miss } from './loudness.ts';
+import { deliverAudio, fixDeliveredFile, miss, withinDelivery } from './loudness.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-loud-'));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -35,14 +35,24 @@ function ebur128(file: string): { i: number; tp: number } {
 const probe = (file: string) => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', file]).toString()).streams as { codec_type: string; codec_name: string; duration: string; nb_frames: string }[];
 
 describe('loudness de entrega (CH-0007)', () => {
-  const dentro = (m: { i: number; tp: number }) => Math.abs(m.i + 14) <= 0.5 && m.tp <= -1;
+  const dentro = (m: { i: number; tp: number }) => Math.abs(m.i + 14) <= 0.5 && m.tp <= -1.5;
+
+  test('CH-0038: pico entre −1,5 e −1 (o v5 do eq2210-15, −1,42) está fora do alvo e é refeito abaixo de −1,5', async () => {
+    assert.equal(withinDelivery({ i: -14.0, tp: -1.4 }), false);
+    // Fala com o limitador antigo (teto −1,5 antes do AAC 320k): o AAC passa o pico para perto de −1,4.
+    const f = fixture('v5.mp4', `${fala},volume=3dB,aresample=192000,alimiter=limit=0.8414:level=false,aresample=48000`);
+    const out = path.join(tmp, 'v5_out.mp4');
+    const r = await fixDeliveredFile(f, out, 12);
+    const m = ebur128(out);
+    assert.ok(r.ok && dentro(m), `fora do alvo: ${JSON.stringify(m)}`);
+  });
 
   test('caminho antigo reproduz o defeito: o AAC passa o pico de −1 dBTP', () => {
     const m = ebur128(fixture('antigo.mp4', fala));
     assert.ok(!dentro(m), `deveria estar fora do alvo: ${JSON.stringify(m)}`);
   });
 
-  test('render: vídeo + mixagem em WAV saem com −14 LUFS (±0,5) e ≤ −1 dBTP medidos no MP4 codificado; vídeo copiado', async () => {
+  test('render: vídeo + mixagem em WAV saem com −14 LUFS (±0,5) e ≤ −1,5 dBTP medidos no MP4 codificado; vídeo copiado', async () => {
     const src = fixture('src.mp4', fala);
     const wav = path.join(tmp, 'mix.wav');
     ff(['-i', src, '-map', '0:a', '-c:a', 'pcm_f32le', wav]);
