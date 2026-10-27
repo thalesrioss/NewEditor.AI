@@ -54,3 +54,35 @@ test('aprovação também leva título no cofre', async () => {
   const l = JSON.parse(linhaCofre({ tipo: 'aprovacao', canal: 'slack', pedido: 'pode entregar o 15' })) as Record<string, string>;
   assert.equal(l.titulo, 'Aprovou: pode entregar o 15');
 });
+
+test('reprovação do revisor (--origem revisor): R-NN por revisor (Igor), origem igual nos dois jsonl, sem A-NN e nunca conta como Thales', async () => {
+  const { registrarThales, linhasThales } = await import('./registro-thales.ts');
+  const alts = () => fs.readdirSync(path.join(RAIZ, 'Registro de Decisões', 'Alterações'));
+  const antes = alts();
+  const thalesAntes = (await linhasThales('equity-sales', 200)).length;
+  const r = await registrarThales({ tipo: 'reprovacao', origem: 'revisor', revisor: 'Igor', canal: 'slack', pedido: 'legenda cobre o rosto do Thales no 07', projeto: 'eq2210-07', cliente: 'equity-sales', ref: 'rev-1', quem: 'studio-revisor' });
+  assert.deepEqual(r.avisos, []);
+  const ultima = (arq: string) => JSON.parse(fs.readFileSync(arq, 'utf8').trim().split('\n').at(-1)!) as Record<string, string>;
+  assert.equal(ultima(path.join(RAIZ, '_SISTEMA', 'correcoes.jsonl')).origem, 'revisor (Igor)');
+  assert.equal(ultima(path.join(tmp, 'mem', 'correcoes.jsonl')).origem, 'revisor (Igor)');
+  assert.match(ultima(path.join(RAIZ, '_SISTEMA', 'correcoes.jsonl')).evidence ?? '', /^revisor \(Igor\) \(slack/);
+  const md = fs.readFileSync(r.cofreNotas?.recusado ?? '', 'utf8');
+  assert.match(path.basename(r.cofreNotas!.recusado!), /^R-02 Leandro Arruda - legenda cobre/);
+  assert.match(md, /^por: revisor \(Igor\)$/m);
+  assert.match(md, /\*\*Descartado por:\*\* revisor \(Igor\)/);
+  assert.doesNotMatch(md, /por: Thales|Descartado por:\*\* Thales/);
+  assert.deepEqual(alts(), antes, 'linha do revisor não vira A-NN "do Thales"');
+  assert.doesNotMatch(fs.readFileSync(path.join(RAIZ, 'Registro de Decisões', 'Lições Técnicas.md'), 'utf8'), /legenda cobre/);
+  assert.equal((await linhasThales('equity-sales', 200)).length, thalesAntes, 'leitura do Thales não traz a do revisor');
+});
+
+test('origem: padrão segue Thales; revisor sem nome ou origem desconhecida é 400', async () => {
+  const { registrarThales, linhaCofre, linhaNewstudios } = await import('./registro-thales.ts');
+  assert.equal((JSON.parse(linhaCofre({ tipo: 'reprovacao', canal: 'slack', pedido: 'x' })) as Record<string, string>).origem, 'Thales');
+  assert.equal((JSON.parse(linhaNewstudios({ tipo: 'alteracao', canal: 'slack', pedido: 'x' })) as Record<string, string>).origem, 'Thales');
+  const ap = JSON.parse(linhaCofre({ tipo: 'aprovacao', canal: 'slack', pedido: 'ok', origem: 'revisor', revisor: 'Vera' })) as Record<string, string>;
+  assert.equal(ap.origem, 'revisor (Vera)');
+  assert.doesNotMatch(JSON.stringify(ap), /Thales/);
+  await assert.rejects(registrarThales({ tipo: 'reprovacao', origem: 'revisor', canal: 'slack', pedido: 'x' }), /nome/);
+  await assert.rejects(registrarThales({ tipo: 'reprovacao', origem: 'chefe' as never, canal: 'slack', pedido: 'x' }), /origem inválida/);
+});

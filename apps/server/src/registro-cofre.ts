@@ -112,6 +112,8 @@ export interface Recusa {
   ref?: string;
   /** Linha do correcoes.jsonl do cofre (para ligar a nota A-NN). */
   linha?: number;
+  /** Quem reprovou: "Thales" (padrão) ou "revisor (<nome>)", igual ao `origem` do jsonl. */
+  por?: string;
 }
 
 /** Cria a nota R-NN da recusa (uma por `ref`). Devolve o caminho, ou null se já existia. */
@@ -127,13 +129,14 @@ export async function notaRecusado(raiz: string, r: Recusa): Promise<string | nu
   // As notas de cliente moram na raiz do cofre (a pasta NewStudios fica dentro dela).
   const cli = r.cliente ? ((await notaCliente(raiz, r.cliente)) ?? (await notaCliente(path.dirname(raiz), r.cliente))) : null;
   const a = r.linha ? await notaA(raiz, r.linha) : null;
+  const por = r.por ?? 'Thales';
   const nome = limpa(`${id} ${cli ?? r.cliente ?? 'Sem cliente'} - ${r.titulo}`);
   const tags = ['registro', 'recusado', ...(cli ? [`cliente/${slug(cli)}`] : [])];
   const md = [
-    '---', 'tipo: recusado', `id: ${id}`, `data: ${r.data}`, `cliente: ${cli ?? r.cliente ?? '—'}`, `projeto: ${r.projeto || '—'}`, 'por: Thales',
-    'fonte: newstudios (Editor Brain, registro do Thales)', ...(r.ref ? [`ref: ${r.ref}`] : []), `tags: [${tags.join(', ')}]`, '---',
+    '---', 'tipo: recusado', `id: ${id}`, `data: ${r.data}`, `cliente: ${cli ?? r.cliente ?? '—'}`, `projeto: ${r.projeto || '—'}`, `por: ${por}`,
+    `fonte: newstudios (Editor Brain, registro ${por === 'Thales' ? 'do Thales' : `do ${por}`})`, ...(r.ref ? [`ref: ${r.ref}`] : []), `tags: [${tags.join(', ')}]`, '---',
     `# ${id} · ${cli ?? r.cliente ?? 'Sem cliente'} — ${r.titulo}`, '',
-    `**Cliente:** ${cli ? `[[${cli}]]` : '—'} · **Projeto:** \`${r.projeto || '—'}\` · **Descartado por:** Thales`, '',
+    `**Cliente:** ${cli ? `[[${cli}]]` : '—'} · **Projeto:** \`${r.projeto || '—'}\` · **Descartado por:** ${por}`, '',
     '## O que foi dito', citacao(r.pedido), '',
     '## Diagnóstico', r.antes?.trim() || '— (a preencher por quem refizer a peça)', '',
     '## Substituído por', r.depois?.trim() || 'Em ajuste: a nova versão entra aqui quando for aprovada.', '',

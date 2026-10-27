@@ -43,6 +43,21 @@ export interface RegistroThales {
   skill?: string;
   /** Frase curta para a nota A-NN do cofre (registro.py). */
   titulo?: string;
+  /**
+   * Quem falou (Ultron 27/10 01:44): padrão "thales". "revisor" (Igor, Vera) grava `"origem": "revisor (<nome>)"`, a
+   * reprovação vira R-NN `por: revisor (<nome>)` e a linha nunca conta como do Thales (leitura, perfil, A-NN).
+   */
+  origem?: OrigemRegistro;
+  /** Nome do revisor; obrigatório com origem "revisor". */
+  revisor?: string;
+}
+
+export type OrigemRegistro = 'thales' | 'revisor';
+export const ORIGENS: OrigemRegistro[] = ['thales', 'revisor'];
+
+/** Rótulo de quem falou, igual no `origem` dos jsonl e no `por:` da R-NN. */
+export function origemDe(r: Pick<RegistroThales, 'origem' | 'revisor'>): string {
+  return r.origem === 'revisor' ? `revisor (${(r.revisor ?? '').trim()})` : 'Thales';
 }
 
 export interface ResultadoRegistro {
@@ -114,7 +129,7 @@ export function linhaNewstudios(r: RegistroThales): string {
     data: dataDe(d),
     quem: r.quem ?? 'editor-brain',
     projeto: projetoDe(r),
-    origem: 'Thales',
+    origem: origemDe(r),
     pedido_literal: r.pedido,
     antes: r.antes ?? '',
     depois: r.depois ?? '',
@@ -129,21 +144,22 @@ export function linhaNewstudios(r: RegistroThales): string {
 /** Linha do cofre: aprovação no molde de decisoes.jsonl, alteração/reprovação no de correcoes.jsonl (PROTOCOLO_GLOBAL). */
 export function linhaCofre(r: RegistroThales): string {
   const d = quandoDe(r);
-  const evidencia = `Thales (${r.canal}, ${horaDe(d)})`;
+  const quem = origemDe(r);
+  const evidencia = `${quem} (${r.canal}, ${horaDe(d)})`;
   const comum = { skill: r.skill ?? '06-editor', projeto: projetoDe(r), data: dataDe(d) };
-  const fim = { origem: 'Thales', fonte: 'newstudios', registrado_por: r.quem ?? 'editor-brain', tipo: r.tipo, canal: r.canal, cliente: r.cliente ? slug(r.cliente) : '', ref: r.ref ?? '' };
+  const fim = { origem: quem, fonte: 'newstudios', registrado_por: r.quem ?? 'editor-brain', tipo: r.tipo, canal: r.canal, cliente: r.cliente ? slug(r.cliente) : '', ref: r.ref ?? '' };
   // R4: toda linha do cofre leva um título curto (o registro.py usa no nome da nota).
   const titulo = r.titulo ?? `${r.tipo === 'aprovacao' ? 'Aprovou: ' : r.tipo === 'reprovacao' ? 'Reprovou: ' : ''}${curto(r.pedido, 70)}`;
   if (r.tipo === 'aprovacao') {
     return linhaJson({
       ...comum,
       titulo,
-      decision: r.depois || `aprovado pelo Thales: ${r.pedido}`,
+      decision: r.depois || `aprovado pelo ${quem}: ${r.pedido}`,
       level: 'PREFERÊNCIA',
       context: r.antes ?? '',
-      justification: `decisão do Thales: ${r.pedido}`,
+      justification: `decisão do ${quem}: ${r.pedido}`,
       evidence: evidencia,
-      confidence: 'MEDIDO (fala literal do Thales)',
+      confidence: `MEDIDO (fala literal do ${quem})`,
       alternatives: '',
       result: 'aprovado',
       learning: '',
@@ -219,6 +235,8 @@ async function gravar(r: RegistroThales): Promise<ResultadoRegistro> {
   if (!TIPOS.includes(r.tipo)) throw Object.assign(new Error(`tipo inválido (${TIPOS.join(', ')})`), { statusCode: 400 });
   if (!CANAIS.includes(r.canal)) throw Object.assign(new Error(`canal inválido (${CANAIS.join(', ')})`), { statusCode: 400 });
   if (!r.pedido?.trim()) throw Object.assign(new Error('pedido obrigatório (a fala literal do Thales)'), { statusCode: 400 });
+  if (r.origem !== undefined && !ORIGENS.includes(r.origem)) throw Object.assign(new Error(`origem inválida (${ORIGENS.join(', ')})`), { statusCode: 400 });
+  if (r.origem === 'revisor' && !r.revisor?.trim()) throw Object.assign(new Error('origem revisor precisa do nome (revisor: "Igor", "Vera")'), { statusCode: 400 });
   const res: ResultadoRegistro = { newstudios: null, cofre: null, avisos: [] };
   if (desligadoEmTeste()) {
     res.avisos.push('teste sem NEWSTUDIOS_MEMORIA/CEREBRO_COFRE: nada gravado');
@@ -268,7 +286,7 @@ async function notasDoCofre(r: RegistroThales, res: ResultadoRegistro): Promise<
   } else res.avisos.push('registro.py do cofre não encontrado: notas A-NN não geradas');
   if (r.tipo === 'reprovacao') {
     const d = quandoDe(r);
-    const f = await notaRecusado(raiz, { pedido: r.pedido, antes: r.antes, depois: r.depois, projeto: projetoDe(r), cliente: r.cliente, titulo: r.titulo ?? curto(r.pedido, 70), data: dataDe(d), ref: r.ref, linha });
+    const f = await notaRecusado(raiz, { pedido: r.pedido, antes: r.antes, depois: r.depois, projeto: projetoDe(r), cliente: r.cliente, titulo: r.titulo ?? curto(r.pedido, 70), data: dataDe(d), ref: r.ref, linha, por: origemDe(r) });
     if (f) res.cofreNotas.recusado = f;
   }
 }

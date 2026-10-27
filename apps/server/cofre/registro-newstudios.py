@@ -98,6 +98,10 @@ for i, l in enumerate(linhas, 1):
     l = l.strip()
     if not l: continue
     d = json.loads(l)
+    # Revisor (Igor, Vera): "origem": "revisor (<nome>)". Nunca conta como Thales e não é lição técnica do loop:
+    # fica só na nota R-NN que o Editor Brain cria.
+    o = str(d.get("origem", "")).strip().lower()
+    if o.startswith("revisor"): continue
     (alts if do_thales(i, d) else tecnicas).append((i, d))
 
 # limpa notas A-NN antigas geradas por este script
