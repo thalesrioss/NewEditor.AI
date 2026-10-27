@@ -360,7 +360,10 @@ export function origemDoNome(file: string): number | null {
 const ehBruto = (file: string) => /^C\d{4}\.(mp4|mov|mxf)$/i.test(path.basename(file));
 const ehCob = (file: string) => /(^|[_\-. ])cob/i.test(path.basename(file));
 
-/** Escala efetiva de um clipe da trilha principal: o recorte do zoom (e do reframe) até o quadro de entrega. */
+/**
+ * Escala efetiva de um clipe da trilha principal: o recorte do zoom (e do reframe) até o quadro de entrega. Mesma conta
+ * do `clipScale` do núcleo (branch da cor): reframe = H/srcH × zoom; contido = min(W/srcW, H/srcH) × zoom.
+ */
 export function escalaClipe(src: Pick<MediaAsset, 'width' | 'height'>, c: Clip, W: number, H: number, reframe = false): number {
   if (!src.width || !src.height) return 0;
   const z = Math.max(c.zoom ?? 1, c.zoomTo ?? c.zoom ?? 1);
