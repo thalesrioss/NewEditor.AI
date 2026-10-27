@@ -16,7 +16,8 @@
     "desktop": "concurrently -n server,web,app -c blue,magenta,green \"npm:dev -w @neweditor/server\" \"npm:dev -w @neweditor/web\" \"npm:dev -w @neweditor/desktop\"",
     "desktop:start": "npm run build -w @neweditor/web && npm run start -w @neweditor/desktop",
     "dist": "npm run dist -w @neweditor/desktop",
-    "test:server": "node --import tsx --test apps/server/src/*.test.ts"
+    "test:server": "node --import tsx --test apps/server/src/*.test.ts",
+    "qc-tecnico": "node --import tsx apps/server/src/qc-tecnico-cli.ts"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",
