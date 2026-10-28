@@ -474,18 +474,27 @@ export function sampleCube(c: CubeLut, rgb: [number, number, number]): [number, 
  * LUT 3D (N³), ordem do .cube: R varia mais rápido. Com `cube` (o look do grade, já lido), ele entra depois
  * da conversão e das primárias, na força pedida — igual no WebGL e no FFmpeg.
  */
-export function buildLut(g: ColorGrade, n = 33, cube?: CubeLut | null, inputCube?: CubeLut | null): Float32Array {
+export function buildLut(g: ColorGrade, n = 33, cube?: CubeLut | null, inputCube?: CubeLut | null, clip?: { grade: ColorGrade; cube?: CubeLut | null } | null): Float32Array {
   const lut = new Float32Array(n * n * n * 3);
   const k = g.lut && cube ? clamp(g.lut.strength) : 0;
   const inCube = g.inputLut ? inputCube : null;
+  // Grade do clipe (BL-0159 C3): sobre o resultado do arquivo (conversão + primárias + look), como Rec.709, e o look dela.
+  const cg0 = clip ? clipGradeOf(clip.grade) : null;
+  const cg = cg0 && !isNeutral(cg0) ? cg0 : null;
+  const ck = cg?.lut && clip?.cube ? clamp(cg.lut.strength) : 0;
+  const mix = (o: [number, number, number], c: CubeLut, f: number): [number, number, number] => {
+    const l = sampleCube(c, o);
+    return [o[0] + (l[0] - o[0]) * f, o[1] + (l[1] - o[1]) * f, o[2] + (l[2] - o[2]) * f];
+  };
   let i = 0;
   for (let bi = 0; bi < n; bi++)
     for (let gi = 0; gi < n; gi++)
       for (let ri = 0; ri < n; ri++) {
         let o = gradePixel([ri / (n - 1), gi / (n - 1), bi / (n - 1)], g, inCube);
-        if (k > 0) {
-          const l = sampleCube(cube!, o);
-          o = [o[0] + (l[0] - o[0]) * k, o[1] + (l[1] - o[1]) * k, o[2] + (l[2] - o[2]) * k];
+        if (k > 0) o = mix(o, cube!, k);
+        if (cg) {
+          o = gradePixel(o, cg);
+          if (ck > 0) o = mix(o, clip!.cube!, ck);
         }
         lut[i++] = o[0];
         lut[i++] = o[1];
@@ -501,6 +510,21 @@ export function lutToCube(lut: Float32Array, n = 33, title = 'NewEditor.AI'): st
 }
 
 export const isNeutral = (g: ColorGrade | undefined) => !g || JSON.stringify(g) === JSON.stringify(NEUTRAL_GRADE);
+
+/**
+ * Grade de clipe (BL-0159 C3) como ela entra: sobre a imagem já convertida pelo arquivo, então sem conversão de entrada
+ * (`input` 'rec709', sem `inputLut` nem `codeRange`). A conta Rec.709 do `gradePixel` com tudo neutro é a identidade.
+ */
+export function clipGradeOf(g: ColorGrade): ColorGrade {
+  const { inputLut: _i, codeRange: _c, ...rest } = normalizeGradeLut(g);
+  return { ...rest, input: 'rec709' };
+}
+
+/** Textura do trecho com grade de clipe: o que o clipe define vale no lugar do arquivo; o que não define, fica o do arquivo. */
+export const textureOfClip = (file: ColorGrade | null | undefined, clip: ColorGrade | null | undefined) => {
+  const f = textureOf(file);
+  return { sharpen: clip?.sharpen ?? f.sharpen, vignette: clip?.vignette ?? f.vignette, grain: clip?.grain ?? f.grain };
+};
 
 /**
  * Palpite de entrada pela medida do quadro (valores de 10 bits): preto em ~95 é S-Log3; ~128 é V-Log/C-Log3.

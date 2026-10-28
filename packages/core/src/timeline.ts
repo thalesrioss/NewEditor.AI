@@ -1,6 +1,6 @@
 import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
-import { normalizeGradeLut } from './color.ts';
+import { clipGradeOf, isNeutral, normalizeGradeLut } from './color.ts';
 
 /** Menor duração de clipe que mantemos; abaixo disso é resíduo de corte. */
 export const MIN_CLIP: Seconds = 0.04;
@@ -454,6 +454,22 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       if (op.grade) grades[op.assetId] = normalizeGradeLut(op.grade);
       else delete grades[op.assetId];
       return { ...t, grades };
+    }
+
+    case 'set_clip_grade': {
+      // Grade do clipe sobre a do arquivo (BL-0159 C3): neutra ou null tira; vários clipes numa op = um passo no desfazer.
+      const ids = new Set(op.clipIds);
+      if (!ids.size) throw new OpError('set_clip_grade: nenhum clipe');
+      for (const id of ids) if (!t.main.some((c) => c.id === id)) throw new OpError(`set_clip_grade: clipe ${id} não existe`);
+      const g = op.grade ? clipGradeOf(op.grade) : null;
+      return {
+        ...t,
+        main: t.main.map((c) => {
+          if (!ids.has(c.id)) return c;
+          const { grade: _drop, ...rest } = c;
+          return g && !isNeutral(g) ? { ...rest, grade: g } : rest;
+        }),
+      };
     }
 
     case 'set_captions':
