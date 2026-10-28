@@ -351,12 +351,28 @@ export interface CaptionEditOp {
   patch: { text?: string | null; hidden?: boolean; force?: boolean; split?: boolean; join?: boolean; position?: number | null; until?: Seconds | null } | null;
 }
 
-/** Grafia corrigida pelo editor de uma palavra da transcrição (vale para legenda, lettering e motion). */
+/** Grafia e/ou tempo corrigidos pelo editor numa palavra da transcrição (vale para legenda, lettering e motion). */
 export interface WordFix {
   assetId: string;
-  /** Início da palavra no bruto (identifica a palavra). */
+  /** Início da palavra no bruto segundo o ASR (identifica a palavra; não muda quando o tempo é corrigido). */
   at: Seconds;
-  text: string;
+  text?: string;
+  /** Início corrigido no bruto, medido na forma de onda (CH-0041: o ASR não é fonte de tempo). */
+  start?: Seconds;
+  /** Fim corrigido no bruto. */
+  end?: Seconds;
+}
+
+/**
+ * Correção de uma palavra pela op `fix_words`. Campo ausente fica como está; `text: ''` ou `null` volta à
+ * grafia do ASR; `start`/`end` `null` voltam ao tempo do ASR (CH-0041).
+ */
+export interface WordFixOp {
+  assetId: string;
+  at: Seconds;
+  text?: string | null;
+  start?: Seconds | null;
+  end?: Seconds | null;
 }
 
 export interface AppNotification {
@@ -506,8 +522,8 @@ export type TimelineOp =
   | { type: 'set_lettering_ref'; refId: string | null }
   /** Efeito por região (CH-0033): sem `id` cria; com `id` altera só os campos enviados; `fx: null` apaga. */
   | { type: 'set_region_fx'; id?: string; fx: RegionFxPatch | null }
-  /** Corrige a grafia de palavras (texto vazio desfaz a correção). */
-  | { type: 'fix_words'; fixes: WordFix[] }
+  /** Corrige a grafia (texto vazio desfaz) e/ou o início e fim de palavras no bruto (CH-0041; null desfaz). */
+  | { type: 'fix_words'; fixes: WordFixOp[] }
   /** Ajusta legendas em lote (patch null volta ao automático naquela palavra). */
   | { type: 'edit_captions'; edits: CaptionEditOp[] };
 

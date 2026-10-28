@@ -1,4 +1,4 @@
-import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp } from './types.ts';
+import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp, type WordFix } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { normalizeGradeLut } from './color.ts';
 import { DEFAULT_CAPTIONS } from './text.ts';
@@ -534,8 +534,21 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'fix_words': {
       let fixes = [...(t.wordFixes ?? [])];
       for (const f of op.fixes) {
-        fixes = fixes.filter((x) => !(x.assetId === f.assetId && Math.abs(x.at - f.at) < 0.02));
-        if (f.text.trim()) fixes.push({ assetId: f.assetId, at: f.at, text: f.text.trim() });
+        const same = (x: WordFix) => x.assetId === f.assetId && Math.abs(x.at - f.at) < 0.02;
+        const prev = fixes.find(same);
+        fixes = fixes.filter((x) => !same(x));
+        const next: WordFix = { assetId: f.assetId, at: prev?.at ?? f.at };
+        // Campo ausente fica como estava; '' / null desfaz só aquele campo.
+        const text = f.text === undefined ? prev?.text : (f.text ?? '').trim();
+        if (text) next.text = text;
+        for (const k of ['start', 'end'] as const) {
+          const v = f[k] === undefined ? prev?.[k] : f[k];
+          if (v === null || v === undefined) continue;
+          if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new OpError(`fix_words: ${k} precisa ser um número ≥ 0 (segundos no bruto)`);
+          next[k] = Math.round(v * 1000) / 1000;
+        }
+        if (next.start !== undefined && next.end !== undefined && !(next.start < next.end)) throw new OpError(`fix_words: start (${next.start}) precisa ser menor que end (${next.end})`);
+        if (next.text !== undefined || next.start !== undefined || next.end !== undefined) fixes.push(next);
       }
       return { ...t, wordFixes: fixes };
     }

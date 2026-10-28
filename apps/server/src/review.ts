@@ -123,7 +123,7 @@ export async function reviewDoubts(p: Project): Promise<ReviewDoubt[]> {
     const tokens = kept.map((w) => strip(fixedText(tl, assetId, w))).filter((t) => t.length >= 3 && !/\d/.test(t) && !STOPLIKE.test(t));
     const wrong = await misspelled(tokens);
     for (const w of kept) {
-      const fixed = tl.wordFixes?.some((f) => f.assetId === assetId && Math.abs(f.at - w.start) < 0.02);
+      const fixed = tl.wordFixes?.some((f) => f.text !== undefined && f.assetId === assetId && Math.abs(f.at - w.start) < 0.02);
       if (fixed) continue;
       const t = strip(w.w);
       const sug = wrong.get(t);
