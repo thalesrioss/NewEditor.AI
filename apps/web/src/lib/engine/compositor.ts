@@ -5,6 +5,7 @@
  *  - B-roll: "cover" (preenche e recorta).
  */
 import { buildLut, coverCrop, isNeutral, type ColorGrade, type CubeLut, type OverlayFraming, textureOf } from '@neweditor/core';
+import { publishScopeFrame } from '../scopeSource.ts';
 
 const N = 33;
 
@@ -161,6 +162,8 @@ export class Compositor {
     gl.viewport(0, 0, W, H);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    // Área coberta pelo vídeo (clip space), para o scope não contar a tarja preta.
+    let [ax0, ay0, ax1, ay1] = [1, 1, -1, -1];
     for (const l of layers) {
       const quarter = ((l.rotate ?? 0) / 90) % 4;
       const turned = quarter % 2 === 1;
@@ -224,7 +227,9 @@ export class Compositor {
       else gl.uniform4f(this.u.uvr!, u0, v0, u1, v1);
       gl.uniform1f(this.u.rot!, quarter);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      [ax0, ay0, ax1, ay1] = [Math.min(ax0, x0), Math.min(ay0, y0), Math.max(ax1, x1), Math.max(ay1, y1)];
     }
+    if (layers.length) publishScopeFrame(this.canvas, { x: ((ax0 + 1) / 2) * W, y: ((1 - ay1) / 2) * H, w: ((ax1 - ax0) / 2) * W, h: ((ay1 - ay0) / 2) * H });
   }
 
   clear(): void {

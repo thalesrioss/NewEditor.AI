@@ -3,6 +3,7 @@ import { Eye, Palette, RotateCcw, Search, Wand2, X } from 'lucide-react';
 import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
+import { Scopes } from './Scopes.tsx';
 import { Button, RangeField } from './ui.tsx';
 
 type Num = 'exposure' | 'contrast' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'temperature' | 'tint' | 'saturation' | 'vibrance';
@@ -64,6 +65,8 @@ export function ColorPanel() {
           ))}
         </select>
       </div>
+
+      <Scopes />
 
       <button
         disabled={busy}
