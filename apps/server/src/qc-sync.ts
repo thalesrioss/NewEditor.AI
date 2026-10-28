@@ -4,6 +4,8 @@
  * a correlação em ±0,5 s diz onde a imagem da entrega está na fonte. Deslocamento > 1 quadro = imagem fora do instante
  * da voz (cobertura de outro momento sem nome, quadro perdido na decodificação, câmera mal sincronizada).
  * Trecho sem movimento (correlação plana) ou coberto por B-roll/motion fica fora: não dá para afirmar nada.
+ * Deslocamento sem pico nítido (máximo na borda da busca ou colado no 2º pico, CH-0040) é reconferido pelo sinal de
+ * movimento em até 6 s com busca de ±1 s; só reprova se esse sinal também tiver pico nítido.
  */
 import { clipDuration, clipStarts, overlayActive, resolveOverlay, type Clip, type Project } from '@neweditor/core';
 import { run } from './media.ts';
