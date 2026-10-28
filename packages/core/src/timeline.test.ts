@@ -198,7 +198,8 @@ test('S-Log3 → Rec.709: preto do LOG vira preto, cinza 18% cai perto de 42%, c
   const rgb = (code: number) => (code - 64) / 876;
   const black = gradePixel([rgb(95), rgb(95), rgb(95)], g);
   const gray = gradePixel([rgb(420), rgb(420), rgb(420)], g);
-  assert.ok(black[0] < 0.03, `preto: ${black[0]}`);
+  // LC-709 Type A (BL-0159) guarda o pé baixo-contraste da oficial: preto do S-Log3 (95) ≈ 0,040, igual à LUT da Sony.
+  assert.ok(black[0] < 0.05, `preto: ${black[0]}`);
   assert.ok(gray[0] > 0.36 && gray[0] < 0.48, `cinza 18%: ${gray[0]}`);
   assert.ok(Math.abs(gray[0] - gray[2]) < 0.01, 'cinza não ganha cor');
 });
