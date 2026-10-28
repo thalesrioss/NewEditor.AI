@@ -214,7 +214,48 @@ const HESITATION = /^(hum+|hm+|ahn+|han+|uh+|eh+|a{2,}h*|ã+)[.,!?…]*$/i;
 /** Texto de uma palavra com a correção de grafia da revisão, se houver. */
 export function fixedText(tl: Pick<Timeline, 'wordFixes'>, assetId: string, w: TextWord): string {
   const f = tl.wordFixes?.find((x) => x.assetId === assetId && Math.abs(x.at - w.start) < 0.02);
-  return f ? f.text : w.w;
+  return f?.text ?? w.w;
+}
+
+/** Início e fim da palavra no bruto com a correção de tempo do editor (CH-0041); sem correção, os do ASR. */
+export function fixedTimes(tl: Pick<Timeline, 'wordFixes'>, assetId: string, w: TextWord): { start: number; end: number; mid: number } {
+  const f = tl.wordFixes?.find((x) => x.assetId === assetId && Math.abs(x.at - w.start) < 0.02);
+  if (f?.start === undefined && f?.end === undefined) return { start: w.start, end: w.end, mid: w.c ?? (w.start + w.end) / 2 };
+  const start = f.start ?? w.start;
+  const end = f.end ?? w.end;
+  return { start, end, mid: (start + end) / 2 };
+}
+
+/**
+ * Confere as correções de tempo de palavra (op `fix_words` com start/end, CH-0041) contra a transcrição: a palavra
+ * existe, start < end, não cruza a palavra de antes nem a de depois (já com as correções delas) e, se está na
+ * montagem, continua dentro do mesmo trecho. Devolve o motivo da recusa ou null.
+ */
+export function wordTimingError(tl: Timeline, assetId: string, words: TextWord[], ats: number[], duration?: number): string | null {
+  const nome = (w: TextWord) => `'${fixedText(tl, assetId, w)}' (${w.start})`;
+  for (const at of ats) {
+    const i = words.findIndex((w) => Math.abs(w.start - at) < 0.02);
+    if (i < 0) return `fix_words: não há palavra começando em ${at} s na transcrição deste asset`;
+    const w = words[i]!;
+    const t = fixedTimes(tl, assetId, w);
+    if (!(t.start < t.end)) return `fix_words: ${nome(w)} ficaria com start ${t.start} ≥ end ${t.end}`;
+    if (duration && duration > 0 && t.end > duration + 0.05) return `fix_words: ${nome(w)} terminaria em ${t.end} s, depois do fim do arquivo (${duration} s)`;
+    const prev = words[i - 1];
+    if (prev) {
+      const p = fixedTimes(tl, assetId, prev);
+      if (t.start < p.end - 1e-3) return `fix_words: ${nome(w)} começaria em ${t.start} s, antes do fim de ${nome(prev)} em ${p.end} s; corrija o end dela na mesma op`;
+    }
+    const next = words[i + 1];
+    if (next) {
+      const n = fixedTimes(tl, assetId, next);
+      if (t.end > n.start + 1e-3) return `fix_words: ${nome(w)} terminaria em ${t.end} s, depois do início de ${nome(next)} em ${n.start} s; corrija o start dela na mesma op`;
+    }
+    // Dentro do trecho: a palavra que estava num clipe da montagem não pode sair dele (sumiria da legenda).
+    const mid0 = w.c ?? (w.start + w.end) / 2;
+    const clip = tl.main.find((c) => c.assetId === assetId && mid0 >= c.in && mid0 < c.out);
+    if (clip && (t.start >= clip.out || t.end <= clip.in || t.mid < clip.in || t.mid >= clip.out)) return `fix_words: ${nome(w)} sairia do trecho ${clip.in}–${clip.out} s do bruto em que está na montagem`;
+  }
+  return null;
 }
 
 export function placeWords(tl: Timeline, transcripts: Record<string, TextWord[] | undefined>): CueWord[] {
@@ -224,12 +265,13 @@ export function placeWords(tl: Timeline, transcripts: Record<string, TextWord[] 
     const words = transcripts[clip.assetId];
     if (!words) return;
     for (const w of words) {
-      const mid = w.c ?? (w.start + w.end) / 2;
-      if (mid < clip.in || mid >= clip.out) continue;
+      // Tempo corrigido pelo editor (CH-0041) vale para a legenda; a palavra continua identificada pelo início do ASR.
+      const t = tl.wordFixes?.length ? fixedTimes(tl, clip.assetId, w) : { start: w.start, end: w.end, mid: w.c ?? (w.start + w.end) / 2 };
+      if (t.mid < clip.in || t.mid >= clip.out) continue;
       if (HESITATION.test(w.w)) continue;
       const sp = clipSpeed(clip);
       const s0 = starts[i]!;
-      placed.push({ src: { assetId: clip.assetId, at: w.start }, text: tl.wordFixes?.length ? fixedText(tl, clip.assetId, w) : w.w, start: Math.max(s0, s0 + (w.start - clip.in) / sp), end: Math.min(s0 + clipDuration(clip), s0 + (w.end - clip.in) / sp) });
+      placed.push({ src: { assetId: clip.assetId, at: w.start }, text: tl.wordFixes?.length ? fixedText(tl, clip.assetId, w) : w.w, start: Math.max(s0, s0 + (t.start - clip.in) / sp), end: Math.min(s0 + clipDuration(clip), s0 + (t.end - clip.in) / sp) });
     }
   });
   return placed;

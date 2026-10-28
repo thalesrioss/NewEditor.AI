@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   applyOp,
@@ -8,7 +9,10 @@ import {
   overlayScale,
   type TimelineOp,
   normalizeTimeline,
+  OpError,
   uid,
+  wordTimingError,
+  type TextWord,
   type AgentActivity,
   type HistoryState,
   type LogEntry,
@@ -222,6 +226,7 @@ class Store {
       env = { ...env, op: { ...env.op, grade: manageGrade(env.op.grade, color)! } };
     }
     const next = applyOp(p.timeline, env.op, env.by);
+    if (env.op.type === 'fix_words') this.checkWordTiming(p, next, env.op.fixes);
     if (!this.openTx.has(id)) this.pushStep(id, env.note ?? LABEL[env.op.type] ?? 'Alteração', p.timeline);
     p.timeline = next;
     p.version++;
@@ -232,6 +237,28 @@ class Store {
     if (escala) this.log(id, 'system', escala);
     this.changed(id);
     return p;
+  }
+
+  /**
+   * Correção de tempo de palavra (CH-0041): confere contra a transcrição do asset (existe, start < end, sem cruzar
+   * as vizinhas, dentro do trecho da montagem). Lança OpError antes de a timeline mudar.
+   */
+  private checkWordTiming(p: Project, next: Timeline, fixes: { assetId: string; at: number; start?: number | null; end?: number | null }[]): void {
+    const porAsset = new Map<string, number[]>();
+    for (const f of fixes) if (f.start !== undefined || f.end !== undefined) porAsset.set(f.assetId, [...(porAsset.get(f.assetId) ?? []), f.at]);
+    for (const [assetId, ats] of porAsset) {
+      const a = p.assets.find((x) => x.id === assetId);
+      if (!a) throw new OpError(`fix_words: asset ${assetId} não existe`);
+      if (!a.transcript) throw new OpError(`fix_words: ${a.name} não tem transcrição`);
+      let words: TextWord[];
+      try {
+        words = (JSON.parse(readFileSync(path.join(this.dir(p.id), a.transcript), 'utf8')) as { words: TextWord[] }).words ?? [];
+      } catch {
+        throw new OpError(`fix_words: não consegui ler a transcrição de ${a.name}`);
+      }
+      const motivo = wordTimingError(next, assetId, words, ats, a.duration);
+      if (motivo) throw new OpError(motivo);
+    }
   }
 
   undo(id: string): boolean {
@@ -383,6 +410,7 @@ const LABEL: Record<string, string> = {
   delete_clip: 'Remover clipe',
   move_clip: 'Mover clipe',
   split: 'Dividir clipe',
+  fix_words: 'Correção de palavra',
   set_zoom: 'Zoom',
   add_overlay: 'Adicionar overlay',
   move_overlay: 'Mover overlay',
