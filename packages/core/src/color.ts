@@ -224,7 +224,7 @@ function toRec709(gamut: keyof typeof PRIMARIES): M3 {
 // ---------------------------------------------------------------------------------------------
 // S-Log3/S-Gamut3.Cine → Rec.709 LC-709 Type A, embutida (BL-0159). A curva S-Log3 é a publicada pela Sony (DECODE e
 // ENCODE acima). A LC-709 Type A acrescenta duas decisões que a Sony não publica em fórmula, medidas uma vez contra a LUT
-// oficial ("SLog3SGamut3.CineToLC-709TypeA.cube", v1.04.04) por `scripts/cor/medir-lc709a.ts`:
+// oficial ("SLog3SGamut3.CineToLC-709TypeA.cube", v1.04.04) por `scripts/cor/ajustar-lc709a.mts` (régua do ΔE em quadro real: evidencias/BL-0159):
 //  1. matriz de cor em linear de cena: a Type A dessatura em relação à matriz das primárias S-Gamut3.Cine → Rec.709
 //     (pura, a matriz pública dá ΔE2000 médio 1,72 contra a oficial em quadros reais; esta, 0,39). Linhas somam 1:
 //     cinza continua cinza;
