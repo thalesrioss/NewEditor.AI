@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { manageGrade, type Timeline, uid, type MediaAsset } from '@neweditor/core';
-import { projectColors } from './color-source.ts';
+import { convertedBy, projectColors } from './color-source.ts';
 import { transcribe, writeCenters } from './asr.ts';
 import { analyze, speechChunks } from './decupagem/analyze.ts';
 import { makeEnvelope, makeProxy, makeThumbs, makeWav16k, probe, readEnvelope } from './media.ts';
@@ -97,9 +97,10 @@ function manageColor(projectId: string, asset: MediaAsset): void {
   const c = asset.color;
   if (!c || c.input === 'rec709') return;
   const cur = store.get(projectId).timeline.grades?.[asset.id];
-  if (cur?.input === c.input && cur.inputLut?.id === c.inputLut?.id && cur.codeRange === c.codeRange) return;
+  const next = manageGrade(cur, c)!;
+  if (cur?.input === c.input && cur.inputLut?.id === next.inputLut?.id && cur.codeRange === c.codeRange) return;
   const de = c.fonte === 'herdado' ? `herdado de ${c.de}` : `XML da câmera${c.modelo ? ` ${c.modelo}` : ''}`;
-  store.apply(projectId, { by: 'system', op: { type: 'set_grade', assetId: asset.id, grade: manageGrade(cur, c)! }, note: `Cor de ${asset.name}: ${c.gamma ?? c.input} (${de}), convertida ${c.inputLut ? `pela LUT oficial (${c.inputLut.nome})` : 'pela conversão da casa'}` });
+  store.apply(projectId, { by: 'system', op: { type: 'set_grade', assetId: asset.id, grade: next }, note: `Cor de ${asset.name}: ${c.gamma ?? c.input} (${de}), convertida ${convertedBy(c)}` });
 }
 
 /** Montagem ainda crua: nenhum corte, só os brutos inteiros postos pelo sistema. */

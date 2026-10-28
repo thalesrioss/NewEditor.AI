@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCues, buildLut, clipPlayed, coverCrop, framingRampWindow, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
+import { BUILTIN_INPUT, buildCues, buildLut, clipPlayed, coverCrop, framingRampWindow, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -283,10 +283,12 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
     const f = path.join(work, `grade-${luts.size}.cube`);
     // Look (LUT .cube do CinePRO) entra depois da conversão e das primárias — a mesma composição do preview.
     const cube = grade.lut ? await cineproCube(grade.lut.id).catch(() => null) : null;
-    // Conversão pela LUT oficial do fabricante: sem ela no disco, o render falha (não sai LOG lavado em silêncio).
-    const inCube = grade.inputLut ? await cineproCube(grade.inputLut.id) : null;
-    // Com a LUT oficial, 65 pontos: a composição com a do fabricante (33) não perde a curva nas sombras.
-    const n = inCube ? 65 : 33;
+    // Conversão por LUT de entrada do fabricante: sem ela no disco, o render falha (não sai LOG lavado em silêncio).
+    // S-Log3 tem conversão embutida (BL-0159): um `inputLut` velho (pasta do DaVinci) não é lido.
+    const builtin = !!BUILTIN_INPUT[grade.input];
+    const inCube = grade.inputLut && !builtin ? await cineproCube(grade.inputLut.id) : null;
+    // LOG convertido em 65 pontos: a curva S-Log3 nas sombras não se perde na interpolação da LUT.
+    const n = inCube || builtin ? 65 : 33;
     await fs.writeFile(f, lutToCube(buildLut(grade, n, cube, inCube), n));
     luts.set(assetId, f);
   }
