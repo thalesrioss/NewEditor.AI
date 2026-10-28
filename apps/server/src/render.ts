@@ -470,7 +470,7 @@ export async function encodeExactFrames(attempts: string[][], out: string, frame
 }
 
 /** Um trecho de áudio em WAV 48 kHz com micro-fade nas pontas (emenda sem estalo); velocidade sem mudar o tom; silêncio no congelamento. */
-async function segmentAudio(a: MediaAsset, c: Clip, out: string, clean: string | null): Promise<void> {
+export async function segmentAudio(a: MediaAsset, c: Clip, out: string, clean: string | null): Promise<void> {
   const d = clipDuration(c);
   const sp = clipSpeed(c);
   const played = clipPlayed(c);
@@ -484,7 +484,9 @@ async function segmentAudio(a: MediaAsset, c: Clip, out: string, clean: string |
   while (r > 2) ((tempo.push('atempo=2')), (r /= 2));
   while (r < 0.5) ((tempo.push('atempo=0.5')), (r *= 2));
   if (Math.abs(r - 1) > 1e-6) tempo.push(`atempo=${r}`);
-  const af = ['aformat=sample_rates=48000:channel_layouts=stereo', ...tempo, 'apad', `atrim=duration=${d}`, `afade=t=in:d=${FADE}`, `afade=t=out:st=${Math.max(0, played - FADE)}:d=${FADE}`].join(',');
+  // `aresample` pelo relógio da fonte: AAC com pacotes faltando (buraco no pts) vira silêncio no lugar do buraco.
+  // Sem isso o WAV só enfileira as amostras: o som depois do buraco adianta e a mix sai curta (BL-0156, 50 ms no v245).
+  const af = ['aresample=async=1:min_hard_comp=0.01:first_pts=0', 'aformat=sample_rates=48000:channel_layouts=stereo', ...tempo, 'apad', `atrim=duration=${d}`, `afade=t=in:d=${FADE}`, `afade=t=out:st=${Math.max(0, played - FADE)}:d=${FADE}`].join(',');
   await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(c.in), '-i', clean ?? a.path, '-t', String(c.out - c.in), '-vn', '-af', af, '-c:a', 'pcm_s16le', ...NO_INPUT_META, out]);
 }
 
