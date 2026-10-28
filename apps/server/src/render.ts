@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { cineproCube } from './cinepro.ts';
 import os from 'node:os';
 import path from 'node:path';
-import { BUILTIN_INPUT, buildCues, buildLut, clipPlayed, coverCrop, framingRampWindow, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
+import { BUILTIN_INPUT, buildCues, buildLut, clipGradeOf, NEUTRAL_GRADE, textureOfClip, type ColorGrade, clipPlayed, coverCrop, framingRampWindow, overlayPlayback, clipSpeed, FLASH_FRAMES, flashShutterCues, MOTION_SFX_TRACK, overlayActive, overlaysInDrawOrder, trackFlag, letteringFromText, clipDuration, clipStarts, isNeutral, lutToCube, resolveOverlay, textureOf, timelineDuration, type Clip, type LetteringSpec, type MediaAsset, type MotionSpec, type Project, type SfxCue, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { ROOT } from './config.ts';
 import { cleanMaster, syncVoiceClean } from './denoise.ts';
@@ -76,7 +76,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     // Color management por clipe (como o DaVinci): a entrada sai do arquivo (XML da câmera), LOG converte sempre.
     const managed = await managedGrades(p);
     notes.push(...managed.notes);
-    const { luts, lutFilter } = await gradeFilters(managed.grades, work);
+    const { luts, lutFilter, clipFilter } = await gradeFilters(managed.grades, work);
 
     // --- 1. Trechos ---------------------------------------------------------------------------
     const starts = clipStarts(tl);
@@ -89,7 +89,8 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
       const seg = (ext: string) => path.join(work, `${String(i).padStart(4, '0')}.${ext}`);
       if (hasVideo) {
         const cam = c.cam ? assets.get(c.cam) : undefined;
-        await segmentVideo(a, c, frames, fps, W, H, seg('mov'), lutFilter(camLut(a.id, cam?.id, luts, managed.colors)), !!tl.reframe, cam);
+        // Grade do clipe (BL-0159 C3) por cima da do arquivo, neste trecho só.
+        await segmentVideo(a, c, frames, fps, W, H, seg('mov'), await clipFilter(camLut(a.id, cam?.id, luts, managed.colors), c.grade), !!tl.reframe, cam);
         tick();
       }
       await segmentAudio(a, c, seg('wav'), cleanMaster(p, a));
@@ -275,12 +276,12 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
  * Cor do export: um LUT .cube por arquivo (câmera) em `work`, o mesmo que o preview usa, e a cadeia de filtros
  * (lut3d + textura) por assetId. Usado pelo render e pelo quadro de conferência (CH-0018), para os dois baterem.
  */
-export async function gradeFilters(grades: Project['timeline']['grades'], work: string): Promise<{ luts: Map<string, string>; lutFilter: (assetId: string) => string }> {
-  const luts = new Map<string, string>();
-  for (const [assetId, grade] of Object.entries(grades ?? {})) {
-    if (isNeutral(grade)) continue;
-    // Nome do arquivo pelo índice, nunca pelo id: o id vem do pedido e não pode virar caminho nem aspas no filtro.
-    const f = path.join(work, `grade-${luts.size}.cube`);
+export async function gradeFilters(
+  grades: Project['timeline']['grades'],
+  work: string,
+): Promise<{ luts: Map<string, string>; lutFilter: (assetId: string) => string; clipFilter: (assetId: string, clipGrade: ColorGrade | undefined) => Promise<string> }> {
+  /** O .cube da grade do arquivo, com a do clipe por cima quando houver (BL-0159 C3): a mesma `buildLut` do preview. */
+  const writeCube = async (f: string, grade: ColorGrade, clip?: ColorGrade): Promise<void> => {
     // Look (LUT .cube do CinePRO) entra depois da conversão e das primárias — a mesma composição do preview.
     const cube = grade.lut ? await cineproCube(grade.lut.id).catch(() => null) : null;
     // Conversão por LUT de entrada do fabricante: sem ela no disco, o render falha (não sai LOG lavado em silêncio).
@@ -289,12 +290,19 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
     const inCube = grade.inputLut && !builtin ? await cineproCube(grade.inputLut.id) : null;
     // LOG convertido em 65 pontos: a curva S-Log3 nas sombras não se perde na interpolação da LUT.
     const n = inCube || builtin ? 65 : 33;
-    await fs.writeFile(f, lutToCube(buildLut(grade, n, cube, inCube), n));
+    const clipLut = clip ? { grade: clip, cube: clip.lut ? await cineproCube(clip.lut.id).catch(() => null) : null } : null;
+    await fs.writeFile(f, lutToCube(buildLut(grade, n, cube, inCube, clipLut), n));
+  };
+  const luts = new Map<string, string>();
+  for (const [assetId, grade] of Object.entries(grades ?? {})) {
+    if (isNeutral(grade)) continue;
+    // Nome do arquivo pelo índice, nunca pelo id: o id vem do pedido e não pode virar caminho nem aspas no filtro.
+    const f = path.join(work, `grade-${luts.size}.cube`);
+    await writeCube(f, grade);
     luts.set(assetId, f);
   }
   // Textura (nitidez, vinheta, grão) do grade: filtros espaciais, com os mesmos valores do shader do preview.
-  const texFilter = (assetId: string) => {
-    const t = textureOf(grades?.[assetId]);
+  const texFilter = (t: ReturnType<typeof textureOf>) => {
     const f: string[] = [];
     if (t.sharpen > 0) f.push(`unsharp=5:5:${(t.sharpen * 1.6).toFixed(2)}`);
     if (t.vignette > 0) f.push(`vignette=a=${(0.2 + t.vignette * 0.9).toFixed(3)}`);
@@ -302,7 +310,24 @@ export async function gradeFilters(grades: Project['timeline']['grades'], work: 
     return f.length ? `,${f.join(',')}` : '';
   };
   // LUT em RGB de 16 bits (o bruto LOG de 8 bits não ganha degrau a mais na conversão).
-  return { luts, lutFilter: (assetId) => `${luts.has(assetId) ? `,format=gbrp16le,lut3d=file='${luts.get(assetId)}':interp=tetrahedral` : ''}${texFilter(assetId)}` };
+  const lut3d = (f: string | undefined) => (f ? `,format=gbrp16le,lut3d=file='${f}':interp=tetrahedral` : '');
+  const lutFilter = (assetId: string) => `${lut3d(luts.get(assetId))}${texFilter(textureOf(grades?.[assetId]))}`;
+  // Grade de clipe (BL-0159 C3): um .cube composto (arquivo → clipe) por combinação, feito na hora e reaproveitado
+  // entre os trechos; sem grade de clipe, o filtro do arquivo, igual ao de antes.
+  const clipLuts = new Map<string, Promise<string>>();
+  const clipFilter = async (assetId: string, clipGrade: ColorGrade | undefined): Promise<string> => {
+    const cg = clipGrade ? clipGradeOf(clipGrade) : null;
+    if (!cg || isNeutral(cg)) return lutFilter(assetId);
+    const key = JSON.stringify([assetId, cg]);
+    let f = clipLuts.get(key);
+    if (!f) {
+      const file = path.join(work, `grade-clipe-${clipLuts.size}.cube`);
+      f = writeCube(file, grades?.[assetId] ?? NEUTRAL_GRADE, cg).then(() => file);
+      clipLuts.set(key, f);
+    }
+    return `${lut3d(await f)}${texFilter(textureOfClip(grades?.[assetId], cg))}`;
+  };
+  return { luts, lutFilter, clipFilter };
 }
 
 /**
