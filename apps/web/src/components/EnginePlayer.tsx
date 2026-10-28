@@ -71,7 +71,7 @@ export function EnginePlayer() {
   useEffect(() => {
     const ids = new Set<string>();
     // LUT de entrada de fabricante (color management por clipe) vem pelo mesmo caminho dos looks; S-Log3 é embutida no core.
-    for (const g of [...Object.values(timeline?.grades ?? {}), ...(gradeDraft ? [gradeDraft.grade] : [])]) {
+    for (const g of [...Object.values(timeline?.grades ?? {}), ...(timeline?.main ?? []).flatMap((c) => (c.grade ? [c.grade] : [])), ...(gradeDraft ? [gradeDraft.grade] : [])]) {
       if (g.lut) ids.add(g.lut.id);
       if (g.inputLut) ids.add(g.inputLut.id);
     }
@@ -80,7 +80,7 @@ export function EnginePlayer() {
       if (!comp || comp.hasCube(id)) continue;
       loadCube(id).then((c) => engine.current?.compositor.setCube(id, c)).catch(() => undefined);
     }
-  }, [timeline?.grades, gradeDraft]);
+  }, [timeline?.grades, timeline?.main, gradeDraft]);
 
   // Tocar / pausar / pular.
   useEffect(() => {

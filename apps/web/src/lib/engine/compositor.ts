@@ -4,7 +4,7 @@
  *  - fala: zoom = recorte (crop iw/z) ancorado na largura (`cx`, CH-0023) e na altura dos olhos (`cy`), depois "contain" no quadro (letterbox);
  *  - B-roll: "cover" (preenche e recorta).
  */
-import { buildLut, coverCrop, isNeutral, type ColorGrade, type CubeLut, type OverlayFraming, textureOf } from '@neweditor/core';
+import { buildLut, clipGradeOf, coverCrop, isNeutral, NEUTRAL_GRADE, type ColorGrade, type CubeLut, type OverlayFraming, textureOfClip } from '@neweditor/core';
 import { publishScopeFrame } from '../scopeSource.ts';
 
 const N = 33;
@@ -53,6 +53,8 @@ export interface Layer {
   fit: 'contain' | 'cover' | 'reframe';
   zoom?: number;
   grade?: ColorGrade | null;
+  /** Grade do clipe (BL-0159 C3), por cima da do arquivo, na mesma LUT. */
+  clipGrade?: ColorGrade | null;
   /** Rotação de exibição do arquivo, em graus no sentido horário (o quadro decodificado vem sem girar). */
   rotate?: 0 | 90 | 180 | 270;
   /** Reframe: centro horizontal (0–1) do recorte em volta do rosto. Contain: âncora horizontal do zoom (CH-0023). */
@@ -126,13 +128,13 @@ export class Compositor {
   }
 
   /** LUT 3D da correção (cache por correção; muda ao vivo enquanto o slider arrasta). */
-  private lutFor(g: ColorGrade): WebGLTexture {
-    const key = JSON.stringify(g);
+  private lutFor(g: ColorGrade, clip: ColorGrade | null = null): WebGLTexture {
+    const key = JSON.stringify(clip ? [g, clip] : g);
     let t = this.luts.get(key);
     if (!t) {
       const gl = this.gl;
       t = this.texture(gl.TEXTURE_3D, 1);
-      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, N, N, N, 0, gl.RGB, gl.FLOAT, buildLut(g, N, g.lut ? (this.cubes.get(g.lut.id) ?? null) : null, g.inputLut ? (this.cubes.get(g.inputLut.id) ?? null) : null));
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, N, N, N, 0, gl.RGB, gl.FLOAT, buildLut(g, N, g.lut ? (this.cubes.get(g.lut.id) ?? null) : null, g.inputLut ? (this.cubes.get(g.inputLut.id) ?? null) : null, clip ? { grade: clip, cube: clip.lut ? (this.cubes.get(clip.lut.id) ?? null) : null } : null));
       this.luts.set(key, t);
       if (this.luts.size > 12) {
         const [k0, t0] = this.luts.entries().next().value!;
@@ -209,14 +211,16 @@ export class Compositor {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, l.frame);
-      const grade = l.grade && !isNeutral(l.grade) ? l.grade : null;
+      const cg = l.clipGrade ? clipGradeOf(l.clipGrade) : null;
+      const clip = cg && !isNeutral(cg) ? cg : null;
+      const grade = l.grade && !isNeutral(l.grade) ? l.grade : clip ? NEUTRAL_GRADE : null;
       if (grade) {
         gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_3D, this.lutFor(grade));
+        gl.bindTexture(gl.TEXTURE_3D, this.lutFor(grade, clip));
       }
       gl.uniform1f(this.u.useLut!, grade ? 1 : 0);
-      // Textura do grade (não cabe na LUT): os mesmos valores que o FFmpeg aplica no export.
-      const tx = textureOf(l.grade);
+      // Textura do grade (não cabe na LUT): os mesmos valores que o FFmpeg aplica no export; a do clipe vale por cima.
+      const tx = textureOfClip(l.grade, clip);
       gl.uniform3f(this.u.tex!, tx.sharpen, tx.vignette, tx.grain);
       gl.uniform2f(this.u.texel!, 1 / Math.max(1, l.frame.displayWidth), 1 / Math.max(1, l.frame.displayHeight));
       gl.uniform2f(this.u.res!, this.canvas.width, this.canvas.height);

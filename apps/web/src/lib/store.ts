@@ -39,8 +39,8 @@ interface EditorState {
 
   envelopes: Record<string, Float32Array>;
   transcripts: Record<string, Word[]>;
-  /** Correção de cor sendo arrastada (preview ao vivo antes de gravar). */
-  gradeDraft: { assetId: string; grade: ColorGrade } | null;
+  /** Correção de cor sendo arrastada (preview ao vivo antes de gravar); com `clipId`, é a grade daquele clipe (BL-0159 C3). */
+  gradeDraft: { assetId: string; grade: ColorGrade; clipId?: string } | null;
   /** Segurando "antes": mostra o original sem correção. */
   compare: boolean;
   /** Marcas de entrada/saída (I/O) na timeline: Delete corta o intervalo. */
@@ -72,7 +72,7 @@ interface EditorState {
   select(s: Selection): void;
   selectWords(s: WordSelection | null): void;
   setPxPerSec(v: number): void;
-  setGradeDraft(d: { assetId: string; grade: ColorGrade } | null): void;
+  setGradeDraft(d: { assetId: string; grade: ColorGrade; clipId?: string } | null): void;
   setCompare(v: boolean): void;
   setMarks(m: { in?: number; out?: number }): void;
   toggleMulti(id: string): void;

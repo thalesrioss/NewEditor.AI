@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, Palette, RotateCcw, Search, Wand2, X } from 'lucide-react';
+import { ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
 import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
+import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor } from '../lib/cor-clipe.ts';
 import { useEditor } from '../lib/store.ts';
 import { Scopes } from './Scopes.tsx';
 import { Button, RangeField } from './ui.tsx';
@@ -22,6 +23,9 @@ const COLOR: { k: Num; label: string; min: number; max: number; step: number }[]
   { k: 'vibrance', label: 'Vibração', min: -1, max: 1, step: 0.02 },
 ];
 
+/** Grade copiada (vale entre clipes e arquivos enquanto o editor está aberto). */
+let copiada: ColorGrade | null = null;
+
 /**
  * Aba Cor: LOG da câmera → Rec.709 (sempre primeiro), correções primárias e, por cima, um look do CinePRO
  * (LUT .cube da nuvem, com força). Ao vivo no player, com o mesmo LUT do export.
@@ -32,31 +36,42 @@ export function ColorPanel() {
   const setDraft = useEditor((s) => s.setGradeDraft);
   const setCompare = useEditor((s) => s.setCompare);
   const videos = (project?.assets ?? []).filter((a) => a.kind === 'video');
-  const [assetId, setAssetId] = useState(() => videos.find((a) => a.role === 'fala')?.id ?? videos[0]?.id ?? '');
-  const saved = (assetId && project?.timeline.grades?.[assetId]) || NEUTRAL_GRADE;
+  const [fileAssetId, setAssetId] = useState(() => videos.find((a) => a.role === 'fala')?.id ?? videos[0]?.id ?? '');
+  // Alvo (BL-0159 C3): a grade do arquivo (todos os clipes dele) ou a do clipe, por cima da do arquivo.
+  const [alvo, setAlvo] = useState<AlvoCor>('arquivo');
+  const [temCopia, setTemCopia] = useState(!!copiada);
+  // O clipe: o selecionado na timeline, senão o sob o cursor (o id só muda na troca de clipe, não a cada quadro).
+  const clipId = useEditor((s) => clipeDaCor(s.project?.timeline, s.selection?.kind === 'clip' ? s.selection.id : null, s.playhead)?.id ?? null);
+  const clip = clipId ? project?.timeline.main.find((c) => c.id === clipId) : undefined;
+  const doClipe = alvo === 'clipe' && !!clip;
+  const assetId = doClipe ? clip!.assetId : fileAssetId;
+  const saved = (doClipe ? clip!.grade : assetId && project?.timeline.grades?.[assetId]) || NEUTRAL_GRADE;
   const [g, setG] = useState<ColorGrade>(saved);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => setG(saved), [assetId, JSON.stringify(saved)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setG(saved), [assetId, doClipe, clipId, JSON.stringify(saved)]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => setDraft(null), [setDraft]);
   if (!project) return null;
   if (!videos.length) return <p className="p-4 text-xs text-ink-400">Sem vídeo no projeto.</p>;
 
   const live = (next: ColorGrade) => {
     setG(next);
-    setDraft({ assetId, grade: next });
+    setDraft(doClipe ? { assetId, grade: next, clipId: clip!.id } : { assetId, grade: next });
   };
   const commit = (next: ColorGrade, note = 'Ajustou a cor') => {
     setDraft(null);
-    sendOp({ op: { type: 'set_grade', assetId, grade: next }, note });
+    if (doClipe) sendOp({ op: { type: 'set_clip_grade', clipIds: [clip!.id], grade: next }, note: `${note} (clipe)` });
+    else sendOp({ op: { type: 'set_grade', assetId, grade: next }, note });
   };
+  const daCamera = clip && project ? clipesDaCamera(project.timeline, clip) : [];
+  const nomeDe = (id: string) => project?.assets.find((a) => a.id === id)?.name ?? id;
   const input = INPUT_TRANSFORMS.find((x) => x.id === g.input);
 
   return (
     <div className="scroll-thin h-full space-y-4 overflow-y-auto p-4">
       <div className="flex items-center gap-2">
         <Palette size={14} className="text-ink-300" />
-        <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-800 px-2 py-1 text-ui-xs text-ink-100 focus:outline-none">
+        <select value={assetId} disabled={doClipe} onChange={(e) => setAssetId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-800 px-2 py-1 text-ui-xs text-ink-100 focus:outline-none">
           {videos.map((a) => (
             <option key={a.id} value={a.id}>
               {a.role === 'fala' ? 'Fala · ' : 'B-roll · '}
@@ -66,8 +81,35 @@ export function ColorPanel() {
         </select>
       </div>
 
+      <div role="radiogroup" aria-label="Alvo da cor" className="grid grid-cols-2 gap-1 rounded-lg border border-ink-700 p-0.5 text-ui-xs">
+        {(['arquivo', 'clipe'] as const).map((k) => (
+          <button key={k} role="radio" aria-checked={alvo === k} disabled={k === 'clipe' && !clip} onClick={() => (setDraft(null), setAlvo(k))} className={`rounded-md px-2 py-1 font-medium disabled:opacity-40 ${alvo === k ? 'bg-ink-700 text-ink-50' : 'text-ink-300 hover:text-ink-100'}`}>
+            {k === 'arquivo' ? 'Arquivo (todos os clipes)' : 'Este clipe'}
+          </button>
+        ))}
+      </div>
+      {doClipe && (
+        <p className="text-ui-xs leading-snug text-ink-400">
+          Clipe {project.timeline.main.indexOf(clip!) + 1} ({nomeDe(clip!.cam ?? clip!.assetId)}): por cima da grade do arquivo, que já faz a conversão da câmera.{clip!.grade ? '' : ' Sem grade própria.'}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="secondary" icon={<ClipboardCopy size={12} />} onClick={() => ((copiada = { ...g }), setTemCopia(true))} title="Copiar a grade mostrada">
+          Copiar
+        </Button>
+        <Button size="sm" variant="secondary" icon={<ClipboardPaste size={12} />} disabled={!temCopia} onClick={() => copiada && commit(colarGrade(copiada, g, doClipe ? 'clipe' : 'arquivo'), 'Colou a grade')} title={doClipe ? 'Colar neste clipe' : 'Colar no arquivo'}>
+          Colar
+        </Button>
+        {doClipe && (
+          <Button size="sm" variant="secondary" icon={<Users size={12} />} onClick={() => sendOp({ op: { type: 'set_clip_grade', clipIds: daCamera, grade: g }, note: `Grade do clipe em ${daCamera.length} clipe(s) da câmera ${nomeDe(clip!.cam ?? clip!.assetId)}` })} title="Mesma grade de clipe em todos os clipes da timeline com esta câmera">
+            Aplicar aos {daCamera.length} clipes desta câmera
+          </Button>
+        )}
+      </div>
+
       <Scopes />
 
+      {!doClipe && (<>
       <button
         disabled={busy}
         onClick={async () => {
@@ -98,6 +140,7 @@ export function ColorPanel() {
         </select>
         {input && <span className="block text-ui-xs text-ink-400">{input.camera}</span>}
       </label>
+      </>)}
 
       <Group title="Luz" items={LIGHT} g={g} live={live} commit={commit} />
       <Group title="Cor" items={COLOR} g={g} live={live} commit={commit} />
@@ -111,7 +154,7 @@ export function ColorPanel() {
         <button aria-label="Segure para ver o original" onMouseDown={() => setCompare(true)} onMouseUp={() => setCompare(false)} onMouseLeave={() => setCompare(false)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-600 py-1.5 text-ui-xs text-ink-200 hover:border-nc-500" title="Segure para ver o original">
           <Eye size={13} /> Segure: antes
         </button>
-        <button aria-label="Zerar ajustes (mantém a entrada da câmera)" onClick={() => commit({ ...NEUTRAL_GRADE, input: g.input }, 'Zerou os ajustes de cor')} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-200 hover:border-rose-400" title="Zerar ajustes (mantém a entrada da câmera)">
+        <button aria-label="Zerar ajustes (mantém a entrada da câmera)" onClick={() => commit({ ...NEUTRAL_GRADE, input: g.input }, doClipe ? 'Tirou a grade do clipe' : 'Zerou os ajustes de cor')} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-200 hover:border-rose-400" title="Zerar ajustes (mantém a entrada da câmera)">
           <RotateCcw size={13} /> Zerar
         </button>
       </div>
