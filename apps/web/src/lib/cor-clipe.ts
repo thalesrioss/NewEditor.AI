@@ -19,15 +19,36 @@ export function clipesDaCamera(tl: Timeline, clip: Clip): string[] {
   return tl.main.filter((c) => cam(c) === cam(clip)).map((c) => c.id);
 }
 
+/** Grade copiada na aba Cor, com o alvo em que foi copiada. */
+export interface CopiaCor {
+  grade: ColorGrade;
+  alvo: AlvoCor;
+}
+
 /**
- * Grade colada no alvo. No arquivo, a conversão de entrada fica a do arquivo (a colada não troca a câmera); no clipe, a
- * entrada sai (o `set_clip_grade` já tira: a grade do clipe entra sobre a imagem convertida).
+ * Grade colada no alvo, ou null quando a cópia veio do outro alvo. A grade do arquivo já faz a conversão e as primárias;
+ * colada num clipe do mesmo arquivo, entraria de novo por cima (primárias duas vezes no render). E a do clipe colada no
+ * arquivo trocaria a grade de todos os clipes por um ajuste feito para um só. No arquivo, a conversão de entrada fica a
+ * do arquivo (a colada não troca a câmera); no clipe, a entrada sai (o `set_clip_grade` já tira).
  */
-export function colarGrade(colada: ColorGrade, atual: ColorGrade, alvo: AlvoCor): ColorGrade {
-  if (alvo === 'clipe') return { ...colada };
-  const { input: _i, codeRange: _c, inputLut: _l, ...resto } = colada;
+export function colarGrade(copia: CopiaCor, atual: ColorGrade, alvo: AlvoCor): ColorGrade | null {
+  if (copia.alvo !== alvo) return null;
+  if (alvo === 'clipe') return { ...copia.grade };
+  const { input: _i, codeRange: _c, inputLut: _l, ...resto } = copia.grade;
   const out: ColorGrade = { ...resto, input: atual.input };
   if (atual.codeRange) out.codeRange = atual.codeRange;
   if (atual.inputLut) out.inputLut = atual.inputLut;
   return out;
+}
+
+/**
+ * Grade do arquivo no player antigo (sem grade por clipe): o rascunho só vale quando é do arquivo. O rascunho de "Este
+ * clipe" é Rec.709 sem conversão de entrada; no lugar da grade do arquivo, a imagem LOG apareceria crua durante o arraste.
+ */
+export function gradeDoArquivoAoVivo(
+  draft: { assetId: string; grade: ColorGrade; clipId?: string } | null | undefined,
+  assetId: string,
+  grades: Record<string, ColorGrade> | undefined,
+): ColorGrade | undefined {
+  return draft && !draft.clipId && draft.assetId === assetId ? draft.grade : grades?.[assetId];
 }

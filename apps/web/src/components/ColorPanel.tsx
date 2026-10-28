@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
 import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
-import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor } from '../lib/cor-clipe.ts';
+import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor, type CopiaCor } from '../lib/cor-clipe.ts';
 import { useEditor } from '../lib/store.ts';
 import { Scopes } from './Scopes.tsx';
 import { Button, RangeField } from './ui.tsx';
@@ -23,8 +23,8 @@ const COLOR: { k: Num; label: string; min: number; max: number; step: number }[]
   { k: 'vibrance', label: 'Vibração', min: -1, max: 1, step: 0.02 },
 ];
 
-/** Grade copiada (vale entre clipes e arquivos enquanto o editor está aberto). */
-let copiada: ColorGrade | null = null;
+/** Grade copiada, com o alvo da cópia (cola só no mesmo alvo: arquivo em arquivo, clipe em clipe; vale enquanto o editor está aberto). */
+let copiada: CopiaCor | null = null;
 
 /**
  * Aba Cor: LOG da câmera → Rec.709 (sempre primeiro), correções primárias e, por cima, um look do CinePRO
@@ -39,7 +39,7 @@ export function ColorPanel() {
   const [fileAssetId, setAssetId] = useState(() => videos.find((a) => a.role === 'fala')?.id ?? videos[0]?.id ?? '');
   // Alvo (BL-0159 C3): a grade do arquivo (todos os clipes dele) ou a do clipe, por cima da do arquivo.
   const [alvo, setAlvo] = useState<AlvoCor>('arquivo');
-  const [temCopia, setTemCopia] = useState(!!copiada);
+  const [alvoCopia, setAlvoCopia] = useState<AlvoCor | null>(copiada?.alvo ?? null);
   // O clipe: o selecionado na timeline, senão o sob o cursor (o id só muda na troca de clipe, não a cada quadro).
   const clipId = useEditor((s) => clipeDaCor(s.project?.timeline, s.selection?.kind === 'clip' ? s.selection.id : null, s.playhead)?.id ?? null);
   const clip = clipId ? project?.timeline.main.find((c) => c.id === clipId) : undefined;
@@ -94,10 +94,10 @@ export function ColorPanel() {
         </p>
       )}
       <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" variant="secondary" icon={<ClipboardCopy size={12} />} onClick={() => ((copiada = { ...g }), setTemCopia(true))} title="Copiar a grade mostrada">
+        <Button size="sm" variant="secondary" icon={<ClipboardCopy size={12} />} onClick={() => ((copiada = { grade: { ...g }, alvo: doClipe ? 'clipe' : 'arquivo' }), setAlvoCopia(copiada.alvo))} title="Copiar a grade mostrada">
           Copiar
         </Button>
-        <Button size="sm" variant="secondary" icon={<ClipboardPaste size={12} />} disabled={!temCopia} onClick={() => copiada && commit(colarGrade(copiada, g, doClipe ? 'clipe' : 'arquivo'), 'Colou a grade')} title={doClipe ? 'Colar neste clipe' : 'Colar no arquivo'}>
+        <Button size="sm" variant="secondary" icon={<ClipboardPaste size={12} />} disabled={alvoCopia !== (doClipe ? 'clipe' : 'arquivo')} onClick={() => { const c = copiada && colarGrade(copiada, g, doClipe ? 'clipe' : 'arquivo'); if (c) commit(c, 'Colou a grade'); }} title={alvoCopia && alvoCopia !== (doClipe ? 'clipe' : 'arquivo') ? (alvoCopia === 'arquivo' ? 'A cópia é de uma grade de arquivo: cole em Arquivo' : 'A cópia é de uma grade de clipe: cole em Este clipe') : doClipe ? 'Colar neste clipe' : 'Colar no arquivo'}>
           Colar
         </Button>
         {doClipe && (
