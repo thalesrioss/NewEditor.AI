@@ -13,7 +13,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-registro-'));
 const MEM = path.join(tmp, 'newstudios', 'memoria');
-const COFRE = path.join(tmp, 'cofre', '_SISTEMA');
+const COFRE = path.join(tmp, 'cofre', 'NewStudios', '_SISTEMA');
 process.env.NEWSTUDIOS_MEMORIA = MEM;
 process.env.CEREBRO_COFRE = COFRE;
 process.env.NEWEDITOR_DATA = path.join(tmp, 'data');

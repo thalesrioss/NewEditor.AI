@@ -438,8 +438,14 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
     if (o.source.type !== 'media') continue;
     const a = assets.get(o.source.assetId);
     const pos = resolveOverlay(tl, o);
-    if (!a || !pos || a.alpha || a.kind === 'audio') continue;
+    // Imagem (print, foto) fica fora da regra, como no aviso da operação (`store.ts`): cover de 1080×1080 num 9:16 é o normal.
+    if (!a || !pos || a.alpha || a.kind === 'audio' || a.kind === 'image') continue;
     const e = overlayScale(a, o.framing, tl) ?? 0;
+    // B-roll de outra coisa (1920×1080 em cover num 1080×1920 dá 1,78×) vira aviso; cobertura do falante segue reprovando.
+    if (!doFalante(a)) {
+      if (e > LIMITES.escala) avisos.push(`escala do B-roll ${o.id} (${nome(a.id)}) em ${trecho(pos.start, pos.end)}: ${n(e, 2)}× sobre ${a.width}×${a.height} (amplia a fonte; confira se a imagem amolece)`);
+      continue;
+    }
     piorEscala = Math.max(piorEscala, e);
     if (e > LIMITES.escala) out.push({ regra: 'escala', ok: false, medido: `${n(e, 2)}× (B-roll${o.framing ? ` zoom ${n(o.framing.zoom, 2)}` : ''} sobre ${a.width}×${a.height})`, limite: `≤ ${n(LIMITES.escala, 2)}×`, onde: `${o.id} (${nome(a.id)}) em ${trecho(pos.start, pos.end)}`, at: pos.start });
   }

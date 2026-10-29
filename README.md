@@ -113,7 +113,9 @@ Reporta precisão/recall de tempo, concordância palavra a palavra, erro de bord
 Toda aprovação, reprovação ou alteração do Thales vira uma linha (só append) na memória da NewStudios
 (`correcoes.jsonl` ou, se aprovação, `decisoes.jsonl`) e no cofre `_SISTEMA/` no formato do PROTOCOLO_GLOBAL, com
 `"origem": "Thales"` e `"fonte": "newstudios"`. Mesmo `--ref` não grava duas vezes; sem cofre, grava só na NewStudios e avisa.
-Caminhos: `NEWSTUDIOS_MEMORIA` (padrão `~/newstudios/memoria`) e `CEREBRO_COFRE` (padrão `~/Documents/Cérebro do Editor/_SISTEMA`).
+Caminhos: `NEWSTUDIOS_MEMORIA` (padrão `~/newstudios/memoria`) e `CEREBRO_COFRE` (padrão `~/Documents/Cérebro do Editor/NewStudios/_SISTEMA`).
+`CEREBRO_COFRE` precisa terminar em `NewStudios/_SISTEMA`: apontado para outra pasta (a raiz do Thales), não grava no cofre e avisa.
+A raiz `~/Documents/Cérebro do Editor/_SISTEMA` é do Thales e só é lida (`CEREBRO_COFRE_RAIZ`).
 
 Pela tela (pedido com `Origin` da tela, WebSocket) o Editor Brain grava sozinho: aprovar a decupagem, card para Entregue
 (aprovação) ou de volta para Alteração (reprovação), comentário do editor, pedido no chat e um resumo da edição à mão
