@@ -13,3 +13,4 @@ export * from './cerebro.ts';
 export * from './prazo.ts';
 export * from './briefing.ts';
 export * from './escala.ts';
+export * from './scopes.ts';

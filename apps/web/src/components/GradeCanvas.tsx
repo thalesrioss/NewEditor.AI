@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { buildLut, type ColorGrade } from '@neweditor/core';
 import { useCube } from '../lib/looks.ts';
+import { publishScopeFrame } from '../lib/scopeSource.ts';
 
 const N = 33;
 
@@ -32,7 +33,7 @@ export function GradeCanvas({ getVideo, grade, style }: { getVideo: () => HTMLVi
   // Contexto + shader (uma vez).
   useEffect(() => {
     const cv = canvas.current!;
-    const ctx = cv.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: false });
+    const ctx = cv.getContext('webgl2', { premultipliedAlpha: false, preserveDrawingBuffer: true });
     if (!ctx) return;
     const sh = (type: number, src: string) => {
       const s = ctx.createShader(type)!;
@@ -95,6 +96,7 @@ export function GradeCanvas({ getVideo, grade, style }: { getVideo: () => HTMLVi
         g.ctx.bindTexture(g.ctx.TEXTURE_2D, g.frameTex);
         g.ctx.texImage2D(g.ctx.TEXTURE_2D, 0, g.ctx.RGB, g.ctx.RGB, g.ctx.UNSIGNED_BYTE, v);
         g.ctx.drawArrays(g.ctx.TRIANGLE_STRIP, 0, 4);
+        publishScopeFrame(cv, null);
       }
       raf = requestAnimationFrame(draw);
     };

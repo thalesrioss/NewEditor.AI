@@ -30,7 +30,7 @@ export class Engine {
   private tl: Timeline | null = null;
   private assets = new Map<string, MediaAsset>();
   private speech: [number, number][] = [];
-  private gradeOverride: { assetId: string; grade: ColorGrade } | null = null;
+  private gradeOverride: { assetId: string; grade: ColorGrade; clipId?: string } | null = null;
   private showGrade = true;
 
   private playing = false;
@@ -74,7 +74,7 @@ export class Engine {
     if (changed && this.playing) this.restartAudio();
   }
 
-  setGrade(override: { assetId: string; grade: ColorGrade } | null, show: boolean): void {
+  setGrade(override: { assetId: string; grade: ColorGrade; clipId?: string } | null, show: boolean): void {
     this.gradeOverride = override;
     this.showGrade = show;
   }
@@ -160,7 +160,10 @@ export class Engine {
     const layers: Layer[] = [];
     let complete = true;
     const loc = locate(tl, Math.min(t, Math.max(0, timelineDuration(tl) - 0.001)));
-    const gradeOf = (assetId: string) => (!this.showGrade ? null : this.gradeOverride?.assetId === assetId ? this.gradeOverride.grade : (tl.grades?.[assetId] ?? null));
+    const ov = this.gradeOverride;
+    const gradeOf = (assetId: string) => (!this.showGrade ? null : ov && !ov.clipId && ov.assetId === assetId ? ov.grade : (tl.grades?.[assetId] ?? null));
+    // Grade do clipe ativo (BL-0159 C3), por cima da do arquivo: a mesma LUT composta que o render usa neste trecho.
+    const clipGradeOf = (clip: Timeline['main'][number]) => (!this.showGrade ? null : ov?.clipId === clip.id ? ov.grade : (clip.grade ?? null));
     if (loc) {
       // 2ª câmera: mesmo instante, deslocado pelo alinhamento de áudio; a cor é a da fala.
       const cam = loc.clip.cam ? this.assets.get(loc.clip.cam) : undefined;
@@ -171,7 +174,7 @@ export class Engine {
         const reframe = !!tl.reframe && loc.clip.framing?.x !== undefined && !!a.width && !!a.height && a.width / a.height > tl.width / tl.height + 0.02;
         // Rampa de enquadramento (CH-0036); no reframe o x é o centro do recorte e não anda, igual ao render.
         const fr = framingAt(loc.clip, loc.local);
-        if (f) layers.push({ frame: f, fit: reframe ? 'reframe' : 'contain', zoom: zoomAt(loc.clip, loc.local), cx: reframe ? loc.clip.framing?.x : fr.x, cy: fr.y, grade: gradeOf(loc.clip.assetId) });
+        if (f) layers.push({ frame: f, fit: reframe ? 'reframe' : 'contain', zoom: zoomAt(loc.clip, loc.local), cx: reframe ? loc.clip.framing?.x : fr.x, cy: fr.y, grade: gradeOf(loc.clip.assetId), clipGrade: clipGradeOf(loc.clip) });
         else complete = false;
       }
     }

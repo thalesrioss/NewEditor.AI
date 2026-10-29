@@ -422,6 +422,7 @@ const LABEL: Record<string, string> = {
   trim_overlay: 'Ajustar overlay',
   remove_overlay: 'Remover overlay',
   set_voice_denoise: 'Limpeza da voz',
+  set_clip_grade: 'Cor do clipe',
 };
 
 export const store = new Store();

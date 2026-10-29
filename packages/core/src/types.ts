@@ -88,6 +88,11 @@ export interface Clip {
    * Fora do reframe, como o `framing` (âncora do zoom: precisa de zoom > 1 para mover).
    */
   framingTo?: FramingRamp;
+  /**
+   * Grade do clipe (BL-0159 C3), SOBRE a do arquivo (`timeline.grades[assetId]`, que faz a conversão LOG): entra depois
+   * dela, no espaço de exibição Rec.709, sem conversão de entrada própria (`input` sempre 'rec709'). Ver `buildLut`.
+   */
+  grade?: import('./color.ts').ColorGrade;
 }
 
 export interface FramingRamp {
@@ -516,6 +521,8 @@ export type TimelineOp =
   /** Velocidade e congelamento do B-roll (CH-0004); null ou ausente = como estava (null volta ao normal). */
   | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
+  /** Grade por clipe sobre a do arquivo (BL-0159 C3), em um ou vários clipes (colar, "todos desta câmera"); null tira. */
+  | { type: 'set_clip_grade'; clipIds: string[]; grade: import('./color.ts').ColorGrade | null }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
   | { type: 'set_motion_ref'; refId: string | null }

@@ -69,6 +69,6 @@ export async function autoGrade(asset: MediaAsset): Promise<{ grade: ColorGrade;
     tint = Math.max(-0.3, Math.min(0.3, ((r + b) / 2 - g) / g));
   }
   const grade: ColorGrade = { ...base, exposure: Math.round(exposure * 20) / 20, temperature: Math.round(temperature * 100) / 100, tint: Math.round(tint * 100) / 100 };
-  const label = input === 'rec709' ? 'imagem já em Rec.709' : asset.color ? `${asset.color.gamma ?? input} lido do arquivo${base.inputLut ? ', LUT oficial' : ''}` : `${input === 'slog3' ? 'Sony S-Log3' : input} (preto em ${Math.round(st.ylow)}/1023${st.brand ? `, arquivo ${st.brand}` : ''})`;
+  const label = input === 'rec709' ? 'imagem já em Rec.709' : asset.color ? `${asset.color.gamma ?? input} lido do arquivo${input === 'slog3' ? ', conversão LC-709 Type A embutida' : base.inputLut ? ', LUT de entrada' : ''}` : `${input === 'slog3' ? 'Sony S-Log3' : input} (preto em ${Math.round(st.ylow)}/1023${st.brand ? `, arquivo ${st.brand}` : ''})`;
   return { grade, why: `${label}; exposição ${grade.exposure >= 0 ? '+' : ''}${grade.exposure} stop, temperatura ${grade.temperature}, matiz ${grade.tint}` };
 }

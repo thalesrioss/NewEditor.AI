@@ -70,8 +70,8 @@ export function EnginePlayer() {
   // Looks do CinePRO nas correções (ou no rascunho): baixa o .cube e entrega ao compositor, que refaz a LUT.
   useEffect(() => {
     const ids = new Set<string>();
-    // A LUT oficial de entrada (S-Log3 da Sony, color management por clipe) vem pelo mesmo caminho dos looks.
-    for (const g of [...Object.values(timeline?.grades ?? {}), ...(gradeDraft ? [gradeDraft.grade] : [])]) {
+    // LUT de entrada de fabricante (color management por clipe) vem pelo mesmo caminho dos looks; S-Log3 é embutida no core.
+    for (const g of [...Object.values(timeline?.grades ?? {}), ...(timeline?.main ?? []).flatMap((c) => (c.grade ? [c.grade] : [])), ...(gradeDraft ? [gradeDraft.grade] : [])]) {
       if (g.lut) ids.add(g.lut.id);
       if (g.inputLut) ids.add(g.inputLut.id);
     }
@@ -80,7 +80,7 @@ export function EnginePlayer() {
       if (!comp || comp.hasCube(id)) continue;
       loadCube(id).then((c) => engine.current?.compositor.setCube(id, c)).catch(() => undefined);
     }
-  }, [timeline?.grades, gradeDraft]);
+  }, [timeline?.grades, timeline?.main, gradeDraft]);
 
   // Tocar / pausar / pular.
   useEffect(() => {

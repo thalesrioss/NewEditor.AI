@@ -8,8 +8,9 @@
  *   → tone map fílmico → curva de exibição Rec.709 → contraste, altas/sombras, brancos/pretos, saturação.
  *
  * As curvas e primárias são as publicadas pelos fabricantes; o tone map é o da casa — por isso a conversão é um PONTO
- * DE PARTIDA, ajustável pelos controles primários. Quando a LUT oficial do fabricante está no disco (Sony S-Log3, a
- * que vem com o DaVinci), ela substitui curva + tone map (`inputLut`), como o Input Color Space do DaVinci.
+ * DE PARTIDA, ajustável pelos controles primários. S-Log3/S-Gamut3.Cine tem conversão embutida no app, a LC-709 Type A
+ * da Sony (`slog3Lc709TypeA`, BL-0159): nada é lido da pasta do DaVinci. `inputLut` (LUT de entrada de outro fabricante,
+ * .cube) continua aceito para as entradas sem conversão embutida.
  */
 
 export type InputTransform = 'rec709' | 'slog3' | 'vlog' | 'clog3' | 'applelog' | 'flog2' | 'nlog' | 'logc3' | 'logc4' | 'bmdfilm5';
@@ -45,8 +46,9 @@ export interface ColorGrade {
   vignette?: number;
   grain?: number;
   /**
-   * Conversão de entrada pela LUT oficial do fabricante (como o Input Color Space do DaVinci): .cube "full in full out"
-   * no lugar da curva + tone map da casa. Vem do arquivo (`MediaAsset.color`), não do editor: `manageGrade` põe.
+   * Conversão de entrada por um .cube do fabricante (como o Input Color Space do DaVinci), "full in full out", no lugar
+   * da curva + tone map da casa. Vem do arquivo (`MediaAsset.color`), não do editor: `manageGrade` põe. S-Log3 não usa
+   * (conversão embutida, `BUILTIN_INPUT`).
    */
   inputLut?: { id: string; nome: string };
   /**
@@ -81,7 +83,8 @@ export function manageGrade(g: ColorGrade | undefined, color: SourceColor | unde
   if (!color || color.input === 'rec709') return g;
   const base: ColorGrade = !g ? NEUTRAL_GRADE : g.input === color.input ? g : { ...NEUTRAL_GRADE, temperature: g.temperature ?? 0, tint: g.tint ?? 0, ...(g.lut ? { lut: g.lut } : {}), ...(g.sharpen ? { sharpen: g.sharpen } : {}), ...(g.vignette ? { vignette: g.vignette } : {}), ...(g.grain ? { grain: g.grain } : {}) };
   const out: ColorGrade = { ...base, input: color.input, codeRange: color.codeRange };
-  if (color.inputLut) out.inputLut = color.inputLut;
+  // Conversão embutida ganha da LUT do disco (projeto antigo guardou a da pasta do DaVinci: sai aqui).
+  if (color.inputLut && !BUILTIN_INPUT[color.input]) out.inputLut = color.inputLut;
   else delete out.inputLut;
   return out;
 }
@@ -219,6 +222,41 @@ function toRec709(gamut: keyof typeof PRIMARIES): M3 {
 }
 
 // ---------------------------------------------------------------------------------------------
+// S-Log3/S-Gamut3.Cine → Rec.709 LC-709 Type A, embutida (BL-0159). A curva S-Log3 é a publicada pela Sony (DECODE e
+// ENCODE acima). A LC-709 Type A acrescenta duas decisões que a Sony não publica em fórmula, medidas uma vez contra a LUT
+// oficial ("SLog3SGamut3.CineToLC-709TypeA.cube", v1.04.04) por `scripts/cor/ajustar-lc709a.mts` (régua do ΔE em quadro real: evidencias/BL-0159):
+//  1. matriz de cor em linear de cena: a Type A dessatura em relação à matriz das primárias S-Gamut3.Cine → Rec.709
+//     (pura, a matriz pública dá ΔE2000 médio 1,72 contra a oficial em quadros reais; esta, 0,39). Linhas somam 1:
+//     cinza continua cinza;
+//  2. curva de tom (contraste baixo, ombro longo), 17 nós em Catmull-Rom sobre o código S-Log3, ajustada no eixo neutro
+//     da oficial por mínimos quadrados (erro máximo < 1 código de 10 bits).
+// Mesma conta no preview (WebGL) e no export (FFmpeg): nada é lido do disco.
+// ---------------------------------------------------------------------------------------------
+
+const LC709A_MATRIX: M3 = [1.340281, -0.267429, -0.072852, -0.087016, 1.303766, -0.216749, -0.008767, 0.01947, 0.989297];
+const LC709A_TONE = [0.007777, 0.028259, 0.054073, 0.09085, 0.146379, 0.224295, 0.332363, 0.449363, 0.565377, 0.677852, 0.782475, 0.872593, 0.931628, 0.96695, 0.984483, 0.991367, 0.995138];
+
+/** Catmull-Rom uniforme sobre nós em u = 0..1 (extremos repetidos). */
+function catmullRom(knots: number[], u: number): number {
+  const t = Math.min(1, Math.max(0, u)) * (knots.length - 1);
+  const i = Math.min(knots.length - 2, Math.floor(t));
+  const f = t - i;
+  const k = (j: number) => knots[Math.max(0, Math.min(knots.length - 1, j))]!;
+  const [p0, p1, p2, p3] = [k(i - 1), k(i), k(i + 1), k(i + 2)];
+  return 0.5 * (2 * p1 + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
+}
+
+/** Linear de cena S-Gamut3.Cine → código de exibição Rec.709 (0..1), LC-709 Type A. */
+export function slog3Lc709TypeA([r, g, b]: [number, number, number]): [number, number, number] {
+  const m = LC709A_MATRIX;
+  const enc = ENCODE.slog3!;
+  return [m[0] * r + m[1] * g + m[2] * b, m[3] * r + m[4] * g + m[5] * b, m[6] * r + m[7] * g + m[8] * b].map((v) => Math.min(1, Math.max(0, catmullRom(LC709A_TONE, enc(v))))) as [number, number, number];
+}
+
+/** Entradas com conversão embutida no app (sem LUT de disco), com o nome mostrado ao editor. */
+export const BUILTIN_INPUT: Partial<Record<InputTransform, string>> = { slog3: 'Sony S-Log3/S-Gamut3.Cine → LC-709 Type A (embutida)' };
+
+// ---------------------------------------------------------------------------------------------
 // Pixel
 // ---------------------------------------------------------------------------------------------
 
@@ -247,7 +285,13 @@ export function gradePixel(rgb: [number, number, number], g: ColorGrade, inputCu
   const lumaW = 0.2126 * wr + 0.7152 * wg + 0.0722 * wb;
   let out: number[];
   const encode = ENCODE[g.input];
-  if (isLog && inputCube && encode) {
+  if (g.input === 'slog3') {
+    // Conversão embutida (LC-709 Type A): balanço e exposição em linear de cena no gamut da câmera, como na LUT de
+    // entrada do DaVinci. Grade neutra = a conversão pura. Um `inputLut` velho (pasta do DaVinci) é ignorado.
+    const k = Math.pow(2, g.exposure);
+    const lin = rgb.map((v, i) => decode(code(v)) * ((k * [wr, wg, wb][i]!) / lumaW)) as [number, number, number];
+    out = slog3Lc709TypeA(lin);
+  } else if (isLog && inputCube && encode) {
     // LUT oficial (Input Color Space do DaVinci): balanço e exposição em linear de cena no gamut da câmera, de volta
     // para a curva LOG, e a LUT do fabricante leva para a exibição. Grade neutra = a LUT pura.
     let c = rgb.map(code) as [number, number, number];
@@ -430,18 +474,27 @@ export function sampleCube(c: CubeLut, rgb: [number, number, number]): [number, 
  * LUT 3D (N³), ordem do .cube: R varia mais rápido. Com `cube` (o look do grade, já lido), ele entra depois
  * da conversão e das primárias, na força pedida — igual no WebGL e no FFmpeg.
  */
-export function buildLut(g: ColorGrade, n = 33, cube?: CubeLut | null, inputCube?: CubeLut | null): Float32Array {
+export function buildLut(g: ColorGrade, n = 33, cube?: CubeLut | null, inputCube?: CubeLut | null, clip?: { grade: ColorGrade; cube?: CubeLut | null } | null): Float32Array {
   const lut = new Float32Array(n * n * n * 3);
   const k = g.lut && cube ? clamp(g.lut.strength) : 0;
   const inCube = g.inputLut ? inputCube : null;
+  // Grade do clipe (BL-0159 C3): sobre o resultado do arquivo (conversão + primárias + look), como Rec.709, e o look dela.
+  const cg0 = clip ? clipGradeOf(clip.grade) : null;
+  const cg = cg0 && !isNeutral(cg0) ? cg0 : null;
+  const ck = cg?.lut && clip?.cube ? clamp(cg.lut.strength) : 0;
+  const mix = (o: [number, number, number], c: CubeLut, f: number): [number, number, number] => {
+    const l = sampleCube(c, o);
+    return [o[0] + (l[0] - o[0]) * f, o[1] + (l[1] - o[1]) * f, o[2] + (l[2] - o[2]) * f];
+  };
   let i = 0;
   for (let bi = 0; bi < n; bi++)
     for (let gi = 0; gi < n; gi++)
       for (let ri = 0; ri < n; ri++) {
         let o = gradePixel([ri / (n - 1), gi / (n - 1), bi / (n - 1)], g, inCube);
-        if (k > 0) {
-          const l = sampleCube(cube!, o);
-          o = [o[0] + (l[0] - o[0]) * k, o[1] + (l[1] - o[1]) * k, o[2] + (l[2] - o[2]) * k];
+        if (k > 0) o = mix(o, cube!, k);
+        if (cg) {
+          o = gradePixel(o, cg);
+          if (ck > 0) o = mix(o, clip!.cube!, ck);
         }
         lut[i++] = o[0];
         lut[i++] = o[1];
@@ -457,6 +510,21 @@ export function lutToCube(lut: Float32Array, n = 33, title = 'NewEditor.AI'): st
 }
 
 export const isNeutral = (g: ColorGrade | undefined) => !g || JSON.stringify(g) === JSON.stringify(NEUTRAL_GRADE);
+
+/**
+ * Grade de clipe (BL-0159 C3) como ela entra: sobre a imagem já convertida pelo arquivo, então sem conversão de entrada
+ * (`input` 'rec709', sem `inputLut` nem `codeRange`). A conta Rec.709 do `gradePixel` com tudo neutro é a identidade.
+ */
+export function clipGradeOf(g: ColorGrade): ColorGrade {
+  const { inputLut: _i, codeRange: _c, ...rest } = normalizeGradeLut(g);
+  return { ...rest, input: 'rec709' };
+}
+
+/** Textura do trecho com grade de clipe: o que o clipe define vale no lugar do arquivo; o que não define, fica o do arquivo. */
+export const textureOfClip = (file: ColorGrade | null | undefined, clip: ColorGrade | null | undefined) => {
+  const f = textureOf(file);
+  return { sharpen: clip?.sharpen ?? f.sharpen, vignette: clip?.vignette ?? f.vignette, grain: clip?.grain ?? f.grain };
+};
 
 /**
  * Palpite de entrada pela medida do quadro (valores de 10 bits): preto em ~95 é S-Log3; ~128 é V-Log/C-Log3.

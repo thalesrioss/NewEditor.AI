@@ -1,20 +1,14 @@
 /**
  * Color management por clipe, como o DaVinci (Input Color Space): o espaço de cor de entrada sai do PRÓPRIO arquivo
  * (XML NonRealTimeMeta da Sony, embutido no MP4 ou ao lado no cartão), nunca de palpite pelo quadro nem da grade do
- * reel vizinho. Arquivo LOG converte sempre pela LUT oficial do fabricante quando ela está no disco (as da Sony vêm
- * com o DaVinci Resolve). Câmera derivada (recorte ProRes de um bruto, que apaga o XML) herda do bruto de origem.
+ * reel vizinho. Arquivo S-Log3 converte pela conversão embutida no app (LC-709 Type A, `slog3Lc709TypeA` no core,
+ * BL-0159): nenhuma LUT é lida da pasta do DaVinci Resolve, nem o Resolve precisa estar instalado.
+ * Câmera derivada (recorte ProRes de um bruto, que apaga o XML) herda do bruto de origem.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { localLutId, manageGrade, gradeWasForced, type ColorGrade, type InputTransform, type MediaAsset, type Project, type SourceColor } from '@neweditor/core';
+import { BUILTIN_INPUT, manageGrade, gradeWasForced, type ColorGrade, type InputTransform, type MediaAsset, type Project, type SourceColor } from '@neweditor/core';
 import { run } from './media.ts';
-
-/** Onde procurar as LUTs oficiais (a pasta do DaVinci; `NEWEDITOR_LUT_DIR` troca, para teste ou outra máquina). */
-const LUT_DIRS = () => [process.env.NEWEDITOR_LUT_DIR, '/Library/Application Support/Blackmagic Design/DaVinci Resolve/LUT'].filter(Boolean) as string[];
-/** LUT oficial por entrada: S-Log3/S-Gamut3.Cine → Rec.709 (LC-709 Type A, "full in full out", a da Sony no Resolve). */
-const OFFICIAL: Partial<Record<InputTransform, { file: string; gamut: RegExp; nome: string }>> = {
-  slog3: { file: 'Sony/SLog3SGamut3.CineToLC-709TypeA.cube', gamut: /cine/i, nome: 'Sony S-Log3/S-Gamut3.Cine → LC-709 Type A (oficial)' },
-};
 
 /** Lê o XML da Sony (NonRealTimeMeta): curva, gamut e modelo. Curva desconhecida = null (não adivinha). */
 export function sonyXmlColor(xml: string): Pick<SourceColor, 'input' | 'gamma' | 'gamut' | 'modelo'> | null {
@@ -66,16 +60,9 @@ export async function cameraXml(file: string): Promise<string | null> {
   return side ? fs.readFile(path.join(dir, side), 'utf8').catch(() => null) : null;
 }
 
-/** LUT oficial de entrada no disco (ou nada: a conversão da casa assume). */
-export async function officialInputLut(input: InputTransform, gamut?: string): Promise<SourceColor['inputLut']> {
-  const o = OFFICIAL[input];
-  if (!o || (gamut && !o.gamut.test(gamut))) return undefined;
-  for (const dir of LUT_DIRS()) {
-    const f = path.join(dir, o.file);
-    if ((await fs.stat(f).catch(() => null))?.isFile()) return { id: localLutId(f), nome: o.nome };
-  }
-  return undefined;
-}
+/** Como a entrada LOG vira Rec.709, para a nota do render e do ingest. */
+export const convertedBy = (c: Pick<SourceColor, 'input' | 'inputLut'>): string =>
+  BUILTIN_INPUT[c.input] ? `pela conversão embutida (${BUILTIN_INPUT[c.input]})` : c.inputLut ? `pela LUT de entrada (${c.inputLut.nome})` : 'pela conversão da casa';
 
 /** Faixa do arquivo: bruto de câmera yuvj (pc) guarda o código direto. */
 async function codeRangeOf(file: string): Promise<SourceColor['codeRange']> {
@@ -95,8 +82,7 @@ export async function readSourceColor(file: string): Promise<SourceColor | null>
       const xml = await cameraXml(file);
       const c = xml ? sonyXmlColor(xml) : null;
       if (!c) return null;
-      const inputLut = c.input === 'rec709' ? undefined : await officialInputLut(c.input, c.gamut);
-      return { ...c, fonte: 'xml' as const, codeRange: await codeRangeOf(file), ...(inputLut ? { inputLut } : {}) };
+      return { ...c, fonte: 'xml' as const, codeRange: await codeRangeOf(file) };
     })();
     cache.set(key, hit);
   }
@@ -162,7 +148,7 @@ export async function managedGrades(p: Pick<Project, 'assets' | 'timeline'>, gra
     const g = manageGrade(out[id], c)!;
     if (gradeWasForced(out[id], c)) forced.push(names.get(id) ?? id);
     out[id] = g;
-    conv.add(`${c.gamma ?? c.input}${c.inputLut ? ' pela LUT oficial' : ' pela conversão da casa (LUT oficial não achada)'}`);
+    conv.add(`${c.gamma ?? c.input} ${convertedBy(c)}`);
   }
   if (conv.size) notes.push(`cor: entrada lida do arquivo, ${[...conv].join('; ')}`);
   if (forced.length) notes.push(`ATENÇÃO: grade feita como Rec.709 em arquivo LOG (${forced.slice(0, 4).join(', ')}${forced.length > 4 ? '…' : ''}): convertida pela entrada do arquivo; contraste, saturação e curvas daquela grade foram zerados (eram compensação do LOG lavado), ficou o balanço de branco: revise a cor sobre a imagem convertida`);

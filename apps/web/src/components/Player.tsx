@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, SkipBack } from 'lucide-react';
 import { buildCues, clipStarts, cueHtml, DEFAULT_CAPTIONS, formatTime, isNeutral, letteringFrameHtml, letteringFromText, locate, motionHtml, placeWords, resolveOverlay, timelineDuration, type Clip, type MediaAsset, overlayActive, overlaysInDrawOrder, overlayPlayback, trackFlag, zoomAt, clipSpeed } from '@neweditor/core';
 import { mediaUrl, proxyOf } from '../lib/api.ts';
+import { gradeDoArquivoAoVivo } from '../lib/cor-clipe.ts';
 import { GradeCanvas } from './GradeCanvas.tsx';
 import { AudioCard, EmptyPlayer, TextLayer } from './PlayerParts.tsx';
 import { useMotionSfx } from '../lib/motionSfx.ts';
@@ -269,7 +270,8 @@ export function LegacyPlayer() {
   const caps = timeline?.captions ?? DEFAULT_CAPTIONS;
   const cues = useMemo(() => (timeline && caps.enabled ? buildCues(timeline, transcripts, caps) : []), [timeline, transcripts, caps]);
   // Cor: o vídeo ativo passa pelo mesmo LUT do export (rascunho ao vivo enquanto arrasta).
-  const grade = asset && (gradeDraft?.assetId === asset.id ? gradeDraft.grade : timeline?.grades?.[asset.id]);
+  // O rascunho de "Este clipe" (com clipId) não entra aqui: o player antigo só desenha a grade do arquivo.
+  const grade = asset && gradeDoArquivoAoVivo(gradeDraft, asset.id, timeline?.grades);
   const showGrade = !!asset && asset.kind === 'video' && !!grade && !isNeutral(grade) && !compare;
   const getActiveVideo = useCallback(() => refs[active.current]!.current, []); // eslint-disable-line react-hooks/exhaustive-deps
 

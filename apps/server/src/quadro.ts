@@ -137,10 +137,10 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
   try {
     // A mesma cor do render: color management por clipe (entrada lida do arquivo) por cima da grade de teste.
     const managedC = await managedGrades(p, merged);
-    const { luts, lutFilter } = await gradeFilters(managedC.grades, work);
+    const { luts, lutFilter, clipFilter } = await gradeFilters(managedC.grades, work);
     const seg = path.join(work, 'seg.mov');
     // Do início do clipe até o quadro pedido: zoom animado e congelamento saem iguais ao render.
-    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(camLut(a.id, cam?.id, luts, managedC.colors)), !!tl.reframe, cam);
+    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, await clipFilter(camLut(a.id, cam?.id, luts, managedC.colors), c.grade), !!tl.reframe, cam);
     const name = `q_${Math.round(t * 1000)}_${Date.now().toString(36)}.png`;
     const png = path.join(outDir, name);
     const probe = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=color_range', '-of', 'default=nw=1:nk=1', seg])).toString().trim();

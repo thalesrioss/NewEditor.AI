@@ -1,8 +1,9 @@
 /**
  * FB-0180 (Q1/Q2 da força-tarefa de 27/10): os 79 brutos Sony ZV-E10 do Leandro são S-Log3/S-Gamut3.Cine (XML
  * NonRealTimeMeta embutido no MP4) e os 18 projetos foram graduados como Rec.709 — a cor saiu lavada. Agora a entrada
- * sai do arquivo, LOG converte pela LUT oficial da Sony (a do DaVinci) em 16 bits, e a entrega sai num encode só,
- * yuv420p/tv/bt709 nas quatro etiquetas, 30000/1001 CFR.
+ * sai do arquivo, LOG converte em 16 bits e a entrega sai num encode só, yuv420p/tv/bt709 nas quatro etiquetas,
+ * 30000/1001 CFR. BL-0159 C1: a conversão S-Log3/S-Gamut3.Cine → LC-709 Type A é embutida no app (sem a pasta do
+ * DaVinci, sem `NEWEDITOR_LUT_DIR`, sem o Resolve no PATH).
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -10,14 +11,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { buildLut, gradeWasForced, manageGrade, NEUTRAL_GRADE, parseCube, gradePixel, type SourceColor } from '@neweditor/core';
+import { BUILTIN_INPUT, buildLut, gradeWasForced, manageGrade, NEUTRAL_GRADE, parseCube, gradePixel, sampleCube, type SourceColor } from '@neweditor/core';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-cor-'));
 process.env.NEWEDITOR_DATA = path.join(tmp, 'data');
 process.env.NEWEDITOR_LLM = 'off';
-// LUT "oficial" de teste: S-Log3 → exibição pela fórmula (mesma forma da Sony: código 420 ≈ 0,40; 598 ≈ 0,71).
-const lutDir = path.join(tmp, 'LUT');
-process.env.NEWEDITOR_LUT_DIR = lutDir;
+// Sem LUT de disco e sem o Resolve: a conversão tem de sair do próprio app.
+process.env.NEWEDITOR_LUT_DIR = '';
+process.env.PATH = (process.env.PATH ?? '').split(path.delimiter).filter((d) => !/DaVinci|Blackmagic|resolve/i.test(d)).join(path.delimiter);
+// Só régua (nunca no caminho de render): a LUT oficial da Sony, quando a máquina tem o Resolve.
 const SONY_REAL = '/Library/Application Support/Blackmagic Design/DaVinci Resolve/LUT/Sony/SLog3SGamut3.CineToLC-709TypeA.cube';
 
 const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args], { stdio: ['ignore', 'ignore', 'inherit'] });
@@ -50,16 +52,6 @@ const bruto = path.join(tmp, 'C3030.MP4');
 const derivado = path.join(tmp, 'C3030_cam9x16_A5.mov');
 
 before(() => {
-  fs.mkdirSync(path.join(lutDir, 'Sony'), { recursive: true });
-  const n = 33;
-  const lines = ['TITLE "teste full in full out"', `LUT_3D_SIZE ${n}`];
-  const disp = (v: number) => {
-    const cv = v * 1023;
-    const lin = cv >= 171.21 ? Math.pow(10, (cv - 420) / 261.5) * 0.19 - 0.01 : ((cv - 95) * 0.01125) / (171.21 - 95);
-    return Math.max(0, Math.min(1, 0.04 + 0.95 * Math.pow(Math.max(0, lin) / (Math.max(0, lin) + 0.12), 0.6) * 0.92));
-  };
-  for (let b = 0; b < n; b++) for (let g = 0; g < n; g++) for (let r = 0; r < n; r++) lines.push([r, g, b].map((x) => disp(x / (n - 1)).toFixed(6)).join(' '));
-  fs.writeFileSync(path.join(lutDir, 'Sony', 'SLog3SGamut3.CineToLC-709TypeA.cube'), lines.join('\n') + '\n');
   const y = (cv: number) => Math.round(slog3(cv) * 255);
   ff(['-f', 'lavfi', '-i', `color=0x${y(95).toString(16).padStart(2, '0').repeat(3)}:s=64x360:r=30000/1001:d=2`, '-f', 'lavfi', '-i', `color=0x${y(420).toString(16).padStart(2, '0').repeat(3)}:s=64x360:r=30000/1001:d=2`, '-f', 'lavfi', '-i', `color=0x${y(598).toString(16).padStart(2, '0').repeat(3)}:s=64x360:r=30000/1001:d=2`, '-f', 'lavfi', '-i', 'sine=f=300:r=48000:d=2',
     '-filter_complex', '[0][1][2]hstack=3,scale=out_range=pc,format=yuvj420p[v]', '-map', '[v]', '-map', '3:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-qp', '0', '-color_range', 'pc', '-c:a', 'pcm_s16le', '-shortest', bruto]);
@@ -81,14 +73,14 @@ describe('cor de entrada lida do arquivo (color management por clipe)', () => {
     assert.equal(sonyXmlColor('<xml/>'), null);
   });
 
-  test('lê o XML embutido no MP4, a faixa cheia do bruto e acha a LUT oficial', async () => {
+  test('lê o XML embutido no MP4 e a faixa cheia do bruto; nenhuma LUT de disco', async () => {
     const { readSourceColor } = await import('./color-source.ts');
     const c = await readSourceColor(bruto);
     assert.equal(c?.input, 'slog3');
     assert.equal(c?.fonte, 'xml');
     assert.equal(c?.codeRange, 'full');
     assert.equal(c?.modelo, 'ZV-E10');
-    assert.match(c?.inputLut?.id ?? '', /^local:.*SLog3SGamut3\.CineToLC-709TypeA\.cube$/);
+    assert.equal(c?.inputLut, undefined, 'S-Log3 não procura LUT no disco');
     assert.equal(await readSourceColor(derivado), null, 'o recorte ProRes não tem XML');
   });
 
@@ -115,28 +107,54 @@ describe('cor de entrada lida do arquivo (color management por clipe)', () => {
     assert.equal(m.contrast, 0, 'contraste feito sobre o LOG lavado não dobra sobre a LUT');
     assert.equal(manageGrade({ ...g, input: 'slog3', temperature: 0.2 }, color)?.contrast, 0.3, 'grade já na entrada certa passa igual');
     assert.equal(manageGrade({ ...g, temperature: 0.2 }, color)?.temperature, 0.2, 'balanço de branco fica');
-    assert.equal(m.inputLut?.id, 'local:/x.cube');
+    assert.equal(m.inputLut, undefined, 'S-Log3 converte pela conversão embutida: LUT de disco não entra');
+    assert.equal(manageGrade(undefined, { ...color, input: 'vlog' })?.inputLut?.id, 'local:/x.cube', 'entrada sem conversão embutida segue aceitando LUT de entrada');
     assert.ok(gradeWasForced(g, color));
     assert.equal(manageGrade(undefined, color)?.input, 'slog3', 'sem grade: só a conversão');
     assert.equal(manageGrade(g, { ...color, input: 'rec709' }), g);
     assert.equal(manageGrade(g, undefined), g);
   });
 
-  test('LUT oficial: grade neutra = a LUT pura; exposição +1 stop clareia o cinza', { skip: !fs.existsSync(SONY_REAL) && 'LUT da Sony não instalada' }, () => {
-    const cube = parseCube(fs.readFileSync(SONY_REAL, 'utf8'));
-    const g = manageGrade(undefined, { input: 'slog3', fonte: 'xml', codeRange: 'full', inputLut: { id: `local:${SONY_REAL}`, nome: 'Sony' } })!;
-    const cinza = gradePixel([slog3(420), slog3(420), slog3(420)], g, cube);
-    assert.ok(Math.abs(cinza[1] - 0.398) < 0.01, `cinza 18% → ${cinza[1]}`);
-    const preto = gradePixel([slog3(95), slog3(95), slog3(95)], g, cube);
+  test('conversão embutida: neutra = LC-709 Type A pura; exposição +1 stop clareia o cinza; LUT velha do DaVinci sai', () => {
+    assert.ok(BUILTIN_INPUT.slog3);
+    const velha = { id: `local:${SONY_REAL}`, nome: 'Sony (pasta do DaVinci)' };
+    const g = manageGrade(undefined, { input: 'slog3', fonte: 'xml', codeRange: 'full', inputLut: velha })!;
+    assert.equal(g.inputLut, undefined, 'projeto antigo: a LUT da pasta do DaVinci não volta para a grade');
+    assert.equal(manageGrade({ ...NEUTRAL_GRADE, input: 'slog3', inputLut: velha }, { input: 'slog3', fonte: 'xml', codeRange: 'full' })!.inputLut, undefined);
+    const cinza = gradePixel([slog3(420), slog3(420), slog3(420)], g);
+    assert.ok(Math.abs(cinza[1] - 0.397) < 0.005, `cinza 18% → ${cinza[1]}`);
+    assert.ok(Math.abs(cinza[0] - cinza[2]) < 1e-6, 'cinza continua cinza');
+    const preto = gradePixel([slog3(95), slog3(95), slog3(95)], g);
     assert.ok(preto[1] < 0.06, `preto → ${preto[1]}`);
-    const mais = gradePixel([slog3(420), slog3(420), slog3(420)], { ...g, exposure: 1 }, cube);
+    const mais = gradePixel([slog3(420), slog3(420), slog3(420)], { ...g, exposure: 1 });
     assert.ok(mais[1] > cinza[1] + 0.08, `+1 stop: ${cinza[1]} → ${mais[1]}`);
-    // Composta em 65 pontos, a LUT bate com a da Sony no ponto do cinza.
-    const lut = buildLut(g, 65, null, cube);
-    assert.equal(lut.length, 65 ** 3 * 3);
+    // Um cubo qualquer passado como LUT de entrada não muda o S-Log3 (a embutida manda).
+    const cubo = parseCube(['LUT_3D_SIZE 2', ...Array.from({ length: 8 }, () => '0 0 0')].join('\n'));
+    assert.deepEqual(gradePixel([slog3(420), slog3(420), slog3(420)], { ...g, inputLut: velha }, cubo), cinza);
+    assert.equal(buildLut(g, 65).length, 65 ** 3 * 3);
   });
 
-  test('render: bruto LOG convertido pela LUT, um encode só, yuv420p/tv/bt709 e 30000/1001', { timeout: 180_000 }, async () => {
+  test('régua: conversão embutida contra a LUT oficial da Sony (só medida, fora do render)', { skip: !fs.existsSync(SONY_REAL) && 'LUT da Sony não instalada' }, () => {
+    const cube = parseCube(fs.readFileSync(SONY_REAL, 'utf8'));
+    const g = manageGrade(undefined, { input: 'slog3', fonte: 'xml', codeRange: 'full' })!;
+    // Eixo neutro (preto 95 ao branco 940) e tons de pele S-Log3 típicos: diferença por canal em código de 8 bits.
+    let pior = 0;
+    for (let cv = 95; cv <= 940; cv += 5) {
+      const v = slog3(cv);
+      const a = gradePixel([v, v, v], g), b = sampleCube(cube, [v, v, v]);
+      pior = Math.max(pior, ...a.map((x, i) => Math.abs(x - b[i]!) * 255));
+    }
+    // A oficial não é exatamente neutra nas altas (R e B ±0,008 do G): até 3/255.
+    assert.ok(pior < 3, `eixo neutro: pior diferença ${pior.toFixed(2)}/255`);
+    for (const pele of [[470, 420, 390], [520, 470, 440], [430, 390, 365], [560, 505, 470]]) {
+      const v = pele.map(slog3) as [number, number, number];
+      const a = gradePixel(v, g), b = sampleCube(cube, v);
+      const d = Math.max(...a.map((x, i) => Math.abs(x - b[i]!) * 255));
+      assert.ok(d < 4, `pele ${pele.join('/')}: ${d.toFixed(2)}/255`);
+    }
+  });
+
+  test('render: bruto LOG convertido sem LUT de disco, um encode só, yuv420p/tv/bt709 e 30000/1001', { timeout: 180_000 }, async () => {
     const { store } = await import('./store.ts');
     const { ingest } = await import('./ingest.ts');
     const { render } = await import('./render.ts');
@@ -152,7 +170,7 @@ describe('cor de entrada lida do arquivo (color management por clipe)', () => {
     store.apply(id, { by: 'human', op: { type: 'set_format', width: 192, height: 360, fps: 29.97 } });
     const res = await render(store.get(id), store.dir(id));
     const out = path.join(store.dir(id), res.file);
-    assert.ok(res.notes.some((n) => /s-log3-cine pela LUT oficial/.test(n)), res.notes.join(' | '));
+    assert.ok(res.notes.some((n) => /s-log3-cine pela conversão embutida/.test(n)), res.notes.join(' | '));
 
     const v = probe(out, 'stream=codec_name,pix_fmt,color_range,color_space,color_primaries,color_transfer,r_frame_rate,avg_frame_rate,sample_rate,bit_rate');
     assert.match(v, /codec_name=h264/);
@@ -165,7 +183,7 @@ describe('cor de entrada lida do arquivo (color management por clipe)', () => {
     assert.match(v, /codec_name=aac/);
     assert.match(v, /sample_rate=48000/);
 
-    // Branco S-Log3 (código 598 ≈ Y 149 cheio): convertido pela LUT ≈ 0,71 na exibição → Y legal ≈ 16 + 0,71·219 ≈ 172.
+    // Branco S-Log3 (código 598 ≈ Y 149 cheio): convertido (LC-709 Type A) ≈ 0,71 na exibição → Y legal ≈ 16 + 0,71·219 ≈ 172.
     // Sem conversão (o defeito), a faixa cheia só ia para a legal: Y ≈ 144. Preto (código 95) fica no pé da curva.
     const raw = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-frames:v', '1', '-vf', 'extractplanes=y', '-f', 'rawvideo', '-'], { maxBuffer: 1 << 24 });
     const W = 192;
