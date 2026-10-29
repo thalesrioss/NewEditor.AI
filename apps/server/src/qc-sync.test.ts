@@ -12,7 +12,7 @@ import { after, test } from 'node:test';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ne-sync-'));
 process.env.NEWEDITOR_DATA = path.join(tmp, 'data');
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
-const { melhorLag, syncPorTrecho } = await import('./qc-sync.ts');
+const { melhorLag, melhorLagMov, movimento, syncPorTrecho } = await import('./qc-sync.ts');
 
 const ff = (args: string[]) => execFileSync('ffmpeg', ['-y', '-v', 'error', ...args]);
 const fonte = path.join(tmp, 'fonte.mp4');
@@ -40,6 +40,30 @@ test('entrega no instante da voz passa; imagem 6 quadros adiantada reprova', { t
   const r2 = await syncPorTrecho(torta, projeto);
   assert.equal(r2.achados[0]?.ok, false, JSON.stringify(r2));
   assert.match(r2.achados[0]!.medido, /\+6 quadros/);
+});
+
+test('CH-0040: curva plana com máximo na borda não é prova; o sinal de movimento acha o lag certo', () => {
+  // Curva subindo devagar até a borda (plano quase parado): máximo na borda, 2º pico colado nele.
+  const f = (v: number) => Float32Array.from([v, -v]);
+  const b = Array.from({ length: 20 }, (_, i) => f(1 + i * 0.001));
+  const r = melhorLag(b.slice(0, 6), b)!;
+  assert.equal(r.borda, true);
+  assert.ok(r.corr - r.segundo < 0.05);
+  // Movimento: um gesto (pico de mudança) no quadro 14 da fonte e no quadro 4 da entrega = lag 10.
+  const gesto = (n: number, at: number) => Array.from({ length: n }, (_, i) => Math.exp(-((i - at) ** 2) / 4) + 0.01 * Math.sin(i * 7.1));
+  const m = melhorLagMov(gesto(12, 4), gesto(30, 14))!;
+  assert.equal(m.lag, 10);
+  assert.equal(m.borda, false);
+  assert.ok(m.corr - m.segundo > 0.15, JSON.stringify(m));
+  assert.equal(movimento([f(1), f(1), f(3)]).length, 2);
+});
+
+test('CH-0040: imagem 15 quadros atrasada (borda da busca de ±0,5 s) continua reprovando', { timeout: 60_000 }, async () => {
+  const torta = path.join(tmp, 'torta15.mp4');
+  entrega(2 - 15 * 1001 / 30000, torta);
+  const r = await syncPorTrecho(torta, projeto);
+  assert.equal(r.achados[0]?.ok, false, JSON.stringify(r));
+  assert.match(r.achados[0]!.medido, /-15 quadros/);
 });
 
 test('fonte fora do disco (SSD desligado): não reprova, avisa', async () => {
