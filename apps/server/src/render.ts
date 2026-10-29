@@ -210,8 +210,10 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     // arquivo (V2/V3), para não sumir sob overlay de tela cheia (CH-0011); a legenda fica fora, como no preview.
     const flashes = clips.flatMap((c, i) => (c.flash ? [starts[i]!] : []));
     if (hasVideo && flashes.length) {
-      const fd = FLASH_FRAMES / fps;
-      const en = flashes.map((t) => `between(t\\,${t.toFixed(4)}\\,${(t + fd).toFixed(4)})`).join('+');
+      // Janela com meio quadro de folga dos dois lados: o `between` é fechado nas pontas e pegava o quadro
+      // seguinte (t0 + 2/fps), saindo com 3 quadros (FB-0189).
+      const meio = 0.5 / fps;
+      const en = flashes.map((t) => `between(t\\,${(t - meio).toFixed(4)}\\,${(t + FLASH_FRAMES / fps - meio).toFixed(4)})`).join('+');
       parts.push(`[${vCur}]negate=enable='${en}',hue=s=0:enable='${en}'[vflash]`);
       vCur = 'vflash';
     }

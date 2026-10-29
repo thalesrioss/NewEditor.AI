@@ -13,7 +13,7 @@
  * Fala = energia da voz na própria entrega (passa-faixa 150–4000 Hz, acima do p95 − 18 dB): trilha alta conta.
  */
 import path from 'node:path';
-import { clipScale, overlayScale, clipDuration, clipPlayed, clipSpeed, clipStarts, coverCrop, locate, normalizeTimeline, overlayActive, overlaySourceTime, resolveOverlay, timelineDuration, type Clip, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
+import { clipScale, overlayScale, clipDuration, clipPlayed, clipSpeed, clipStarts, coverCrop, FLASH_FRAMES, locate, normalizeTimeline, overlayActive, overlaySourceTime, resolveOverlay, timelineDuration, type Clip, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
 import { syncPorTrecho } from './qc-sync.ts';
 import { fpsRational } from './render.ts';
@@ -412,6 +412,8 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
   const visiveis = tl.overlays.filter((o) => (o.role === 'broll' || o.role === 'motion') && overlayActive(tl, o) && o.source.type === 'media');
   const cobreOutro: Trecho[] = [];
   const bordas: number[] = [...starts, timelineDuration(tl)];
+  // Fim do flash de entrada: a volta do negativo para a imagem é troca de plano no detector, mas é da timeline (FB-0189).
+  tl.main.forEach((c, i) => c.flash && bordas.push(starts[i]! + FLASH_FRAMES * quadro));
   for (const o of tl.overlays) {
     const pos = resolveOverlay(tl, o);
     if (!pos || o.role === 'music' || o.role === 'sfx') continue;
