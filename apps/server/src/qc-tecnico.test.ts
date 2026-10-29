@@ -125,6 +125,21 @@ describe('regras puras', () => {
     // Sem fala embaixo, a cobertura de outro momento não reprova.
     assert.equal(achadosProjeto(p, { fala: [{ start: 3, end: 13 }] }).achados.filter((a) => a.regra === 'boca-outro-momento' && !a.ok && a.onde!.startsWith('outro')).length, 0);
   });
+  test('flash de entrada não é corte embutido (FB-0189): a volta do negativo, 2 a 3 quadros depois do corte, é da timeline', () => {
+    const fala: MediaAsset = { id: 'fala', name: 'davi-lo.mp4', path: '/b/davi-lo.mp4', kind: 'video', duration: 90, width: 1080, height: 1920, fps: 30, hasAudio: true, role: 'fala' };
+    const main: Clip[] = [
+      { id: 'c1', assetId: 'fala', in: 0, out: 20, by: 'human' },
+      { id: 'c2', assetId: 'fala', in: 24, out: 50, by: 'human', flash: true, flashSfx: false },
+    ];
+    const p = { assets: [fala], timeline: { fps: 30, width: 1080, height: 1920, main, removals: [], pins: [], tracks: [], overlays: [] } } as unknown as Project;
+    const med = (cortes: number[]) => achadosProjeto(p, { cortes, fala: [{ start: 0, end: 46 }] }).achados.filter((a) => a.regra === 'corte-embutido' && !a.ok);
+    // O que o detector achou no render do Leo: corte em 20,0 (timeline) e o fim do flash em 20,067 e 20,10.
+    assert.deepEqual(med([20, 20 + 2 / 30, 20.1]), []);
+    // Sem flash no clipe, a mesma troca de plano 0,2 s depois do corte segue reprovando.
+    assert.equal(med([20.2]).length, 1);
+    const semFlash = { ...p, timeline: { ...p.timeline, main: [main[0]!, { ...main[1]!, flash: undefined }] } } as unknown as Project;
+    assert.equal(achadosProjeto(semFlash, { cortes: [20 + 4 / 30], fala: [{ start: 0, end: 46 }] }).achados.filter((a) => a.regra === 'corte-embutido' && !a.ok).length, 1);
+  });
 });
 
 describe('gate em vídeo sintético', () => {

@@ -45,7 +45,11 @@ async function renderFlash(sfx: boolean | undefined) {
   let peak = 0;
   for (let i = 0; i + 4 <= pcm.length; i += 4) peak = Math.max(peak, Math.abs(pcm.readFloatLE(i)));
   const px = execFileSync('ffmpeg', ['-v', 'error', '-ss', '2.0', '-i', out, '-frames:v', '1', '-vf', 'crop=2:2:44:79,format=rgb24', '-f', 'rawvideo', '-']);
-  return { db: peak > 0 ? 20 * Math.log10(peak) : -Infinity, vermelho: px[0]! > 150 && px[2]! < 100 };
+  // Quadros sem o vermelho da fala entre 1,8 e 2,3 s (54 a 68): só os do flash.
+  const fr = execFileSync('ffmpeg', ['-v', 'error', '-ss', '1.8', '-t', '0.5', '-i', out, '-vf', 'crop=2:2:44:79,format=rgb24', '-f', 'rawvideo', '-']);
+  let quadros = 0;
+  for (let i = 0; i + 12 <= fr.length; i += 12) if (!(fr[i]! > 150 && fr[i + 2]! < 100)) quadros++;
+  return { db: peak > 0 ? 20 * Math.log10(peak) : -Infinity, vermelho: px[0]! > 150 && px[2]! < 100, quadros };
 }
 
 describe('flash sem obturador (CH-0010)', () => {
@@ -53,6 +57,7 @@ describe('flash sem obturador (CH-0010)', () => {
     const r = await renderFlash(undefined);
     assert.ok(r.db > -40, `obturador deveria soar perto do flash (pico ${r.db.toFixed(1)} dBFS)`);
     assert.equal(r.vermelho, false, 'quadro do flash deveria sair invertido');
+    assert.equal(r.quadros, 2, `o flash dura FLASH_FRAMES = 2 quadros (FB-0189: saía com 3); saíram ${r.quadros}`);
   });
   test('sfx: false: o flash continua na imagem e o áudio fica mudo', async () => {
     const r = await renderFlash(false);
