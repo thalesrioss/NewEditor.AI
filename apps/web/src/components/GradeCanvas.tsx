@@ -26,7 +26,8 @@ export function GradeCanvas({ getVideo, grade, style }: { getVideo: () => HTMLVi
   const canvas = useRef<HTMLCanvasElement>(null);
   const gl = useRef<{ ctx: WebGL2RenderingContext; lutTex: WebGLTexture; frameTex: WebGLTexture } | null>(null);
   const cube = useCube(grade.lut?.id);
-  const lut = useMemo(() => buildLut(grade, N, cube), [grade, cube]);
+  const inCube = useCube(grade.inputLut?.id);
+  const lut = useMemo(() => buildLut(grade, N, cube, inCube), [grade, cube, inCube]);
 
   // Contexto + shader (uma vez).
   useEffect(() => {

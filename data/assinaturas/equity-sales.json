@@ -1,0 +1,22 @@
+{
+  "satavg": 8.32,
+  "fonte": "aprovados do cliente (4: SATAVG 14,8, 10,0, 8,3, 9,1; vale o menor)",
+  "arquivos": [
+    {
+      "file": "/Volumes/Thales SSD/Clientes/Equity Sales/Editados/Leandro Arruda/Reels - BYD Dolphin parece um mouse.mp4",
+      "satavg": 14.84
+    },
+    {
+      "file": "/Volumes/Thales SSD/Clientes/Equity Sales/Editados/Leandro Arruda/Reels - Empreendedorismo Emprovisado.mp4",
+      "satavg": 9.97
+    },
+    {
+      "file": "/Volumes/Thales SSD/Clientes/Equity Sales/Editados/Leandro Arruda/Reels - Marketing BYD.mp4",
+      "satavg": 8.32
+    },
+    {
+      "file": "/Volumes/Thales SSD/Clientes/Equity Sales/Editados/Leandro Arruda/Reels - Tese da Equity Sales.mp4",
+      "satavg": 9.09
+    }
+  ]
+}

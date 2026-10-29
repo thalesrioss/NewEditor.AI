@@ -7,6 +7,7 @@ import { stepEnd, stepStart } from '../estimate.ts';
 import { enqueueJob, queuePosition, queueState } from '../jobs.ts';
 import type { ColorGrade } from '@neweditor/core';
 import { runRenderQc } from '../qc.ts';
+import { marcarReprovado } from '../qc-gate.ts';
 import { renderQuadro } from '../quadro.ts';
 import { render } from '../render.ts';
 import { store } from '../store.ts';
@@ -75,8 +76,17 @@ async function renderJobSemStatus(id: string, job?: string): Promise<void> {
     setStatus(job, id, { estado: 'rodando', pct: Math.round(pct * 100) });
   });
   stepEnd(id, 'render');
-  const caminho = path.join(store.dir(id), res.file);
+  let caminho = path.join(store.dir(id), res.file);
   const qc = await runRenderQc(id, caminho).catch(() => null);
+  // Reprovado no gate técnico (FB-0180): o arquivo ganha _REPROVADO no nome, para não sair como entrega por engano.
+  const tecnico = qc?.issues.filter((i) => i.severidade === 'bloqueia' && i.regra.startsWith('tecnico:')) ?? [];
+  if (tecnico.length) {
+    const novo = await marcarReprovado(store.dir(id), res.file).catch(() => res.file);
+    res.file = novo;
+    caminho = path.join(store.dir(id), novo);
+    if (qc?.render) store.update(id, { qc: { ...qc, render: { ...qc.render, file: path.join(store.dir(id), novo) } } });
+    store.log(id, 'agent', `REPROVADO no gate técnico (${tecnico.length}): ${tecnico.map((i) => i.texto.replace(/^Gate técnico: /, '')).join(' · ')}. Não entregue este arquivo; laudo em ${novo.replace(/\.mp4$/i, '.qc-tecnico.txt')}.`);
+  } else if (qc) store.log(id, 'agent', 'Gate técnico: aprovado (perfil de entrega, níveis, saturação, movimento sob fala, escala, cobertura, sincronia).');
   if (qc?.render) store.log(id, 'agent', `QC do render: ${qc.render.lufs?.toFixed(1) ?? '?'} LUFS · pico ${qc.render.truePeak?.toFixed(1) ?? '?'} dBTP${qc.render.blackFrames ? ` · ${qc.render.blackFrames} quadro(s) preto(s)` : ''}${qc.issues.length ? ` · ${qc.issues.length} ponto(s) para conferir` : ' · ok'}`);
   store.log(id, 'agent', `Render pronto: ${res.file}${res.notes.length ? ` · ${res.notes.join(' · ')}` : ''}${res.skipped.length ? ` (fora do export por enquanto: ${res.skipped.join('; ')})` : ''}`);
   store.broadcast(id, { type: 'log', entry: { id: `render_${Date.now()}`, at: new Date().toISOString(), by: 'system', text: `/media/${id}/${res.file}` } });
@@ -90,6 +100,12 @@ async function renderJobSemStatus(id: string, job?: string): Promise<void> {
 export async function entregaJob(id: string, opts: EntregaOpts): Promise<void> {
   store.setActivity(id, { state: 'analyzing', message: 'Entregando', progress: 0 });
   const r = await entregar(id, opts, (pct) => store.setActivity(id, { state: 'analyzing', message: 'Entregando', progress: pct }));
+  if (r.reprovado) {
+    // Gate técnico reprovou: nada foi entregue; o link é o do render reprovado (nunca o da versão anterior).
+    store.broadcast(id, { type: 'log', entry: { id: `render_${Date.now()}`, at: new Date().toISOString(), by: 'system', text: `/media/${id}/${r.reprovado}` } });
+    store.setActivity(id, { state: 'idle', message: `Entrega NÃO saiu: reprovada no gate técnico (${r.qcBloqueios.length} ponto(s))` });
+    return;
+  }
   store.broadcast(id, { type: 'log', entry: { id: `render_${Date.now()}`, at: new Date().toISOString(), by: 'system', text: `/media/${id}/${store.get(id).versions?.at(-1)?.render ?? ''}` } });
   store.setActivity(id, { state: 'celebrating', message: r.qcBloqueios.length ? `Entrega pronta, com ${r.qcBloqueios.length} ponto(s) do QC` : 'Entrega pronta!' });
 }

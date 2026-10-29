@@ -14,6 +14,7 @@ import { loadTranscripts } from './actions.ts';
 import { pedeDesfazer, runLocalCommand } from './commands-local.ts';
 import { BRAIN } from './config.ts';
 import { askJson, llmFor, type Ask } from './llm-local.ts';
+import { contextoThales } from './registro-thales.ts';
 import { store } from './store.ts';
 
 /** Só para teste: LLM simulado no lugar do local. */
@@ -46,7 +47,8 @@ export function rotuloDoPedido(text: string): string {
 async function runOne(projectId: string, text: string, playhead: number | undefined, deps: CommandDeps): Promise<string> {
   if (BRAIN === 'claude') {
     const { runClaudeCommand } = await import('./claude/commands.ts');
-    return runClaudeCommand(projectId, text, playhead);
+    // O agente lê as últimas correções do Thales para o cliente antes de mexer (frente R3).
+    return runClaudeCommand(projectId, text, playhead, await contextoThales(store.get(projectId)).catch(() => ''));
   }
   const answer = await runLocalCommand(projectId, text, playhead);
   if (!/^Ainda não entendi/.test(answer) || !(await (deps.llm ?? (() => llmFor('comando')))())) return answer;

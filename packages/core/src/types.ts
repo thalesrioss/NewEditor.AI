@@ -32,6 +32,12 @@ export interface MediaAsset {
   syncOffset?: Seconds;
   /** 2ª câmera: id da fala a que o `syncOffset` se refere (com várias falas no projeto, cada câmera é de uma). */
   syncFala?: string;
+  /** 2ª câmera: confiança (0..1) do alinhamento pelo áudio; manual = ausente. */
+  syncConfianca?: number;
+  /** Matriz YUV etiquetada no arquivo (ffprobe color_space), quando há: o render só força bt709 em fonte sem etiqueta. */
+  matrix?: string;
+  /** Espaço de cor de entrada lido do arquivo (XML da câmera) ou herdado do bruto: a cor converte sempre por ele. */
+  color?: import('./color.ts').SourceColor;
   /** Miniaturas para a filmstrip da timeline: grade de quadros a cada `interval` segundos. */
   thumbs?: { file: string; interval: number; w: number; h: number; cols: number; count: number };
   /** Caminhos relativos à pasta do projeto, servidos pelo servidor. */

@@ -216,7 +216,7 @@ function ApplySuggestion({ suggestion }: { suggestion: NonNullable<LogEntry['sug
   const apply = async () => {
     if (!project) return;
     try {
-      await api.command(project.id, suggestion.text, suggestion.playhead ?? useEditor.getState().playhead);
+      await api.command(project.id, suggestion.text, suggestion.playhead ?? useEditor.getState().playhead, true);
       setState('sent');
     } catch {
       setState('error');

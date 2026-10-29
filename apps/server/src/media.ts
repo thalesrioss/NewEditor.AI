@@ -85,6 +85,7 @@ export function run(cmd: string, args: string[], opts: { onStderr?: (line: strin
 interface ProbeStream {
   codec_type: string;
   pix_fmt?: string;
+  color_space?: string;
   width?: number;
   height?: number;
   avg_frame_rate?: string;
@@ -116,6 +117,7 @@ export async function probe(file: string): Promise<Omit<MediaAsset, 'id' | 'name
     fps: fps ? Math.round(fps * 1000) / 1000 : undefined,
     hasAudio: !!a,
     ...(v && /yuva|rgba|argb|abgr|bgra|gbrap|ya8|ya16/.test(v.pix_fmt ?? '') ? { alpha: true } : {}),
+    ...(v?.color_space && v.color_space !== 'unknown' ? { matrix: v.color_space } : {}),
   };
 }
 
@@ -162,7 +164,10 @@ export async function makeProxy(asset: MediaAsset, outDir: string, onProgress?: 
     await atomic(out, (tmp) => run('ffmpeg', ['-y', '-v', 'error', '-stats', '-i', asset.path, '-map', '0:v:0', '-vf', `scale=${w}:${h}:flags=fast_bilinear,format=yuva420p`, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-auto-alt-ref', '0', '-b:v', '1800k', '-deadline', 'realtime', '-cpu-used', '4', '-g', gop, '-an', tmp], { onStderr: progress }));
     return rel;
   }
-  const vf = `scale=${w}:${h}:flags=fast_bilinear,format=yuv420p`;
+  // Fonte HD sem etiqueta de matriz (bruto de câmera): o proxy sai etiquetado bt709, senão o navegador pode decodificar
+  // o 540p como bt601 e o preview fica com outra matiz que o export (que já usa bt709).
+  const tag = (asset.height ?? 1080) >= 720 && (!asset.matrix || asset.matrix === 'bt709') ? ',setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709' : '';
+  const vf = `scale=${w}:${h}:flags=fast_bilinear,format=yuv420p${tag}`;
   const audio = asset.hasAudio ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '128k', '-ac', '2'] : [];
   // Arquivo de câmera às vezes traz áudio começando antes do vídeo: zera os tempos, senão o Chrome
   // recusa o primeiro pacote de áudio (timestamp negativo) e o proxy não toca.

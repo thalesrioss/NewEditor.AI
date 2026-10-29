@@ -7,8 +7,9 @@
  *   → matriz para o gamut Rec.709 (calculada das primárias publicadas) → balanço de branco + exposição
  *   → tone map fílmico → curva de exibição Rec.709 → contraste, altas/sombras, brancos/pretos, saturação.
  *
- * As curvas e primárias são as publicadas pelos fabricantes; o tone map é o da casa (não é o LUT oficial de
- * cada marca) — por isso a conversão é um PONTO DE PARTIDA, ajustável pelos controles primários.
+ * As curvas e primárias são as publicadas pelos fabricantes; o tone map é o da casa — por isso a conversão é um PONTO
+ * DE PARTIDA, ajustável pelos controles primários. Quando a LUT oficial do fabricante está no disco (Sony S-Log3, a
+ * que vem com o DaVinci), ela substitui curva + tone map (`inputLut`), como o Input Color Space do DaVinci.
  */
 
 export type InputTransform = 'rec709' | 'slog3' | 'vlog' | 'clog3' | 'applelog' | 'flog2' | 'nlog' | 'logc3' | 'logc4' | 'bmdfilm5';
@@ -43,7 +44,50 @@ export interface ColorGrade {
   sharpen?: number;
   vignette?: number;
   grain?: number;
+  /**
+   * Conversão de entrada pela LUT oficial do fabricante (como o Input Color Space do DaVinci): .cube "full in full out"
+   * no lugar da curva + tone map da casa. Vem do arquivo (`MediaAsset.color`), não do editor: `manageGrade` põe.
+   */
+  inputLut?: { id: string; nome: string };
+  /**
+   * Como o RGB que chega (FFmpeg/navegador) vira valor de código da curva LOG: 'full' = já é o código (bruto yuvj de
+   * câmera, faixa cheia: a conversão não expande); 'legal' (padrão) = faixa 64–940 expandida para 0..1.
+   */
+  codeRange?: 'full' | 'legal';
 }
+
+/** Espaço de cor de entrada de um arquivo, lido do próprio arquivo (XML da câmera) ou herdado do bruto de origem. */
+export interface SourceColor {
+  input: InputTransform;
+  /** Como veio escrito no arquivo (ex.: s-log3-cine, s-gamut3-cine). */
+  gamma?: string;
+  gamut?: string;
+  modelo?: string;
+  /** 'xml' = metadado da câmera no arquivo; 'herdado' = de outro arquivo com o mesmo clipe (`de`). */
+  fonte: 'xml' | 'herdado';
+  de?: string;
+  codeRange: 'full' | 'legal';
+  /** LUT oficial de conversão encontrada no disco (id `local:<caminho>`). */
+  inputLut?: { id: string; nome: string };
+}
+
+/**
+ * Color management por clipe (como o DaVinci): arquivo LOG converte sempre pela entrada do arquivo, nunca como Rec.709.
+ * Sem grade, devolve uma neutra só com a conversão. Arquivo Rec.709 (ou sem cor lida): a grade passa igual.
+ * Grade feita em outra entrada (Rec.709 sobre o LOG lavado, ou copiada do reel vizinho): contraste, saturação, curvas e
+ * rodas eram compensação da imagem sem conversão e dobrariam sobre a LUT; ficam o balanço de branco, o look e a textura.
+ */
+export function manageGrade(g: ColorGrade | undefined, color: SourceColor | undefined): ColorGrade | undefined {
+  if (!color || color.input === 'rec709') return g;
+  const base: ColorGrade = !g ? NEUTRAL_GRADE : g.input === color.input ? g : { ...NEUTRAL_GRADE, temperature: g.temperature ?? 0, tint: g.tint ?? 0, ...(g.lut ? { lut: g.lut } : {}), ...(g.sharpen ? { sharpen: g.sharpen } : {}), ...(g.vignette ? { vignette: g.vignette } : {}), ...(g.grain ? { grain: g.grain } : {}) };
+  const out: ColorGrade = { ...base, input: color.input, codeRange: color.codeRange };
+  if (color.inputLut) out.inputLut = color.inputLut;
+  else delete out.inputLut;
+  return out;
+}
+
+/** A grade estava em Rec.709 sobre arquivo LOG (feita olhando a imagem lavada): os ajustes dela precisam ser revistos. */
+export const gradeWasForced = (g: ColorGrade | undefined, color: SourceColor | undefined): boolean => !!g && !!color && color.input !== 'rec709' && g.input !== color.input;
 
 /** Look de um .cube do disco (fora do catálogo CinePRO): o id carrega o caminho absoluto. */
 export const LOCAL_LUT_PREFIX = 'local:';
@@ -110,6 +154,11 @@ const DECODE: Record<InputTransform, (x: number) => number> = {
     return x >= 0 ? (2 ** ((14 * (x - c)) / b + 6) - 64) / a : x * s + t;
   },
   bmdfilm5: (x) => (x < 8.283605932402494 * 0.005 + 0.09246575342465753 ? (x - 0.09246575342465753) / 8.283605932402494 : Math.exp((x - 0.5300133392291939) / 0.08692876065491224) - 0.005494072432257808),
+};
+
+/** Linear de cena → código (inversa do DECODE), só onde há LUT oficial de entrada. */
+const ENCODE: Partial<Record<InputTransform, (l: number) => number>> = {
+  slog3: (l) => (l >= 0.01125 ? 420 + Math.log10((l + 0.01) / 0.19) * 261.5 : 95 + (l * (171.2102946929 - 95)) / 0.01125) / 1023,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -187,28 +236,41 @@ const SCENE_SCALE = 0.6;
  * Aplica a correção num pixel. Entrada: RGB do vídeo já em 0..1 (o FFmpeg e o navegador expandem a faixa
  * legal 64–940 para 0..1); a curva LOG espera o valor de código original, então volta para ele aqui.
  */
-export function gradePixel(rgb: [number, number, number], g: ColorGrade): [number, number, number] {
+export function gradePixel(rgb: [number, number, number], g: ColorGrade, inputCube?: CubeLut | null): [number, number, number] {
   const decode = DECODE[g.input];
   const isLog = g.input !== 'rec709';
-  // RGB 0..1 (faixa legal expandida) → valor de código de 10 bits normalizado.
-  const code = (v: number) => (isLog ? (64 + v * 876) / 1023 : v);
-  let [r, gg, b] = rgb.map((v) => decode(code(v))) as [number, number, number];
-  const m = toRec709(GAMUT_OF[g.input]);
-  [r, gg, b] = [m[0] * r + m[1] * gg + m[2] * b, m[3] * r + m[4] * gg + m[5] * b, m[6] * r + m[7] * gg + m[8] * b];
-
-  // Balanço de branco (em linear) e exposição.
+  // RGB 0..1 → valor de código de 10 bits normalizado (faixa legal expandida, ou já o código na fonte de faixa cheia).
+  const code = (v: number) => (isLog && g.codeRange !== 'full' ? (64 + v * 876) / 1023 : v);
   const wr = 1 + 0.18 * g.temperature - 0.04 * g.tint;
   const wg = 1 + 0.12 * g.tint;
   const wb = 1 - 0.18 * g.temperature - 0.04 * g.tint;
-  const k = Math.pow(2, g.exposure) * (isLog ? SCENE_SCALE : 1);
   const lumaW = 0.2126 * wr + 0.7152 * wg + 0.0722 * wb;
-  r *= (k * wr) / lumaW;
-  gg *= (k * wg) / lumaW;
-  b *= (k * wb) / lumaW;
+  let out: number[];
+  const encode = ENCODE[g.input];
+  if (isLog && inputCube && encode) {
+    // LUT oficial (Input Color Space do DaVinci): balanço e exposição em linear de cena no gamut da câmera, de volta
+    // para a curva LOG, e a LUT do fabricante leva para a exibição. Grade neutra = a LUT pura.
+    let c = rgb.map(code) as [number, number, number];
+    if (g.exposure || g.temperature || g.tint) {
+      const k = Math.pow(2, g.exposure);
+      c = c.map((v, i) => encode(decode(v) * ((k * [wr, wg, wb][i]!) / lumaW))) as [number, number, number];
+    }
+    out = sampleCube(inputCube, c);
+  } else {
+    let [r, gg, b] = rgb.map((v) => decode(code(v))) as [number, number, number];
+    const m = toRec709(GAMUT_OF[g.input]);
+    [r, gg, b] = [m[0] * r + m[1] * gg + m[2] * b, m[3] * r + m[4] * gg + m[5] * b, m[6] * r + m[7] * gg + m[8] * b];
 
-  // Para a exibição: LOG passa pelo tone map fílmico; material Rec.709 só volta para a curva de exibição.
-  const toDisplay = (v: number) => Math.pow(clamp(isLog ? filmic(Math.max(0, v)) : v), 1 / 2.4);
-  let out = [toDisplay(r), toDisplay(gg), toDisplay(b)];
+    // Balanço de branco (em linear) e exposição.
+    const k = Math.pow(2, g.exposure) * (isLog ? SCENE_SCALE : 1);
+    r *= (k * wr) / lumaW;
+    gg *= (k * wg) / lumaW;
+    b *= (k * wb) / lumaW;
+
+    // Para a exibição: LOG passa pelo tone map fílmico; material Rec.709 só volta para a curva de exibição.
+    const toDisplay = (v: number) => Math.pow(clamp(isLog ? filmic(Math.max(0, v)) : v), 1 / 2.4);
+    out = [toDisplay(r), toDisplay(gg), toDisplay(b)];
+  }
 
   // Ajustes primários, no espaço de exibição.
   const bl = g.blacks * 0.08;
@@ -368,14 +430,15 @@ export function sampleCube(c: CubeLut, rgb: [number, number, number]): [number, 
  * LUT 3D (N³), ordem do .cube: R varia mais rápido. Com `cube` (o look do grade, já lido), ele entra depois
  * da conversão e das primárias, na força pedida — igual no WebGL e no FFmpeg.
  */
-export function buildLut(g: ColorGrade, n = 33, cube?: CubeLut | null): Float32Array {
+export function buildLut(g: ColorGrade, n = 33, cube?: CubeLut | null, inputCube?: CubeLut | null): Float32Array {
   const lut = new Float32Array(n * n * n * 3);
   const k = g.lut && cube ? clamp(g.lut.strength) : 0;
+  const inCube = g.inputLut ? inputCube : null;
   let i = 0;
   for (let bi = 0; bi < n; bi++)
     for (let gi = 0; gi < n; gi++)
       for (let ri = 0; ri < n; ri++) {
-        let o = gradePixel([ri / (n - 1), gi / (n - 1), bi / (n - 1)], g);
+        let o = gradePixel([ri / (n - 1), gi / (n - 1), bi / (n - 1)], g, inCube);
         if (k > 0) {
           const l = sampleCube(cube!, o);
           o = [o[0] + (l[0] - o[0]) * k, o[1] + (l[1] - o[1]) * k, o[2] + (l[2] - o[2]) * k];

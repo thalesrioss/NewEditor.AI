@@ -47,7 +47,7 @@ test('zoom acima de 2× (CH-0013): bruto 4K vertical a 2,6× recorta e amplia pa
 });
 
 test('zoom animado reamostra a fonte ao fps da timeline antes do zoompan (CH-0017)', () => {
-  assert.match(segmentVideoFilter(src, clip({ zoom: 1.18, zoomTo: 1.3 }), 29.97, 1080, 1920), /fps=29\.97,zoompan=/);
+  assert.match(segmentVideoFilter(src, clip({ zoom: 1.18, zoomTo: 1.3 }), 29.97, 1080, 1920), /fps=30000\/1001,zoompan=/);
 });
 
 /** Brilho médio (0–255) do último quadro de um trecho de `frames` quadros com a fonte em `srcFps`. */

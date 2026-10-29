@@ -41,7 +41,7 @@ export function withinDelivery(m: Loudness): boolean {
   return Math.abs(m.i - DELIVERY.I) <= DELIVERY.tolI && m.tp <= TP_TARGET;
 }
 
-const AAC = ['-c:a', 'aac', '-b:a', '256k'];
+const AAC = ['-c:a', 'aac', '-b:a', '320k', '-ar', '48000'];
 /** Abaixo disso (LUFS) é silêncio: vai sem ganho. */
 const SILENCE = -50;
 /** Teto de ganho da correção (dB), para mixagem muito baixa não virar ruído amplificado. */

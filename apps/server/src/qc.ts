@@ -13,6 +13,7 @@
 import path from 'node:path';
 import { buildCues, clipDuration, clipStarts, editorialWarnings, fixedText, letteringCues, motionCues, resolveOverlay, timelineDuration, type ClientProfile, type Project, type QcIssue, type QcReport, type TextWord, cutEndAfter, ratioLabel, captionSafe, PISCA, profileLabel, passaDoAlvo, textoPassaDoAlvo } from '@neweditor/core';
 import { DELIVERY } from './loudness.ts';
+import { gateTecnico } from './qc-gate.ts';
 import { readTranscript } from './asr.ts';
 import { captionsWithoutWords, captionsWithoutWordsOf } from './legenda-vazia.ts';
 import { run } from './media.ts';
@@ -223,6 +224,10 @@ export async function runRenderQc(projectId: string, file: string, opts: { expec
   if (semLegenda) push({ severidade: 'bloqueia', regra: 'legenda-sem-palavras', texto: `Legenda ${semLegenda}` });
   if (black) push({ severidade: 'avisa', regra: 'quadro-preto', texto: `${black} trecho(s) de quadro preto no vídeo` });
   if (duration !== undefined && Math.abs(duration - expected) > 2 * frame + 1e-6) push({ severidade: 'bloqueia', regra: 'duracao-render', texto: `Arquivo com ${duration.toFixed(2)} s; a timeline tem ${expected.toFixed(2)} s (${Math.round(Math.abs(duration - expected) / frame)} quadros de diferença, tolerância 2)` });
+  // Gate técnico (FB-0180 A4, força-tarefa 27/10): perfil de entrega, níveis, saturação contra os aprovados do cliente,
+  // freeze e câmera lenta sob fala, escala, boca de outro momento, câmera sem sincronia medida. Reprovou = bloqueia.
+  const tec = await gateTecnico(p, file);
+  for (const a of tec.achados) if (!a.ok) push({ severidade: 'bloqueia', regra: `tecnico:${a.regra}`, texto: `Gate técnico: ${a.regra} ${a.medido} (limite ${a.limite})${a.onde ? ` @ ${a.onde}` : ''}` });
   const report: QcReport = { at: new Date().toISOString(), fase: 'render', issues: [...(p.qc?.fase === 'edicao' ? p.qc.issues.filter((i) => i.regra !== 'legenda-sem-palavras') : []), ...issues], render: { lufs, truePeak: tp, blackFrames: black, duration, file } };
   store.update(projectId, { qc: report });
   return report;

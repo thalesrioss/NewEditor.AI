@@ -19,11 +19,12 @@ after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const { run } = await import('./media.ts');
 const { clipNoTempo, lerSinal, limparQuadros, renderQuadro } = await import('./quadro.ts');
-const { deliverySize, gradeFilters, mainRange, segmentVideo } = await import('./render.ts');
+const { DELIVERY_VIDEO_FILTER, deliverySize, gradeFilters, segmentVideo } = await import('./render.ts');
 
-// Bruto full range (yuvj420p, color_range=pc), 2 s, 30 fps, gradiente com preto de verdade.
+// Bruto full range (yuvj420p, color_range=pc), 2 s, 30 fps, degradê preto → branco determinístico (o `gradients` do
+// ffmpeg sorteia cores e tipo a cada execução: o teste oscilava).
 const bruto = path.join(tmp, 'bruto.mp4');
-await run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'gradients=s=640x360:d=2:r=30:c0=black:c1=white:x0=0:y0=0:x1=640:y1=0:speed=0', '-pix_fmt', 'yuvj420p', '-color_range', 'pc', '-c:v', 'libx264', '-crf', '12', '-y', bruto]);
+await run('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "nullsrc=s=640x360:d=2:r=30,geq=lum='X*255/W':cb=128:cr=128", '-pix_fmt', 'yuvj420p', '-color_range', 'pc', '-c:v', 'libx264', '-crf', '12', '-y', bruto]);
 
 const grade = { ...NEUTRAL_GRADE, blacks: 0.45, contrast: 0.2 };
 const projeto = (): Project =>
@@ -57,27 +58,27 @@ describe('quadro de conferência da grade (CH-0018)', () => {
     assert.equal(clipNoTempo(tl, 2.5), null);
   });
 
-  test('mede na escala do render: range pc do bruto e mesmo YLOW/YAVG/YHIGH do trecho renderizado', async () => {
+  test('mede na escala da entrega: faixa legal e mesmo YLOW/YAVG/YHIGH do trecho renderizado', async () => {
     const p = projeto();
     const dir = path.join(tmp, 'proj');
     fs.mkdirSync(dir, { recursive: true });
     const q = await renderQuadro(p, dir, 1.5);
     assert.equal(q.clipId, 'c2');
-    assert.equal(q.range, 'pc');
+    assert.equal(q.range, 'tv');
     assert.ok(fs.statSync(path.join(dir, q.file)).size > 0, 'PNG gravado');
 
     // Referência: o trecho inteiro do clipe como o render faz, medido no quadro 15.
     const work = fs.mkdtempSync(path.join(tmp, 'ref-'));
     const { W, H } = deliverySize(p.timeline);
     const { lutFilter } = await gradeFilters(p.timeline.grades, work);
-    const seg = path.join(work, 'seg.mp4');
-    await segmentVideo(p.assets[0]!, p.timeline.main[1]!, 30, 30, W, H, seg, lutFilter('a1'), false, undefined, await mainRange(p));
-    const ref = lerSinal((await run('ffmpeg', ['-v', 'error', '-i', seg, '-vf', "select='eq(n\\,15)',signalstats,metadata=print:file=-", '-f', 'null', '-'])).toString());
+    const seg = path.join(work, 'seg.mov');
+    await segmentVideo(p.assets[0]!, p.timeline.main[1]!, 30, 30, W, H, seg, lutFilter('a1'), false, undefined);
+    const ref = lerSinal((await run('ffmpeg', ['-v', 'error', '-i', seg, '-vf', `select='eq(n\\,15)',${DELIVERY_VIDEO_FILTER},signalstats,metadata=print:file=-`, '-f', 'null', '-'])).toString());
     assert.ok(Math.abs(q.sinal.ylow - ref.ylow) <= 1, `YLOW quadro ${q.sinal.ylow} x render ${ref.ylow}`);
     assert.ok(Math.abs(q.sinal.yavg - ref.yavg) <= 1, `YAVG quadro ${q.sinal.yavg} x render ${ref.yavg}`);
     assert.ok(Math.abs(q.sinal.yhigh - ref.yhigh) <= 1, `YHIGH quadro ${q.sinal.yhigh} x render ${ref.yhigh}`);
-    // Full range: o preto fica perto de 0, não em 16 (o erro da simulação em PNG).
-    assert.ok(q.sinal.ymin < 10, `YMIN ${q.sinal.ymin}`);
+    // Faixa legal da entrega (FB-0180): o preto do bruto de faixa cheia vai para 16, nunca abaixo.
+    assert.ok(q.sinal.ymin >= 14 && q.sinal.ymin <= 20, `YMIN ${q.sinal.ymin}`);
   });
 
   test('grade de teste muda a medida e não salva no projeto', async () => {

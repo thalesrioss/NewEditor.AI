@@ -26,6 +26,7 @@ import { rotasBibliotecas } from './routes/bibliotecas.ts';
 import { rotasCinepro } from './routes/cinepro.ts';
 import { rotasMotion } from './routes/motion.ts';
 import { rotasProjetos } from './routes/projetos.ts';
+import { rotasRegistro } from './routes/registro.ts';
 import { entregaJob, renderJob, rotasRender } from './routes/render.ts';
 import { rotasRevisao } from './routes/revisao.ts';
 import { rotasSistema } from './routes/sistema.ts';
@@ -52,7 +53,7 @@ const webDist = process.env.NEWEDITOR_WEB_DIST ?? path.join(ROOT, 'apps', 'web',
 if (fs.existsSync(webDist)) await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: false });
 
 // Rotas por área.
-for (const rotas of [rotasSistema, rotasProjetos, rotasRevisao, rotasAgente, rotasRender, rotasBibliotecas, rotasMotion, rotasCinepro]) await app.register(rotas);
+for (const rotas of [rotasSistema, rotasProjetos, rotasRevisao, rotasAgente, rotasRender, rotasBibliotecas, rotasMotion, rotasCinepro, rotasRegistro]) await app.register(rotas);
 
 // Limpeza da voz ligada/mudada (ou um arquivo novo na trilha): prepara o áudio limpo em segundo plano.
 store.onTimeline((id) => void syncVoiceClean(id).catch((e) => report(id, 'limpeza da voz', e)));

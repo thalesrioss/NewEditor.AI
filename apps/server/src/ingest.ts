@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { type Timeline, uid, type MediaAsset } from '@neweditor/core';
+import { manageGrade, type Timeline, uid, type MediaAsset } from '@neweditor/core';
+import { projectColors } from './color-source.ts';
 import { transcribe, writeCenters } from './asr.ts';
 import { analyze, speechChunks } from './decupagem/analyze.ts';
 import { makeEnvelope, makeProxy, makeThumbs, makeWav16k, probe, readEnvelope } from './media.ts';
@@ -28,7 +29,9 @@ export async function ingest(projectId: string, filePath: string, role?: MediaAs
   const segundaBruta = hasFala && meta.kind === 'video' && meta.hasAudio && meta.duration >= 60 && isRaw(p0.timeline);
   const asset: MediaAsset = { id: uid('ast'), name: path.basename(filePath), path: filePath, file, ...meta, role: role ?? ((!hasFala && meta.hasAudio) || segundaBruta ? 'fala' : 'broll') };
   await fs.mkdir(path.join(store.dir(projectId), asset.id), { recursive: true });
+  Object.assign(asset, await colorOf(projectId, asset));
   saveAsset(projectId, asset);
+  manageColor(projectId, asset);
   // Formato e fps já na leitura do arquivo, não no fim da preparação: o ASR leva minutos (ou falha) — CH-0005.
   if (asset.role === 'fala') inheritFormat(projectId, asset);
   store.log(projectId, 'agent', `Recebi ${asset.name} (${fmtDur(asset.duration)}${asset.width ? `, ${asset.width}×${asset.height}` : ''}) como ${asset.role === 'fala' ? (segundaBruta ? 'fala (2ª bruta — entra na decupagem junto)' : 'fala principal') : asset.role === 'motion' ? 'motion' : 'B-roll'}`);
@@ -53,6 +56,10 @@ export function fileChanged(a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' 
  */
 async function refresh(projectId: string, a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' | 'path'>, file: NonNullable<MediaAsset['file']>): Promise<MediaAsset> {
   if (!fileChanged(a, meta, file)) {
+    if (!a.color) {
+      a = await colorOf(projectId, a);
+      if (a.color) (store.upsertAsset(projectId, a), manageColor(projectId, a));
+    }
     if (!a.file) store.upsertAsset(projectId, { ...a, file });
     store.log(projectId, 'agent', `${a.name} já está no projeto e não mudou.`);
     return prepare(projectId, { ...a, file });
@@ -78,6 +85,24 @@ function inheritFormat(projectId: string, asset: MediaAsset): void {
   else if (tl.formatoManual && asset.fps) store.setFormat(projectId, { fps: asset.fps });
 }
 
+/** A cor de entrada do arquivo (XML da câmera, ou herdada do bruto com o mesmo clipe no projeto). */
+async function colorOf(projectId: string, asset: MediaAsset): Promise<MediaAsset> {
+  if (asset.kind !== 'video' || asset.alpha) return asset;
+  const others = store.get(projectId).assets.filter((x) => x.id !== asset.id);
+  const color = (await projectColors({ assets: [...others, asset] }).catch(() => null))?.get(asset.id);
+  return color ? { ...asset, color } : asset;
+}
+
+/** Arquivo LOG entra já convertido (Input Color Space do DaVinci): a grade dele ganha a entrada do arquivo. */
+function manageColor(projectId: string, asset: MediaAsset): void {
+  const c = asset.color;
+  if (!c || c.input === 'rec709') return;
+  const cur = store.get(projectId).timeline.grades?.[asset.id];
+  if (cur?.input === c.input && cur.inputLut?.id === c.inputLut?.id && cur.codeRange === c.codeRange) return;
+  const de = c.fonte === 'herdado' ? `herdado de ${c.de}` : `XML da câmera${c.modelo ? ` ${c.modelo}` : ''}`;
+  store.apply(projectId, { by: 'system', op: { type: 'set_grade', assetId: asset.id, grade: manageGrade(cur, c)! }, note: `Cor de ${asset.name}: ${c.gamma ?? c.input} (${de}), convertida ${c.inputLut ? `pela LUT oficial (${c.inputLut.nome})` : 'pela conversão da casa'}` });
+}
+
 /** Montagem ainda crua: nenhum corte, só os brutos inteiros postos pelo sistema. */
 const isRaw = (tl: Timeline): boolean => !tl.removals.length && tl.main.every((c) => c.by === 'system');
 
@@ -90,7 +115,7 @@ export async function setRole(projectId: string, assetId: string, role: 'fala' |
   const a = p.assets.find((x) => x.id === assetId);
   if (!a) throw Object.assign(new Error('arquivo não existe'), { statusCode: 404 });
   if (a.role === role) return a;
-  store.upsertAsset(projectId, { ...a, role, syncOffset: undefined, syncFala: undefined });
+  store.upsertAsset(projectId, { ...a, role, syncOffset: undefined, syncFala: undefined, syncConfianca: undefined });
   if (role === 'broll') {
     if (isRaw(p.timeline) && p.timeline.main.some((c) => c.assetId === assetId)) store.apply(projectId, { by: 'system', op: { type: 'set_main', clips: p.timeline.main.filter((c) => c.assetId !== assetId), removals: [] } });
     store.log(projectId, 'agent', `${a.name} agora é B-roll.`);
@@ -108,7 +133,7 @@ export async function setRole(projectId: string, assetId: string, role: 'fala' |
  */
 function saveAsset(projectId: string, asset: MediaAsset): void {
   const cur = store.get(projectId).assets.find((a) => a.id === asset.id);
-  store.upsertAsset(projectId, cur ? { ...asset, role: cur.role ?? asset.role, syncOffset: cur.syncOffset ?? asset.syncOffset, syncFala: cur.syncFala ?? asset.syncFala, clean: cur.clean ?? asset.clean, transcript: cur.transcript ?? asset.transcript } : asset);
+  store.upsertAsset(projectId, cur ? { ...asset, role: cur.role ?? asset.role, syncOffset: cur.syncOffset ?? asset.syncOffset, syncFala: cur.syncFala ?? asset.syncFala, syncConfianca: cur.syncConfianca ?? asset.syncConfianca, color: cur.color ?? asset.color, clean: cur.clean ?? asset.clean, transcript: cur.transcript ?? asset.transcript } : asset);
 }
 
 /** O que ainda falta preparar neste asset (vazio = pronto). */

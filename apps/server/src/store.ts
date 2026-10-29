@@ -3,6 +3,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   applyOp,
+  clipScale,
+  escalaAviso,
+  manageGrade,
+  overlayScale,
+  type TimelineOp,
   normalizeTimeline,
   OpError,
   uid,
@@ -220,6 +225,11 @@ class Store {
   /** Aplica uma operação. Lança OpError se inválida (nada muda). */
   apply(id: string, env: OpEnvelope): Project {
     const p = this.get(id);
+    // Color management por clipe: arquivo LOG (cor lida do XML da câmera) nunca recebe grade como Rec.709 (FB-0180).
+    if (env.op.type === 'set_grade' && env.op.grade) {
+      const color = p.assets.find((a) => a.id === (env.op as { assetId: string }).assetId)?.color;
+      env = { ...env, op: { ...env.op, grade: manageGrade(env.op.grade, color)! } };
+    }
     const next = applyOp(p.timeline, env.op, env.by);
     if (env.op.type === 'fix_words') this.checkWordTiming(p, next, env.op.fixes);
     if (!this.openTx.has(id)) this.pushStep(id, env.note ?? LABEL[env.op.type] ?? 'Alteração', p.timeline);
@@ -228,6 +238,8 @@ class Store {
     this.schedulePersist(id);
     this.broadcast(id, { type: 'op', envelope: env, version: p.version, timeline: next, history: this.historyState(id) });
     if (env.note) this.log(id, env.by, env.note);
+    const escala = escalaDaOp(p, env.op);
+    if (escala) this.log(id, 'system', escala);
     this.changed(id);
     return p;
   }
@@ -413,3 +425,19 @@ const LABEL: Record<string, string> = {
 };
 
 export const store = new Store();
+
+/** Aviso de escala efetiva na própria operação de zoom/enquadramento (FB-0180 A3). */
+function escalaDaOp(p: Project, op: TimelineOp): string | null {
+  const asset = (id: string | undefined) => p.assets.find((a) => a.id === id);
+  if (op.type === 'set_zoom') {
+    const c = p.timeline.main.find((x) => x.id === op.clipId);
+    const a = c && (asset(c.cam) ?? asset(c.assetId));
+    return c && a ? escalaAviso(clipScale(a, c, p.timeline), `Zoom no clipe ${c.id}`) : null;
+  }
+  if (op.type === 'set_overlay_framing') {
+    const o = p.timeline.overlays.find((x) => x.id === op.id);
+    const a = o?.source.type === 'media' ? asset(o.source.assetId) : undefined;
+    return o && a && a.kind !== 'image' ? escalaAviso(overlayScale(a, o.framing, p.timeline), `Enquadramento do B-roll ${o.id}`) : null;
+  }
+  return null;
+}

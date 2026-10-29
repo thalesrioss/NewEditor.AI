@@ -1,8 +1,8 @@
 /**
  * Quadro de conferência (CH-0018): 1 quadro da timeline pelo MESMO caminho do render — tamanho de entrega, reframe,
- * zoom, LUT da grade e o encode do trecho (libx264 yuv420p, que herda o range do bruto) — sem render completo.
- * Devolve o PNG e a medida do signalstats no arquivo codificado, na mesma escala do render (full range num bruto pc:
- * preto = 0; limitado: preto = 16). Aceita grade de teste por arquivo, sem salvar no projeto.
+ * zoom, cor (color management por clipe + grade) e o trecho (ProRes 10 bits, faixa legal) — sem render completo.
+ * Devolve o PNG e a medida do signalstats na escala da entrega (4:2:0 8 bits, faixa legal: preto = 16). Aceita grade
+ * de teste por arquivo, sem salvar no projeto.
  * Por padrão só a faixa principal (V1). Com `camadas` (CH-0028), o B-roll e o motion de arquivo (V2/V3) ativos no
  * quadro entram por cima, com o mesmo enquadramento, grade e ordem de trilha do render; lettering, motion desenhado
  * e legenda continuam fora.
@@ -12,7 +12,8 @@ import path from 'node:path';
 import { clipDuration, clipStarts, normalizeGradeLut, overlayActive, overlaySourceTime, overlaysInDrawOrder, resolveOverlay, resolveRegionFx, TIMELINE_ANCHOR, type ColorGrade, type MediaAsset, type OverlayItem, type Project } from '@neweditor/core';
 import { run } from './media.ts';
 import { regionFxGraph } from './region-fx.ts';
-import { deliverySize, gradeFilters, mainRange, overlayFit, overlayFrames, segmentVideo } from './render.ts';
+import { camLut, DELIVERY_VIDEO_FILTER, deliverySize, gradeFilters, overlayFit, overlayFrames, segmentVideo } from './render.ts';
+import { managedGrades } from './color-source.ts';
 
 export interface QuadroSinal {
   ylow: number;
@@ -134,15 +135,18 @@ export async function renderQuadro(p: Project, dir: string, t: number, grades?: 
   await limparQuadros(outDir);
   const work = await fs.mkdtemp(path.join(outDir, '.work-'));
   try {
-    const { luts, lutFilter } = await gradeFilters(merged, work);
-    const seg = path.join(work, 'seg.mp4');
+    // A mesma cor do render: color management por clipe (entrada lida do arquivo) por cima da grade de teste.
+    const managedC = await managedGrades(p, merged);
+    const { luts, lutFilter } = await gradeFilters(managedC.grades, work);
+    const seg = path.join(work, 'seg.mov');
     // Do início do clipe até o quadro pedido: zoom animado e congelamento saem iguais ao render.
-    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(cam && luts.has(cam.id) ? cam.id : a.id), !!tl.reframe, cam, await mainRange(p));
+    await segmentVideo(a, c, hit.frame + 1, fps, W, H, seg, lutFilter(camLut(a.id, cam?.id, luts, managedC.colors)), !!tl.reframe, cam);
     const name = `q_${Math.round(t * 1000)}_${Date.now().toString(36)}.png`;
     const png = path.join(outDir, name);
     const probe = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=color_range', '-of', 'default=nw=1:nk=1', seg])).toString().trim();
     const base = `select='eq(n\\,${hit.frame})'`;
-    const medir = 'signalstats,metadata=print:file=-';
+    // Medido como sai na entrega (4:2:0 8 bits, faixa legal): o trecho é ProRes 10 bits e o signalstats leria em 0..1023.
+    const medir = `${DELIVERY_VIDEO_FILTER},signalstats,metadata=print:file=-`;
     const sobre = camadas ? camadasNoQuadro(tl, assets, Math.round(clipStarts(tl)[hit.i]! * fps) + hit.frame) : [];
     // Efeito por região ativo neste instante (CH-0033): entra na V1, antes das camadas, como no render.
     const rfx = regionFxGraph(regioesNoQuadro(tl, t), W, H, fps, 'b0');
