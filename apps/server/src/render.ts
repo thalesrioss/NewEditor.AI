@@ -253,7 +253,7 @@ export async function render(p: Project, dir: string, onProgress?: (pct: number)
     if (!hasVideo) args.push('-loop', '1');
     for (const f of inputs) (typeof f === 'string' ? args.push('-i', f) : args.push(...f.pre, '-i', f.path));
     args.push(...(await filterGraphArgs(graph)));
-    args.push('-map', '[vout]', ...deliveryVideoArgs(fps));
+    args.push('-map', '[vout]', ...deliveryVideoArgs(fps, tl.maxBitrate));
     // Imagem num arquivo, mixagem em WAV no outro: o AAC só é feito depois, já no alvo de loudness (`deliverAudio`).
     const videoOnly = path.join(work, 'video.mp4');
     const premix = path.join(work, 'premix.wav');
@@ -379,9 +379,11 @@ export function fpsRational(fps: number): string {
 /**
  * O único encode com perda (FB-0180 A2): x264 High 4.2 slow, crf 16 com teto de 25 Mb/s, aq-mode 3 (degradê de parede e
  * pele), CFR no fps exato, as quatro etiquetas bt709/tv. Os aprovados do cliente são yuv420p/tv/bt709.
+ * `maxMbps` (timeline.maxBitrate, CH-0039) baixa o teto quando a ficha do cliente pede menos (Equity: ~11-14 Mb/s).
  */
-export function deliveryVideoArgs(fps: number): string[] {
-  return ['-c:v', 'libx264', '-preset', 'slow', '-tune', 'film', '-crf', '16', '-maxrate', '25M', '-bufsize', '50M', '-profile:v', 'high', '-level:v', '4.2', '-x264-params', 'aq-mode=3', '-pix_fmt', 'yuv420p', '-fps_mode', 'cfr', '-r', fpsRational(fps), ...BT709_TV_TAGS];
+export function deliveryVideoArgs(fps: number, maxMbps?: number): string[] {
+  const max = maxMbps ?? 25;
+  return ['-c:v', 'libx264', '-preset', 'slow', '-tune', 'film', '-crf', '16', '-maxrate', `${max}M`, '-bufsize', `${max * 2}M`, '-profile:v', 'high', '-level:v', '4.2', '-x264-params', 'aq-mode=3', '-pix_fmt', 'yuv420p', '-fps_mode', 'cfr', '-r', fpsRational(fps), ...BT709_TV_TAGS];
 }
 
 /** Faixa de níveis de um arquivo de vídeo (cabeçalho). */

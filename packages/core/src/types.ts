@@ -307,6 +307,8 @@ export interface Timeline {
   formatoManual?: boolean;
   /** Banco dos SFX dos motions, letterings e flashes: foley sintetizado ou amostras reais do CinePRO. */
   sfxBank?: import('./sfx.ts').SfxBank;
+  /** Teto de bitrate do vídeo na entrega, em Mb/s; ausente = 25 (CH-0039). */
+  maxBitrate?: number;
   /** Efeitos por região no V1 (CH-0033). */
   regionFx?: RegionFx[];
 }
@@ -501,6 +503,8 @@ export type TimelineOp =
   /** Formato da entrega em pixels (e fps): presets ou livre. Fica no histórico. */
   | { type: 'set_format'; width: number; height: number; fps?: number }
   | { type: 'set_sfx_bank'; bank: import('./sfx.ts').SfxBank }
+  /** Teto de bitrate do vídeo na entrega, em Mb/s (2 a 25); `null` volta ao padrão de 25 (CH-0039). */
+  | { type: 'set_bitrate'; maxMbps: number | null }
   | { type: 'add_overlay'; item: Omit<OverlayItem, 'id' | 'by'> & { id?: string } }
   | { type: 'move_overlay'; id: string; anchor: Anchor; trackId?: string }
   | { type: 'trim_overlay'; id: string; duration: Seconds; sourceIn?: Seconds }
