@@ -39,11 +39,16 @@ tags: [registro, newstudios]
 <!-- alteracoes:fim -->
 `;
 
+/** O `_SISTEMA` é o da pasta NewStudios (`…/NewStudios/_SISTEMA`), nunca o da raiz do Thales. */
+export const ehNewStudios = (sistema: string) => path.basename(path.dirname(path.resolve(sistema))) === 'NewStudios';
+
 /**
  * Cria a pasta NewStudios no cofre (só o que falta) e instala o registro.py dela. Precisa do cofre existir: sem a raiz
- * "Cérebro do Editor", não cria nada e devolve false.
+ * "Cérebro do Editor", não cria nada e devolve false. Fora de `…/NewStudios/_SISTEMA` recusa (erro): com o
+ * `CEREBRO_COFRE` apontado para a raiz, sobrescreveria o registro.py do Thales.
  */
 export async function prepararNewStudios(sistema: string): Promise<boolean> {
+  if (!ehNewStudios(sistema)) throw new Error(`${sistema} não é a pasta NewStudios do cofre (…/NewStudios/_SISTEMA): nada gravado lá`);
   const raiz = path.dirname(sistema);
   if (!(await fs.stat(path.dirname(raiz)).catch(() => null))?.isDirectory()) return false;
   for (const d of [path.join(sistema, 'bin'), ...['Alterações', 'Recusados', 'Aprovados'].map((x) => path.join(raiz, 'Registro de Decisões', x))]) await fs.mkdir(d, { recursive: true });

@@ -140,6 +140,26 @@ describe('regras puras', () => {
     const semFlash = { ...p, timeline: { ...p.timeline, main: [main[0]!, { ...main[1]!, flash: undefined }] } } as unknown as Project;
     assert.equal(achadosProjeto(semFlash, { cortes: [20 + 4 / 30], fala: [{ start: 0, end: 46 }] }).achados.filter((a) => a.regra === 'corte-embutido' && !a.ok).length, 1);
   });
+
+  test('escala: B-roll 1920×1080 em cover vira aviso, imagem 1080×1080 fica fora; cobertura do falante segue reprovando', () => {
+    const v = (id: string, p: string, extra: Partial<MediaAsset> = {}): MediaAsset => ({ id, name: path.basename(p), path: p, kind: 'video', duration: 100, width: 2160, height: 3840, fps: 29.97, hasAudio: true, ...extra });
+    const assets = [
+      v('fala', '/b/C3039.MP4', { role: 'fala' }),
+      v('br', '/i/rua.mp4', { role: 'broll', width: 1920, height: 1080, hasAudio: false }),
+      v('img', '/i/print.png', { kind: 'image', role: 'broll', width: 1080, height: 1080, hasAudio: false }),
+    ];
+    const ov = (id: string, assetId: string, at: number, framing?: OverlayItem['framing']): OverlayItem => ({ id, trackId: 'V2', role: 'broll', anchor: { assetId: 'fala', at }, duration: 1, source: { type: 'media', assetId, in: 0 }, by: 'agent', ...(framing ? { framing } : {}) });
+    const main: Clip[] = [{ id: 'c1', assetId: 'fala', in: 10, out: 16, by: 'agent' }];
+    const proj = (overlays: OverlayItem[]) => ({ assets, timeline: { fps: 29.97, width: 1080, height: 1920, main, removals: [], pins: [], tracks: [], overlays } }) as unknown as Project;
+    const r = achadosProjeto(proj([ov('br', 'br', 11), ov('img', 'img', 13)]), { fala: [{ start: 0, end: 6 }] });
+    assert.deepEqual(r.achados.filter((a) => a.regra === 'escala').map((a) => a.ok), [true]);
+    assert.equal(r.avisos.filter((a) => /escala do B-roll br .*1,78×/.test(a)).length, 1, JSON.stringify(r.avisos));
+    assert.ok(!r.avisos.some((a) => /img/.test(a)));
+    // Cobertura do próprio falante (punch-in 2160×3840 a zoom 3 = 1,5×) continua reprovando.
+    const f = achadosProjeto(proj([ov('cob', 'fala', 11, { x: 0.5, y: 0.5, zoom: 3 })]), { fala: [{ start: 0, end: 6 }] }).achados.filter((a) => a.regra === 'escala' && !a.ok);
+    assert.equal(f.length, 1);
+    assert.match(f[0]!.onde!, /^cob/);
+  });
 });
 
 describe('gate em vídeo sintético', () => {
