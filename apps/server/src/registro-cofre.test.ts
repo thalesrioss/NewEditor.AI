@@ -49,6 +49,31 @@ test('pasta NewStudios nasce no cofre; reprovação: linha com título, A-01 ger
   assert.equal(fs.readdirSync(path.join(RAIZ, 'Registro de Decisões', 'Recusados')).length, 1);
 });
 
+test('CEREBRO_COFRE apontado para a raiz do Thales: recusa, o registro.py e o correcoes.jsonl da raiz saem intactos', async () => {
+  const { prepararNewStudios } = await import('./registro-cofre.ts');
+  const { registrarThales } = await import('./registro-thales.ts');
+  const raizSis = path.join(VAULT, '_SISTEMA');
+  fs.mkdirSync(path.join(raizSis, 'bin'), { recursive: true });
+  const py = path.join(raizSis, 'bin', 'registro.py');
+  fs.writeFileSync(py, '# registro.py do Thales (mapa histórico)\nprint("thales")\n');
+  const pyAntes = fs.readFileSync(py, 'utf8');
+  const jsonlAntes = fs.readFileSync(path.join(raizSis, 'correcoes.jsonl'), 'utf8');
+  await assert.rejects(prepararNewStudios(raizSis), /não é a pasta NewStudios/);
+  const antes = process.env.CEREBRO_COFRE;
+  process.env.CEREBRO_COFRE = raizSis;
+  try {
+    const r = await registrarThales({ tipo: 'reprovacao', canal: 'trello', pedido: 'cofre errado', projeto: 'eq2210-09', cliente: 'equity-sales', ref: 'card-raiz' });
+    assert.equal(r.cofre, null);
+    assert.equal(r.newstudios?.gravado, true);
+    assert.ok(r.avisos.some((a) => /não é a pasta NewStudios/.test(a)), JSON.stringify(r.avisos));
+  } finally {
+    process.env.CEREBRO_COFRE = antes;
+  }
+  assert.equal(fs.readFileSync(py, 'utf8'), pyAntes);
+  assert.equal(fs.readFileSync(path.join(raizSis, 'correcoes.jsonl'), 'utf8'), jsonlAntes);
+  assert.ok(!fs.existsSync(path.join(VAULT, 'Registro de Decisões')));
+});
+
 test('aprovação também leva título no cofre', async () => {
   const { linhaCofre } = await import('./registro-thales.ts');
   const l = JSON.parse(linhaCofre({ tipo: 'aprovacao', canal: 'slack', pedido: 'pode entregar o 15' })) as Record<string, string>;

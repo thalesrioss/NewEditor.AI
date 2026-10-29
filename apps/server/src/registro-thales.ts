@@ -4,8 +4,9 @@
  *  - memória da NewStudios (`NEWSTUDIOS_MEMORIA`, padrão ~/newstudios/memoria): correcoes.jsonl (alteração e
  *    reprovação) ou decisoes.jsonl (aprovação), no formato das linhas de lá (data, quem, projeto, origem,
  *    pedido_literal, antes, depois);
- *  - cofre do Thales (`CEREBRO_COFRE`, padrão ~/Documents/Cérebro do Editor/_SISTEMA), no formato do
- *    PROTOCOLO_GLOBAL, com "fonte": "newstudios". Cofre ausente = grava só na NewStudios e avisa.
+ *  - pasta NewStudios do cofre do Thales (`CEREBRO_COFRE`, padrão ~/Documents/Cérebro do Editor/NewStudios/_SISTEMA;
+ *    nunca a raiz `Cérebro do Editor/_SISTEMA`, que é só leitura via `CEREBRO_COFRE_RAIZ`), no formato do
+ *    PROTOCOLO_GLOBAL, com "fonte": "newstudios". Cofre ausente ou fora da pasta NewStudios = grava só na NewStudios e avisa.
  * Mesmo `ref` (id da mensagem, do card, do comentário) não grava duas vezes no mesmo arquivo.
  * Leitura: as linhas com origem Thales de um cliente (as duas fontes, sem repetir) e o perfil do cliente em
  * `<dados>/perfis/thales/<cliente>.json` (subpasta: `perfis/*.json` são os perfis de edição).
@@ -16,7 +17,7 @@ import path from 'node:path';
 import type { Project } from '@neweditor/core';
 import { DATA_ROOT } from './config.ts';
 import { slug } from './profiles.ts';
-import { notaRecusado, prepararNewStudios, raizCofre, rodarRegistroPy } from './registro-cofre.ts';
+import { ehNewStudios, notaRecusado, prepararNewStudios, raizCofre, rodarRegistroPy } from './registro-cofre.ts';
 import { PRODUTORA_DIR } from './videos.ts';
 
 export type TipoThales = 'aprovacao' | 'reprovacao' | 'alteracao';
@@ -247,9 +248,11 @@ async function gravar(r: RegistroThales): Promise<ResultadoRegistro> {
     { chave: 'newstudios', dir: memoriaDir(), linha: linhaNewstudios(r) },
     { chave: 'cofre', dir: cofreDir(), linha: linhaCofre(r) },
   ];
-  // A pasta NewStudios do cofre nasce aqui na primeira gravação (com o registro.py dela).
-  await prepararNewStudios(cofreDir()).catch((e) => res.avisos.push(`pasta NewStudios do cofre: ${(e as Error).message}`));
+  // A pasta NewStudios do cofre nasce aqui na primeira gravação (com o registro.py dela). `CEREBRO_COFRE` fora dela
+  // (ex.: a raiz do Thales) não grava no cofre: nem linha, nem registro.py.
+  const cofreOk = await prepararNewStudios(cofreDir()).then(() => true, (e) => (res.avisos.push(`pasta NewStudios do cofre: ${(e as Error).message}`), ehNewStudios(cofreDir())));
   for (const d of destinos) {
+    if (d.chave === 'cofre' && !cofreOk) continue;
     if (!(await existe(d.dir))) {
       res.avisos.push(`${d.chave === 'cofre' ? 'cofre' : 'memória da NewStudios'} não encontrado em ${d.dir}: não gravado lá`);
       continue;
