@@ -6,7 +6,7 @@
  *  2. níveis: Y fora de 16–235 em mais de 0,5% dos pixels (código armazenado, ~1 quadro/s);
  *  3. saturação: SATAVG do centro do quadro abaixo de 0,7× a assinatura dos aprovados do cliente;
  *  4. imagem parada sob fala: freeze ≥ 0,15 s ou quadros repetidos em cadência (câmera lenta) com fala;
- *  5. com o projeto: escala efetiva > 1,25, velocidade ≠ 1 e congelamento sob fala, boca de outro momento
+ *  5. com o projeto: escala efetiva > 1,25 (bruto nativo abaixo da entrega sem zoom nem recorte: aviso até 1,5×), velocidade ≠ 1 e congelamento sob fala, boca de outro momento
  *     (cobertura do mesmo falante fora do instante da voz, ou cobertura embutida no arquivo) e 2ª câmera sem
  *     sincronia medida.
  *
@@ -56,6 +56,8 @@ export const LIMITES = {
   freeze: 0.15,
   /** Escala efetiva máxima (pixel da fonte → pixel da entrega). */
   escala: 1.25,
+  /** Bruto nativo abaixo da entrega (720×1280 de iPhone numa entrega 1080×1920 = 1,5×), sem zoom: aviso até aqui (CH-0045). */
+  escalaNativa: 1.5,
   /** Quadros repetidos isolados em 1 s que fazem a cadência de câmera lenta. */
   cadencia: 4,
 };
@@ -426,11 +428,19 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
 
   // (a) Escala efetiva.
   let piorEscala = 0;
+  const ampliadas = new Map<string, { e: number; src: MediaAsset }>();
   tl.main.forEach((c, i) => {
     const src = assets.get(c.cam ?? c.assetId) ?? assets.get(c.assetId);
     if (!src || src.kind === 'audio') return;
     // Sobre o tamanho de ENTREGA (lado curto 1080), a mesma conta do aviso da operação (`clipScale` do núcleo).
     const e = clipScale(src, c, tl) ?? 0;
+    // Bruto nativo abaixo da entrega (CH-0045: único bruto é iPhone 720×1280 numa entrega 1080×1920): sem zoom e sem
+    // recorte, a ampliação é a da própria fonte e não há plano melhor; vira aviso até `escalaNativa`. Zoom por cima reprova.
+    const nativa = Math.max(c.zoom ?? 1, c.zoomTo ?? c.zoom ?? 1) <= 1.001 && Math.abs(e - (clipScale(src, {}, { width: tl.width, height: tl.height }) ?? 0)) < 1e-6;
+    if (nativa && e > LIMITES.escala && e <= LIMITES.escalaNativa + 1e-6) {
+      ampliadas.set(src.id, { e, src });
+      return;
+    }
     piorEscala = Math.max(piorEscala, e);
     if (e > LIMITES.escala) out.push({ regra: 'escala', ok: false, medido: `${n(e, 2)}× (zoom ${n(Math.max(c.zoom ?? 1, c.zoomTo ?? 1), 2)} sobre ${src.width}×${src.height})`, limite: `≤ ${n(LIMITES.escala, 2)}×`, onde: `clipe ${i + 1} (${nome(src.id)}) em ${tt(starts[i]!)}`, at: starts[i] });
   });
@@ -449,7 +459,10 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
     piorEscala = Math.max(piorEscala, e);
     if (e > LIMITES.escala) out.push({ regra: 'escala', ok: false, medido: `${n(e, 2)}× (B-roll${o.framing ? ` zoom ${n(o.framing.zoom, 2)}` : ''} sobre ${a.width}×${a.height})`, limite: `≤ ${n(LIMITES.escala, 2)}×`, onde: `${o.id} (${nome(a.id)}) em ${trecho(pos.start, pos.end)}`, at: pos.start });
   }
-  if (!out.some((x) => x.regra === 'escala')) out.push({ regra: 'escala', ok: true, medido: `máx. ${n(piorEscala, 2)}×`, limite: `≤ ${n(LIMITES.escala, 2)}×` });
+  for (const { e, src } of ampliadas.values())
+    avisos.push(`escala nativa de ${nome(src.id)}: ${n(e, 2)}× sobre ${src.width}×${src.height} sem zoom (a fonte é menor que a entrega; aceita até ${n(LIMITES.escalaNativa, 2)}× sem punch-in; se houver bruto maior, use ele)`);
+  const nativaMax = Math.max(0, ...[...ampliadas.values()].map((x) => x.e));
+  if (!out.some((x) => x.regra === 'escala')) out.push({ regra: 'escala', ok: true, medido: `máx. ${n(piorEscala, 2)}×${nativaMax ? ` (bruto nativo ${n(nativaMax, 2)}×, aviso)` : ''}`, limite: `≤ ${n(LIMITES.escala, 2)}×` });
   if (project.assets.some((a) => !ehBruto(a.path) && a.kind === 'video' && (falante.has(a.id) || visiveis.some((o) => o.source.type === 'media' && o.source.assetId === a.id)) && a.role !== 'motion' && !a.alpha && clipeSony(a.path)))
     avisos.push('intermediários do falante (recorte/punch-in já embutido no arquivo): a escala medida é sobre o arquivo, o zoom de dentro dele não aparece no projeto');
 

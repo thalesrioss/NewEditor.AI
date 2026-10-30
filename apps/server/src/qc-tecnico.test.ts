@@ -143,6 +143,23 @@ describe('regras puras', () => {
     assert.equal(boca(8.6).length, 1);
   });
 
+  test('escala: bruto nativo 720×1280 sem zoom numa entrega 1080×1920 vira aviso; zoom por cima, recorte e fonte menor seguem reprovando (CH-0045)', () => {
+    const v = (id: string, w: number, h: number): MediaAsset => ({ id, name: `IMG_${id}.MOV`, path: `/b/IMG_${id}.MOV`, kind: 'video', duration: 100, width: w, height: h, fps: 30, hasAudio: true, role: 'fala' });
+    const proj = (a: MediaAsset, main: Clip[], reframe = false) => ({ assets: [a], timeline: { fps: 30, width: 1080, height: 1920, reframe, main, removals: [], pins: [], tracks: [], overlays: [] } }) as unknown as Project;
+    const c = (extra: Partial<Clip> = {}): Clip => ({ id: 'c', assetId: 'a', in: 0, out: 4, by: 'agent', ...extra });
+    const escala = (p: Project) => achadosProjeto(p, { fala: [{ start: 0, end: 4 }] });
+    // thales-bf-01: só o iPhone 720×1280, zoom 1 = 1,5×.
+    const ok = escala(proj(v('a', 720, 1280), [c(), c({ id: 'c2', in: 5, out: 8 })]));
+    assert.deepEqual(ok.achados.filter((a) => a.regra === 'escala').map((a) => a.ok), [true]);
+    assert.equal(ok.avisos.filter((a) => /escala nativa de IMG_a\.MOV: 1,50×/.test(a)).length, 1, JSON.stringify(ok.avisos));
+    // Punch-in por cima do bruto pequeno reprova.
+    assert.equal(escala(proj(v('a', 720, 1280), [c({ zoom: 1.1 })])).achados.filter((a) => a.regra === 'escala' && !a.ok).length, 1);
+    // Fonte ainda menor (540×960 = 2×) reprova.
+    assert.equal(escala(proj(v('a', 540, 960), [c()])).achados.filter((a) => a.regra === 'escala' && !a.ok).length, 1);
+    // Recorte 9:16 de um 1920×1080 deitado (1,78×) é escolha de enquadramento: reprova.
+    assert.equal(escala(proj(v('a', 1920, 1080), [c({ framing: { x: 0.5 } })], true)).achados.filter((a) => a.regra === 'escala' && !a.ok).length, 1);
+  });
+
   test('escala: B-roll 1920×1080 em cover vira aviso, imagem 1080×1080 fica fora; cobertura do falante segue reprovando', () => {
     const v = (id: string, p: string, extra: Partial<MediaAsset> = {}): MediaAsset => ({ id, name: path.basename(p), path: p, kind: 'video', duration: 100, width: 2160, height: 3840, fps: 29.97, hasAudio: true, ...extra });
     const assets = [
