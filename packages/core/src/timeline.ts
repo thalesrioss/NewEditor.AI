@@ -5,6 +5,16 @@ import { normalizeGradeLut } from './color.ts';
 /** Menor duração de clipe que mantemos; abaixo disso é resíduo de corte. */
 export const MIN_CLIP: Seconds = 0.04;
 
+/**
+ * A palavra é identificada pelo início dela no bruto (`at`). Folga só para ruído de ponto flutuante e arredondamento
+ * em centésimos: palavras do ASR podem começar a 0,02 s uma da outra, e com folga de 0,02 s a edição de uma caía na
+ * vizinha (CH-0043: o "dividir" do 'vou' 47,48 casou com o 'eu' 47,46).
+ */
+export const WORD_AT_EPS: Seconds = 0.005;
+export function sameWordAt(a: Seconds, b: Seconds): boolean {
+  return Math.abs(a - b) < WORD_AT_EPS;
+}
+
 let counter = 0;
 export function uid(prefix: string): string {
   counter = (counter + 1) % 1_000_000;
@@ -532,7 +542,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'fix_words': {
       let fixes = [...(t.wordFixes ?? [])];
       for (const f of op.fixes) {
-        const same = (x: WordFix) => x.assetId === f.assetId && Math.abs(x.at - f.at) < 0.02;
+        const same = (x: WordFix) => x.assetId === f.assetId && sameWordAt(x.at, f.at);
         const prev = fixes.find(same);
         fixes = fixes.filter((x) => !same(x));
         const next: WordFix = { assetId: f.assetId, at: prev?.at ?? f.at };
@@ -553,7 +563,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'edit_captions': {
       let list = [...(t.captionEdits ?? [])];
       for (const ed of op.edits) {
-        const same = (e: { assetId: string; at: number }) => e.assetId === ed.assetId && Math.abs(e.at - ed.at) < 0.02;
+        const same = (e: { assetId: string; at: number }) => e.assetId === ed.assetId && sameWordAt(e.at, ed.at);
         const prev = list.find(same);
         list = list.filter((e) => !same(e));
         if (!ed.patch) continue;

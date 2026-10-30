@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Loader2, Pause, Play, RotateCcw, SpellCheck, Wand2 } from 'lucide-react';
-import { formatTime } from '@neweditor/core';
+import { formatTime, sameWordAt } from '@neweditor/core';
 import { api, mediaUrl, type ReviewDoubt } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { Button, ConfirmButton } from './ui.tsx';
@@ -186,7 +186,7 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
     const words = transcripts[d.assetId] ?? [];
     const target = strip(d.text).toLowerCase();
     // A mesma palavra errada em outros pontos do vídeo também é corrigida (mantendo a pontuação de cada uma).
-    const hits = all ? words.filter((w) => strip(w.w).toLowerCase() === target) : words.filter((w) => Math.abs(w.start - (d.wordAt ?? -1)) < 0.02);
+    const hits = all ? words.filter((w) => strip(w.w).toLowerCase() === target) : words.filter((w) => sameWordAt(w.start, d.wordAt ?? -1));
     const fixes = hits.map((w) => ({ assetId: d.assetId, at: w.start, text: text + (w.w.match(/[^\p{L}\p{N}]+$/u)?.[0] ?? '') }));
     if (fixes.length) sendOp({ op: { type: 'fix_words', fixes }, note: `Corrigiu "${d.text}" → "${text}"${fixes.length > 1 ? ` (${fixes.length}×)` : ''}` });
   };
