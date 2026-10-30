@@ -536,7 +536,9 @@ export async function segmentAudio(a: MediaAsset, c: Clip, out: string, clean: s
   // `aresample` pelo relógio da fonte: AAC com pacotes faltando (buraco no pts) vira silêncio no lugar do buraco.
   // Sem isso o WAV só enfileira as amostras: o som depois do buraco adianta e a mix sai curta (BL-0156, 50 ms no v245).
   const af = ['aresample=async=1:min_hard_comp=0.01:first_pts=0', 'aformat=sample_rates=48000:channel_layouts=stereo', ...tempo, 'apad', `atrim=duration=${d}`, `afade=t=in:d=${FADE}`, `afade=t=out:st=${Math.max(0, played - FADE)}:d=${FADE}`].join(',');
-  await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(c.in), '-i', clean ?? a.path, '-t', String(c.out - c.in), '-vn', '-af', af, '-c:a', 'pcm_s16le', out]);
+  // `-t` antes do `-i`: limita a leitura da fonte. Depois do `-i` ele cortava a saída em out−in e jogava fora o silêncio
+  // do congelamento (apad) e a câmera lenta: a mix saía curta e o render falhava (CH-0042, freeze de 1,75 s no fim).
+  await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(c.in), '-t', String(c.out - c.in), '-i', clean ?? a.path, '-vn', '-af', af, '-c:a', 'pcm_s16le', out]);
 }
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {
