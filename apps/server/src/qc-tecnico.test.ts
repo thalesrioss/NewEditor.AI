@@ -126,6 +126,23 @@ describe('regras puras', () => {
     assert.equal(achadosProjeto(p, { fala: [{ start: 3, end: 13 }] }).achados.filter((a) => a.regra === 'boca-outro-momento' && !a.ok && a.onde!.startsWith('outro')).length, 0);
   });
 
+  test('boca-outro-momento: cauda de fala do clipe anterior no 1º quadro do ar coberto não reprova (CH-0044)', () => {
+    const v = (id: string, p: string): MediaAsset => ({ id, name: path.basename(p), path: p, kind: 'video', duration: 100, width: 1080, height: 1920, fps: 29.97, hasAudio: true, role: 'fala' });
+    const assets = [v('fala', '/b/C3070.MP4')];
+    // c1 termina em 16,42 do bruto (8,42 na timeline); c2 é o ar da sala de 21,08, coberto pela continuação do plano (16,42).
+    const main: Clip[] = [
+      { id: 'c1', assetId: 'fala', in: 8, out: 16.42, by: 'agent' },
+      { id: 'c2', assetId: 'fala', in: 21.08, out: 25, by: 'agent' },
+    ];
+    const ar: OverlayItem = { id: 'c_ar', trackId: 'V2', role: 'broll', anchor: { assetId: 'fala', at: 21.08 }, duration: 0.26, source: { type: 'media', assetId: 'fala', in: 16.42 }, by: 'agent' };
+    const p = { assets, timeline: { fps: 29.97, width: 1080, height: 1920, main, removals: [], pins: [], tracks: [], overlays: [ar] } } as unknown as Project;
+    const boca = (fim: number) => achadosProjeto(p, { fala: [{ start: 0, end: fim }] }).achados.filter((a) => a.regra === 'boca-outro-momento' && !a.ok);
+    // Cauda de 10 ms do 'cara?' depois do corte (trechosDeFala termina em 8,43): passa.
+    assert.equal(boca(8.43).length, 0, JSON.stringify(boca(8.43)));
+    // Contraprova: fala que continua no clipe de baixo segue reprovando.
+    assert.equal(boca(8.6).length, 1);
+  });
+
   test('escala: B-roll 1920×1080 em cover vira aviso, imagem 1080×1080 fica fora; cobertura do falante segue reprovando', () => {
     const v = (id: string, p: string, extra: Partial<MediaAsset> = {}): MediaAsset => ({ id, name: path.basename(p), path: p, kind: 'video', duration: 100, width: 2160, height: 3840, fps: 29.97, hasAudio: true, ...extra });
     const assets = [
