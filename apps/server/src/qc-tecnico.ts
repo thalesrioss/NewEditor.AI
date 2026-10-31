@@ -485,9 +485,10 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
     const passos = Math.max(2, Math.ceil((pos.end - pos.start) / quadro));
     for (let k = 0; k < passos; k++) {
       const t = Math.min(pos.end - 1e-3, pos.start + k * quadro + 1e-3);
-      if (!temFala({ start: t - quadro / 2, end: t + quadro / 2 })) continue;
       const loc = locate(tl, t);
       if (!loc || loc.local > clipPlayed(loc.clip)) continue;
+      // A voz comparada é a do clipe sob t: fala que só cai antes do corte (cauda do clipe anterior) não conta (CH-0044).
+      if (falaEm(med.fala, { start: Math.max(t - quadro / 2, loc.clipStart), end: t + quadro / 2 }) < quadro / 2) continue;
       const vozAsset = assets.get(loc.clip.assetId);
       const voz = vozAsset ? instanteBruto(vozAsset, loc.sourceTime, assets) : null;
       const img = instanteBruto(a, overlaySourceTime(o, t - pos.start), assets);
