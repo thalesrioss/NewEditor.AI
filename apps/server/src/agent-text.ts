@@ -32,15 +32,17 @@ export async function autoLettering(projectId: string, amount: LetteringAmount =
   const style = await videoStyle(projectId);
   const tl = p.timeline;
   const placed = tl.overlays.map((o) => ({ o, pos: resolveOverlay(tl, o) })).filter((x) => x.pos);
-  const mine = placed.filter(({ o }) => o.role === 'lettering' && o.by !== 'human');
-  const human = placed.filter(({ o }) => o.role === 'lettering' && o.by === 'human');
+  // Só o lettering de texto que não é do humano é refeito; lettering de mídia (.mov/PNG) fica, venha de quem vier (BL-0173).
+  const isText = (o: (typeof tl.overlays)[number]) => o.source.type === 'lettering' || o.source.type === 'text';
+  const mine = placed.filter(({ o }) => o.role === 'lettering' && o.by !== 'human' && isText(o));
+  const kept = placed.filter(({ o }) => o.role === 'lettering' && !mine.some((m) => m.o === o));
   const plan = planLetterings({
     words,
     total: timelineDuration(tl),
     ...style,
     amount,
-    blocked: [...placed.filter(({ o }) => o.role === 'motion'), ...human].map(({ pos }) => pos!),
-    existing: human.map(({ o }) => (o.source.type === 'lettering' ? o.source.lettering.words.filter((w) => w.destaque).map((w) => w.text).join(' ') : o.source.type === 'text' ? o.source.text.replace(/\*/g, '') : '')),
+    blocked: [...placed.filter(({ o }) => o.role === 'motion'), ...kept].map(({ pos }) => pos!),
+    existing: kept.map(({ o }) => (o.source.type === 'lettering' ? o.source.lettering.words.filter((w) => w.destaque).map((w) => w.text).join(' ') : o.source.type === 'text' ? o.source.text.replace(/\*/g, '') : '')),
   });
 
   await store.transaction(projectId, `Lettering automático (${plan.length})`, async () => {
