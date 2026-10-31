@@ -29,7 +29,10 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     title: 'Timeline',
     keys: [
       ['N', 'Ímã liga / desliga'],
-      ['+ / −  ou  ⌘ + roda', 'Zoom (em volta do mouse)'],
+      ['⌥ + roda  ou  ⌘ + roda', 'Zoom em volta do mouse'],
+      ['+ / −', 'Zoom'],
+      ['⇧Z', 'Ajustar à janela (a timeline inteira na tela)'],
+      ['Arrastar a borda do cabeçalho', 'Altura da trilha (duplo clique volta ao padrão)'],
       ['⇧ + roda', 'Rolar no tempo'],
       ['Arrastar no vazio', 'Laço: seleciona vários'],
       ['Shift + clique', 'Soma à seleção'],

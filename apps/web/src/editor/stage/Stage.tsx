@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ChevronFirst, ChevronLast, Cpu, FileVideo, Maximize2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward, Volume2, VolumeX } from 'lucide-react';
-import { clipStarts, FORMAT_PRESETS, formatPresetOf, ratioLabel, timelineDuration, trackFlag } from '@neweditor/core';
+import { clipStarts, FORMAT_PRESETS, formatPresetOf, ratioLabel, timelineDuration } from '@neweditor/core';
 import { api } from '../../lib/api.ts';
 import { webcodecsAvailable } from '../../lib/engine/media.ts';
 import { useEditor } from '../../lib/store.ts';
@@ -62,7 +62,8 @@ function Transport({ onFullscreen }: { onFullscreen: () => void }) {
   const starts = timeline ? clipStarts(timeline) : [];
   const prevCut = () => seek([...starts].reverse().find((s) => s < playhead - 0.02) ?? 0);
   const nextCut = () => seek([...starts, total].find((s) => s > playhead + 0.02) ?? total);
-  const muted = !!timeline && trackFlag(timeline, 'A1', 'muted');
+  // O botão liga/desliga o mudo guardado da A1 (o solo de outra trilha não conta aqui: ele se desfaz no solo).
+  const muted = !!timeline?.trackState?.A1?.muted;
   const Btn = ({ label, onClick, children, disabled }: { label: string; onClick: () => void; children: React.ReactNode; disabled?: boolean }) => (
     <button aria-label={label} title={label} disabled={disabled || !has} onClick={(e) => (e.currentTarget.blur(), onClick())} className="rounded-[var(--radius-ui-md)] p-1.5 text-ink-300 transition hover:bg-ink-800 hover:text-white disabled:pointer-events-none disabled:opacity-30">
       {children}

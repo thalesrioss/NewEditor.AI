@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftToLine, ArrowRightToLine, Eye, EyeOff, Lock, MessageSquarePlus, Scissors, SkipBack, Trash2, Unlock, Volume2, VolumeX, Zap } from 'lucide-react';
-import { anchorAt, clipStarts, cutEndAfter, formatTime, letteringCues, MOTION_TEMPLATES, motionCues, resolveOverlay, timelineDuration, trackFlag, type Clip, type MediaAsset, type OverlayItem, type OverlayRole, type Track, DEFAULT_CAPTIONS } from '@neweditor/core';
+import { ArrowLeftToLine, ArrowRightToLine, Eye, EyeOff, Headphones, Lock, MessageSquarePlus, Scissors, SkipBack, Trash2, Unlock, Volume2, VolumeX, Zap } from 'lucide-react';
+import { anchorAt, clipSpeed, clipStarts, cutEndAfter, formatTime, letteringCues, MOTION_TEMPLATES, motionCues, overlaySourceTime, resolveOverlay, soloMuted, timelineDuration, trackFlag, TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN, type Clip, type MediaAsset, type OverlayItem, type OverlayRole, type Track, DEFAULT_CAPTIONS } from '@neweditor/core';
 import { api, mediaUrl } from '../../lib/api.ts';
 import { CaptionInput, captionActions, cueText, useCaptionCues } from '../../lib/captions.tsx';
 import { useEditor, type Word } from '../../lib/store.ts';
 import { IconButton } from '../../components/ui.tsx';
-import { ASSET_MIME, CINEPRO_MIME, openRightTab, ROLE_STYLE, ROW } from '../shared.ts';
+import { ASSET_MIME, CINEPRO_MIME, openRightTab, ROLE_STYLE } from '../shared.ts';
 import { openMenu } from './ContextMenu.tsx';
 
 const SNAP_PX = 8;
@@ -15,46 +15,112 @@ const COVER_LABEL = { lettering: 'lettering', motion: 'motion', broll: 'B-roll' 
 // Cabeçalho de trilha (CapCut: rótulo curto + olho / som / cadeado)
 // ---------------------------------------------------------------------------
 
-export function TrackHeader({ id, name, h, strong, kind }: { id: string; name: string; h: number; strong?: boolean; kind: 'video' | 'audio' | 'main' }) {
-  const state = useEditor((s) => s.project?.timeline.trackState?.[id]);
+/** Ícones do cabeçalho: discretos até o mouse (ou o foco do teclado) chegar na trilha; ligados ficam acesos. */
+const headerBtn = (on?: boolean) => `!p-0.5 ${on ? '' : 'opacity-40 group-hover:opacity-100 focus-visible:opacity-100'}`;
+
+/**
+ * Alça de altura na borda de baixo do cabeçalho (BL-0160): arrastar muda a altura da trilha ao vivo e grava no
+ * projeto ao soltar (`set_track_state` com `height`); duplo clique volta ao padrão; setas ↑/↓ no teclado.
+ */
+export function HeightHandle({ id, h, onLive }: { id: string; h: number; onLive: (id: string, h: number | null) => void }) {
   const sendOp = useEditor((s) => s.sendOp);
-  const set = (patch: { hidden?: boolean; muted?: boolean; locked?: boolean }, note: string) => sendOp({ op: { type: 'set_track_state', trackId: id, patch }, note });
+  const clamp = (v: number) => Math.round(Math.max(TRACK_HEIGHT_MIN, Math.min(TRACK_HEIGHT_MAX, v)));
+  const commit = (v: number) => sendOp({ op: { type: 'set_track_state', trackId: id, patch: { height: v } }, note: v ? `Altura de ${id}: ${v} px` : `Altura de ${id} de volta ao padrão` });
+  const down = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const y0 = e.clientY;
+    let v = h;
+    const move = (ev: MouseEvent) => {
+      v = clamp(h + ev.clientY - y0);
+      onLive(id, v);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      if (v !== h) commit(v);
+      else onLive(id, null);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
   return (
-    <div className={`group flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5 ${state?.hidden || state?.muted ? 'opacity-60' : ''}`} style={{ height: h }}>
-      <span className={`w-6 shrink-0 rounded text-center font-mono text-ui-2xs font-semibold leading-4 ${strong ? 'bg-nc-500/30 text-nc-300' : 'bg-ink-750 text-ink-300'}`}>{id}</span>
-      <span className="min-w-0 flex-1 truncate text-ui-2xs text-ink-400" title={name}>
-        {name}
-      </span>
-      <span className="flex items-center">
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label={`Altura da trilha ${id}`}
+      aria-valuenow={h}
+      aria-valuemin={TRACK_HEIGHT_MIN}
+      aria-valuemax={TRACK_HEIGHT_MAX}
+      tabIndex={0}
+      title={`Arraste para mudar a altura de ${id} · duplo clique volta ao padrão`}
+      onMouseDown={down}
+      onDoubleClick={() => (onLive(id, null), commit(0))}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        e.stopPropagation();
+        const v = clamp(h + (e.key === 'ArrowDown' ? 4 : -4));
+        onLive(id, v);
+        commit(v);
+      }}
+      className="absolute inset-x-0 -bottom-[3px] z-[var(--z-track)] h-[6px] cursor-row-resize hover:bg-nc-400/40 focus-visible:bg-nc-400/40"
+    />
+  );
+}
+
+export function TrackHeader({ id, name, h, strong, kind, onHeight }: { id: string; name: string; h: number; strong?: boolean; kind: 'video' | 'audio' | 'main'; onHeight: (id: string, h: number | null) => void }) {
+  const state = useEditor((s) => s.project?.timeline.trackState?.[id]);
+  const soloOff = useEditor((s) => !!s.project && soloMuted(s.project.timeline, id));
+  const sendOp = useEditor((s) => s.sendOp);
+  const set = (patch: { hidden?: boolean; muted?: boolean; locked?: boolean; solo?: boolean }, note: string) => sendOp({ op: { type: 'set_track_state', trackId: id, patch }, note });
+  const compact = h < 30;
+  return (
+    <div className={`group relative flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5 ${state?.hidden || state?.muted || soloOff ? 'opacity-60' : ''}`} style={{ height: h }}>
+      <span className={`w-6 shrink-0 rounded-ui-sm text-center font-mono text-ui-xs font-semibold leading-4 ${strong ? 'bg-nc-500/30 text-nc-300' : 'bg-ink-750 text-ink-300'}`}>{id}</span>
+      {!compact && (
+        <span className="min-w-0 flex-1 truncate text-ui-xs text-ink-400" title={name}>
+          {name}
+        </span>
+      )}
+      <span className="ml-auto flex items-center">
         {kind !== 'audio' && (
-          <IconButton label={state?.hidden ? `Mostrar ${id}` : `Ocultar ${id} (sai do vídeo e do export)`} className={`!p-0.5 ${state?.hidden ? '' : 'opacity-40 group-hover:opacity-100'}`} active={state?.hidden} onClick={() => set({ hidden: !state?.hidden }, state?.hidden ? `Mostrou ${id}` : `Ocultou ${id}`)}>
-            {state?.hidden ? <EyeOff size={11} /> : <Eye size={11} />}
+          <IconButton label={state?.hidden ? `Mostrar ${id}` : `Ocultar ${id} (sai do vídeo e do export)`} className={headerBtn(state?.hidden)} active={state?.hidden} onClick={() => set({ hidden: !state?.hidden }, state?.hidden ? `Mostrou ${id}` : `Ocultou ${id}`)}>
+            {state?.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
           </IconButton>
         )}
-        {kind !== 'video' && (
-          <IconButton label={state?.muted ? `Ligar o som de ${id}` : `Mudo em ${id} (vale no export)`} className={`!p-0.5 ${state?.muted ? '' : 'opacity-40 group-hover:opacity-100'}`} active={state?.muted} onClick={() => set({ muted: !state?.muted }, state?.muted ? `Som de ${id} de volta` : `Mudo em ${id}`)}>
-            {state?.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}
+        {kind === 'audio' && (
+          <IconButton label={state?.muted ? `Ligar o som de ${id}` : soloOff ? `${id} está muda pelo solo de outra trilha (clique para mudo fixo)` : `Mudo em ${id} (vale no export)`} className={headerBtn(state?.muted)} active={state?.muted} onClick={() => set({ muted: !state?.muted }, state?.muted ? `Som de ${id} de volta` : `Mudo em ${id}`)}>
+            {state?.muted || soloOff ? <VolumeX size={12} /> : <Volume2 size={12} />}
           </IconButton>
         )}
-        <IconButton label={state?.locked ? `Destravar ${id}` : `Travar ${id} (protege da edição)`} className={`!p-0.5 ${state?.locked ? '' : 'opacity-40 group-hover:opacity-100'}`} active={state?.locked} onClick={() => set({ locked: !state?.locked }, state?.locked ? `Destravou ${id}` : `Travou ${id}`)}>
-          {state?.locked ? <Lock size={11} /> : <Unlock size={11} />}
+        {kind === 'audio' && (
+          <IconButton label={state?.solo ? `Tirar o solo de ${id}` : `Solo em ${id} (só as trilhas em solo soam, no preview e no export)`} className={`${headerBtn(state?.solo)} ${state?.solo ? '!bg-warn/20 !text-warn' : ''}`} active={state?.solo} onClick={() => set({ solo: !state?.solo }, state?.solo ? `Tirou o solo de ${id}` : `Solo em ${id}`)}>
+            <Headphones size={12} />
+          </IconButton>
+        )}
+        <IconButton label={state?.locked ? `Destravar ${id}` : `Travar ${id} (protege da edição)`} className={headerBtn(state?.locked)} active={state?.locked} onClick={() => set({ locked: !state?.locked }, state?.locked ? `Destravou ${id}` : `Travou ${id}`)}>
+          {state?.locked ? <Lock size={12} /> : <Unlock size={12} />}
         </IconButton>
       </span>
+      <HeightHandle id={id} h={h} onLive={onHeight} />
     </div>
   );
 }
 
-export function CaptionHeader() {
+export function CaptionHeader({ h, onHeight }: { h: number; onHeight: (id: string, h: number | null) => void }) {
   const caps = useEditor((s) => s.project?.timeline.captions);
   const sendOp = useEditor((s) => s.sendOp);
   const on = !!caps?.enabled;
   return (
-    <div className="flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5" style={{ height: ROW.LG }}>
-      <span className="w-6 shrink-0 rounded bg-teal-500/20 text-center font-mono text-ui-2xs font-semibold leading-4 text-teal-300">LG</span>
-      <span className="min-w-0 flex-1 truncate text-ui-2xs text-ink-400">Legenda</span>
+    <div className="group relative flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5" style={{ height: h }}>
+      <span className="w-6 shrink-0 rounded-ui-sm bg-teal-500/20 text-center font-mono text-ui-xs font-semibold leading-4 text-teal-300">LG</span>
+      <span className="min-w-0 flex-1 truncate text-ui-xs text-ink-400">Legenda</span>
       <IconButton label={on ? 'Legenda ligada (clique para esconder do vídeo)' : 'Legenda desligada (clique para ligar)'} className="!p-0.5" active={!on} onClick={() => sendOp({ op: { type: 'set_captions', captions: { ...(caps ?? DEFAULT_CAPTIONS), enabled: !on } }, note: on ? 'Desligou a legenda' : 'Ligou a legenda automática' })}>
-        {on ? <Eye size={11} /> : <EyeOff size={11} />}
+        {on ? <Eye size={12} /> : <EyeOff size={12} />}
       </IconButton>
+      <HeightHandle id="LG" h={h} onLive={onHeight} />
     </div>
   );
 }
@@ -63,14 +129,14 @@ export function CaptionHeader() {
 // LG — uma legenda por bloco, no tempo da fala
 // ---------------------------------------------------------------------------
 
-export function CaptionLane({ pps, pad, selectedKey }: { pps: number; pad: number; selectedKey?: string }) {
+export function CaptionLane({ pps, pad, h, selectedKey }: { pps: number; pad: number; h: number; selectedKey?: string }) {
   const cues = useCaptionCues();
   const enabled = useEditor((s) => !!s.project?.timeline.captions?.enabled);
   const select = useEditor((s) => s.select);
   const seek = useEditor((s) => s.seek);
   const [editing, setEditing] = useState<string | null>(null);
   return (
-    <div data-lane="LG" className={`relative border-b border-ink-750/60 ${enabled ? '' : 'opacity-45'}`} style={{ height: ROW.LG, marginLeft: pad }} title={enabled ? undefined : 'Legenda desligada — ligue no olho do cabeçalho'}>
+    <div data-lane="LG" className={`relative border-b border-ink-750/60 ${enabled ? '' : 'opacity-45'}`} style={{ height: h, marginLeft: pad }} title={enabled ? undefined : 'Legenda desligada — ligue no olho do cabeçalho'}>
       {cues.map((c) => {
         const sel = c.key === selectedKey;
         const isEditing = editing === c.key;
@@ -92,7 +158,7 @@ export function CaptionLane({ pps, pad, selectedKey }: { pps: number; pad: numbe
                 { label: c.hidden ? 'Restaurar legenda' : 'Apagar legenda', shortcut: 'Delete', danger: !c.hidden, icon: <Trash2 size={13} />, onClick: () => captionActions.toggleHidden(c) },
               ])
             }
-            className={`group/cue absolute top-1 bottom-1 rounded-[4px] border ${isEditing ? 'z-50' : sel ? 'z-10 ring-2 ring-white/70' : ''} ${c.hidden ? 'border-dashed border-ink-500 bg-transparent opacity-50' : c.coveredBy && !c.forced ? 'border-dashed border-teal-400/40 bg-teal-500/5 opacity-40 hover:opacity-70' : 'border-teal-400/70 bg-teal-500/25 hover:bg-teal-500/35'}`}
+            className={`group/cue absolute top-1 bottom-1 rounded-ui-sm border ${isEditing ? 'z-50' : sel ? 'z-10 ring-2 ring-white/70' : ''} ${c.hidden ? 'border-dashed border-ink-500 bg-transparent opacity-50' : c.coveredBy && !c.forced ? 'border-dashed border-teal-400/40 bg-teal-500/5 opacity-40 hover:opacity-70' : 'border-teal-400/70 bg-teal-500/25 hover:bg-teal-500/35'}`}
             style={{ left: c.start * pps, width: Math.max(3, (c.end - c.start) * pps - 1) }}
             title={`${cueText(c)}${c.edited ? `\n(editada — automático: "${c.original}")` : ''}${c.hidden ? '\n(apagada — selecione e restaure)' : ''}${c.coveredBy ? (c.forced ? `\n(mostrada mesmo com ${COVER_LABEL[c.coveredBy]} em cima)` : `\n(oculta: há ${COVER_LABEL[c.coveredBy]} em cima — clique no olho para mostrar)`) : ''}\nDuplo clique edita · Enter no meio divide · ⌫ no começo junta com a anterior`}
           >
@@ -107,9 +173,9 @@ export function CaptionLane({ pps, pad, selectedKey }: { pps: number; pad: numbe
               </button>
             )}
             {isEditing ? (
-              <CaptionInput cue={c} cues={cues} autoFocus onDone={() => setEditing(null)} className="absolute top-0 left-0 h-full min-w-[240px] rounded-[4px] border border-teal-300 bg-ink-900 px-1.5 text-ui-xs text-white shadow-xl outline-none" />
+              <CaptionInput cue={c} cues={cues} autoFocus onDone={() => setEditing(null)} className="absolute top-0 left-0 h-full min-w-[240px] rounded-ui-sm border border-teal-300 bg-ink-900 px-1.5 text-ui-xs text-white shadow-xl outline-none" />
             ) : (
-              <span className={`block truncate px-1 text-ui-2xs leading-[18px] ${c.hidden ? 'text-ink-400 line-through' : 'text-teal-50'}`}>
+              <span className={`block truncate px-1 text-ui-xs leading-[18px] ${c.hidden ? 'text-ink-400 line-through' : 'text-teal-50'}`}>
                 {c.edited && <span className="mr-0.5 text-amber-300">✎</span>}
                 {cueText(c)}
               </span>
@@ -131,8 +197,33 @@ function snapTargets(words: Word[] | undefined, edge: 'in' | 'out'): number[] {
   return words.map((w) => (edge === 'in' ? w.start : w.end));
 }
 
-export function ClipBlock({ clip, index, x, w, pps, selected, asset }: { clip: Clip; index: number; x: number; w: number; pps: number; selected: boolean; asset?: MediaAsset }) {
-  const project = useEditor((s) => s.project);
+/**
+ * Filmstrip (BL-0160): miniaturas do arquivo lado a lado dentro do bloco, na altura da trilha. `srcAt(local)` diz
+ * que instante da fonte aparece `local` s depois do começo do bloco (corte, velocidade, congelamento).
+ */
+export function Filmstrip({ asset, width, h, pps, srcAt }: { asset: MediaAsset; width: number; h: number; pps: number; srcAt: (local: number) => number }) {
+  const projectId = useEditor((s) => s.project?.id);
+  const th = asset.thumbs;
+  if (!th || !projectId || h < 8 || width < 2) return null;
+  const tw = (th.w * h) / th.h;
+  const rows = Math.ceil(th.count / th.cols);
+  const n = Math.min(300, Math.ceil(width / tw));
+  const url = `url(${mediaUrl(projectId, th.file)})`;
+  const tiles: React.ReactNode[] = [];
+  for (let k = 0; k < n; k++) {
+    const f = Math.max(0, Math.min(th.count - 1, Math.floor(srcAt(((k + 0.5) * tw) / pps) / th.interval)));
+    tiles.push(
+      <div
+        key={k}
+        className="absolute top-0 h-full"
+        style={{ left: k * tw, width: tw, backgroundImage: url, backgroundSize: `${th.cols * tw}px ${rows * h}px`, backgroundPosition: `${-(f % th.cols) * tw}px ${-Math.floor(f / th.cols) * h}px` }}
+      />,
+    );
+  }
+  return <div className="pointer-events-none absolute inset-0 overflow-hidden">{tiles}</div>;
+}
+
+export function ClipBlock({ clip, index, x, w, h, pps, selected, asset }: { clip: Clip; index: number; x: number; w: number; h: number; pps: number; selected: boolean; asset?: MediaAsset }) {
   const words = useEditor((s) => (asset ? s.transcripts[asset.id] : undefined));
   const select = useEditor((s) => s.select);
   const sendOp = useEditor((s) => s.sendOp);
@@ -176,30 +267,7 @@ export function ClipBlock({ clip, index, x, w, pps, selected, asset }: { clip: C
   };
 
   const th = asset?.thumbs;
-  const H = ROW.V1 - 2;
-  const tiles: React.ReactNode[] = [];
-  if (th && project) {
-    const tw = (th.w * H) / th.h;
-    const rows = Math.ceil(th.count / th.cols);
-    const n = Math.min(300, Math.ceil(shownW / tw));
-    for (let k = 0; k < n; k++) {
-      const t = shownIn + ((k + 0.5) * tw) / pps;
-      const f = Math.max(0, Math.min(th.count - 1, Math.floor(t / th.interval)));
-      tiles.push(
-        <div
-          key={k}
-          className="absolute top-0 h-full"
-          style={{
-            left: k * tw,
-            width: tw,
-            backgroundImage: `url(${mediaUrl(project.id, th.file)})`,
-            backgroundSize: `${th.cols * tw}px ${rows * H}px`,
-            backgroundPosition: `${-(f % th.cols) * tw}px ${-Math.floor(f / th.cols) * H}px`,
-          }}
-        />,
-      );
-    }
-  }
+  const speed = clipSpeed(clip);
 
   const timeOf = (clientX: number, el: HTMLElement) => {
     const st = useEditor.getState();
@@ -239,23 +307,23 @@ export function ClipBlock({ clip, index, x, w, pps, selected, asset }: { clip: C
         if (!selected) select({ kind: 'clip', id: clip.id });
       }}
       onContextMenu={menu}
-      className={`group absolute top-px bottom-px overflow-hidden rounded-[6px] border ${sel ? 'z-10 border-white ring-2 ring-white/40' : 'border-nc-500/60 hover:border-nc-300'} ${th ? 'bg-ink-800' : 'bg-nc-600/25'}`}
+      className={`group absolute top-px bottom-px overflow-hidden rounded-ui-sm border ${sel ? 'z-10 border-white ring-2 ring-white/40' : 'border-nc-500/60 hover:border-nc-300'} ${th ? 'bg-ink-800' : 'bg-nc-600/25'}`}
       style={{ left: x + dx, width: shownW - 1 }}
       title={label}
     >
-      {tiles}
-      <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/75 to-transparent px-1.5 pt-0.5 pb-2">{shownW > 44 && <div className="truncate text-ui-2xs font-medium text-white/90">{label || asset?.name}</div>}</div>
+      {asset && <Filmstrip asset={asset} width={shownW} h={h - 6} pps={pps} srcAt={(local) => Math.min(shownOut, shownIn + local * speed)} />}
+      <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/75 to-transparent px-1.5 pt-0.5 pb-2">{shownW > 44 && <div className="truncate text-ui-xs font-medium text-white/90">{label || asset?.name}</div>}</div>
       <div className="absolute right-1 bottom-0.5 flex gap-0.5">
-        {clip.speed && Math.abs(clip.speed - 1) > 0.01 && <span className="rounded bg-black/70 px-1 text-ui-2xs font-semibold text-white">{clip.speed}×</span>}
-        {clip.freeze ? <span className="rounded bg-black/70 px-1 text-ui-2xs text-white">❄ {clip.freeze.toFixed(1)}s</span> : null}
-        {clip.flash && <span className="rounded bg-amber-300/90 px-1 text-ui-2xs font-bold text-ink-950">⚡</span>}
+        {clip.speed && Math.abs(clip.speed - 1) > 0.01 && <span className="rounded bg-black/70 px-1 text-ui-xs font-semibold text-white">{clip.speed}×</span>}
+        {clip.freeze ? <span className="rounded bg-black/70 px-1 text-ui-xs text-white">❄ {clip.freeze.toFixed(1)}s</span> : null}
+        {clip.flash && <span className="rounded bg-amber-300/90 px-1 text-ui-xs font-bold text-ink-950">⚡</span>}
         {clip.zoom && clip.zoom > 1 && (
-          <span className="rounded bg-cyan-nc/90 px-1 text-ui-2xs font-bold text-ink-950">
+          <span className="rounded bg-cyan-nc/90 px-1 text-ui-xs font-bold text-ink-950">
             {clip.zoom}×{clip.zoomTo ? `→${clip.zoomTo}×` : ''}
           </span>
         )}
       </div>
-      {drag && <span className="absolute bottom-0.5 left-1 rounded bg-black/80 px-1 font-mono text-ui-2xs text-white">{formatTime(drag.value, true)}</span>}
+      {drag && <span className="absolute bottom-0.5 left-1 rounded bg-black/80 px-1 font-mono text-ui-xs text-white">{formatTime(drag.value, true)}</span>}
       {/* Alças de aparar (CapCut: aparecem no clipe selecionado ou sob o mouse) */}
       <div className={`absolute top-0 bottom-0 left-0 w-2 cursor-ew-resize rounded-l-[5px] ${sel ? 'bg-white/70' : 'bg-white/0 group-hover:bg-white/35'}`} onMouseDown={startTrim('in')} />
       <div className={`absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize rounded-r-[5px] ${sel ? 'bg-white/70' : 'bg-white/0 group-hover:bg-white/35'}`} onMouseDown={startTrim('out')} />
@@ -263,11 +331,11 @@ export function ClipBlock({ clip, index, x, w, pps, selected, asset }: { clip: C
   );
 }
 
-export function WaveBlock({ clip, x, w }: { clip: Clip; x: number; w: number }) {
+export function WaveBlock({ clip, x, w, h }: { clip: Clip; x: number; w: number; h: number }) {
   const env = useEditor((s) => s.envelopes[clip.assetId]);
   const canvas = useRef<HTMLCanvasElement>(null);
   const cw = Math.max(1, Math.min(16000, Math.floor(w)));
-  const H = ROW.A1 - 4;
+  const H = Math.max(4, h - 4);
   useEffect(() => {
     const cv = canvas.current;
     if (!cv || !env) return;
@@ -293,7 +361,7 @@ export function WaveBlock({ clip, x, w }: { clip: Clip; x: number; w: number }) 
     }
   }, [env, cw, H, clip.in, clip.out]);
   return (
-    <div className="absolute top-0.5 bottom-0.5 overflow-hidden rounded-[4px] border border-nc-600/40 bg-nc-600/10" style={{ left: x, width: Math.max(2, w - 1) }}>
+    <div className="absolute top-0.5 bottom-0.5 overflow-hidden rounded-ui-sm border border-nc-600/40 bg-nc-600/10" style={{ left: x, width: Math.max(2, w - 1) }}>
       <canvas ref={canvas} style={{ width: cw, height: H }} />
     </div>
   );
@@ -359,13 +427,13 @@ export function OverlayTrack(props: { track?: Track; h: number; items: OverlayIt
       onDrop={onDrop}
     >
       {items.map((o) => (
-        <OverlayBlock key={o.id} item={o} pps={pps} timeAt={timeAt} selected={o.id === selectedId} bad={bad.has(o.id)} locked={locked} asset={o.source.type === 'media' ? assets.get(o.source.assetId) : undefined} />
+        <OverlayBlock key={o.id} item={o} h={h} pps={pps} timeAt={timeAt} selected={o.id === selectedId} bad={bad.has(o.id)} locked={locked} asset={o.source.type === 'media' ? assets.get(o.source.assetId) : undefined} />
       ))}
     </div>
   );
 }
 
-export function OverlayBlock({ item, pps, timeAt, selected: primary, bad, asset, locked }: { item: OverlayItem; pps: number; timeAt: (x: number) => number; selected: boolean; bad: boolean; asset?: MediaAsset; locked: boolean }) {
+export function OverlayBlock({ item, h, pps, timeAt, selected: primary, bad, asset, locked }: { item: OverlayItem; h: number; pps: number; timeAt: (x: number) => number; selected: boolean; bad: boolean; asset?: MediaAsset; locked: boolean }) {
   const timeline = useEditor((s) => s.project?.timeline);
   const select = useEditor((s) => s.select);
   const inMulti = useEditor((s) => s.multi.includes(item.id));
@@ -482,11 +550,12 @@ export function OverlayBlock({ item, pps, timeAt, selected: primary, bad, asset,
       data-overlay-id={item.id}
       onMouseDown={begin('move')}
       onContextMenu={menu}
-      className={`group absolute top-0.5 bottom-0.5 overflow-hidden rounded-[5px] border ${locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'z-10 ring-2 ring-white/70' : ''} ${bad ? 'outline-2 outline-rose-500' : ''}`}
+      className={`group absolute top-0.5 bottom-0.5 overflow-hidden rounded-ui-sm border ${locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'} ${selected ? 'z-10 ring-2 ring-white/70' : ''} ${bad ? 'outline-2 outline-rose-500' : ''}`}
       style={{ left: start * pps, width: Math.max(4, (end - start) * pps), background: st.bg, borderColor: selected ? '#fff' : st.border }}
       title={`${st.label}: ${text}${bad ? '\n⚠ repetido mais de 2×' : ''}`}
     >
-      <div className="flex items-center gap-1 truncate px-1.5 text-ui-2xs leading-[1.6] font-medium text-white/90">
+      {item.role === 'broll' && asset?.thumbs && <Filmstrip asset={asset} width={(end - start) * pps} h={h - 6} pps={pps} srcAt={(local) => overlaySourceTime(item, local + (start - pos.start))} />}
+      <div className={`relative flex items-center gap-1 truncate px-1.5 text-ui-xs leading-[1.6] font-medium text-white/90 ${item.role === 'broll' && asset?.thumbs ? 'bg-gradient-to-b from-black/75 to-transparent pb-1' : ''}`}>
         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: st.solid }} />
         {bad && '⚠ '}
         {text}
