@@ -13,7 +13,8 @@ import { rulerStep } from './ruler.ts';
 import { SourceLane } from './SourceLane.tsx';
 
 const PAD = 16;
-const HEADER_W = 104;
+/** Cabeçalho largo o bastante para nome + olho/mudo/solo/cadeado sem cortar o nome (BL-0160). */
+const HEADER_W = 148;
 const MIN_PPS = 0.3;
 /** Mesmo teto do store (`setPxPerSec`): o zoom centrado calcula a rolagem com o valor que de fato fica. */
 const MAX_PPS = 400;
