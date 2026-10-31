@@ -144,7 +144,18 @@ export interface TrackState {
   hidden?: boolean;
   muted?: boolean;
   locked?: boolean;
+  /**
+   * Solo (BL-0160): com alguma trilha em solo, as trilhas de som sem solo ficam mudas — no preview e no export,
+   * porque o mudo efetivo passa por `trackFlag(..., 'muted')` / `overlayActive`. O `muted` guardado não muda.
+   */
+  solo?: boolean;
+  /** Altura da trilha na timeline, em px (BL-0160). Ausente = altura padrão da interface. Só visual. */
+  height?: number;
 }
+
+/** Limites da altura de trilha guardada no projeto (BL-0160). */
+export const TRACK_HEIGHT_MIN = 20;
+export const TRACK_HEIGHT_MAX = 200;
 
 export interface Track {
   id: string;

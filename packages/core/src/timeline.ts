@@ -1,4 +1,4 @@
-import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp, type WordFix } from './types.ts';
+import { DEFAULT_TRACKS, TIMELINE_ANCHOR, TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN,type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp, type WordFix } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { clipGradeOf, isNeutral, normalizeGradeLut } from './color.ts';
 import { DEFAULT_CAPTIONS } from './text.ts';
@@ -606,6 +606,8 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       return { ...t, motionSfxDb: Math.max(-24, Math.min(12, op.gainDb)) };
     case 'set_track_state': {
       const cur = { ...(t.trackState?.[op.trackId] ?? {}), ...op.patch };
+      // Altura: px inteiros dentro dos limites; 0, null ou inválido volta à altura padrão.
+      if (cur.height !== undefined) cur.height = typeof cur.height === 'number' && Number.isFinite(cur.height) && cur.height > 0 ? Math.round(Math.max(TRACK_HEIGHT_MIN, Math.min(TRACK_HEIGHT_MAX, cur.height))) : undefined;
       for (const k of Object.keys(cur) as (keyof typeof cur)[]) if (!cur[k]) delete cur[k];
       const all = { ...(t.trackState ?? {}) };
       if (Object.keys(cur).length) all[op.trackId] = cur;
@@ -766,10 +768,18 @@ export const MOTION_SFX_TRACK = 'A2';
 
 /** O overlay aparece/soa? (trilha oculta some da imagem; trilha muda some do som) */
 export function overlayActive(t: Timeline, o: OverlayItem): boolean {
-  const st = t.trackState?.[o.trackId];
-  if (!st) return true;
   const audio = o.role === 'music' || o.role === 'sfx';
-  return audio ? !st.muted : !st.hidden;
+  return audio ? !trackFlag(t, o.trackId, 'muted') : !t.trackState?.[o.trackId]?.hidden;
+}
+
+/** Trilha de som (A1 fala, A2 SFX, A3 trilha): só elas têm solo. */
+const isAudioTrack = (trackId: string): boolean => /^A\d+$/i.test(trackId);
+
+/** Alguma trilha de som está em solo e esta (de som) não: o som dela sai (BL-0160). */
+export function soloMuted(t: Timeline, trackId: string): boolean {
+  const all = t.trackState;
+  if (!all || !isAudioTrack(trackId) || all[trackId]?.solo) return false;
+  return Object.entries(all).some(([id, s]) => isAudioTrack(id) && !!s?.solo);
 }
 
 /**
@@ -798,8 +808,13 @@ export function overlaysInDrawOrder<T extends OverlayItem>(overlays: readonly T[
   return overlays.map((o, i) => ({ o, i, z: overlayLayer(o) })).sort((a, b) => a.z - b.z || a.i - b.i).map((x) => x.o);
 }
 
-export function trackFlag(t: Timeline, trackId: string, flag: 'hidden' | 'muted' | 'locked'): boolean {
-  return !!t.trackState?.[trackId]?.[flag];
+/**
+ * Estado efetivo da trilha. `muted` já conta o solo (outra trilha em solo emudece esta), e é o que preview e
+ * export consultam; o botão de mudo do cabeçalho lê o `muted` guardado em `trackState`.
+ */
+export function trackFlag(t: Timeline, trackId: string, flag: 'hidden' | 'muted' | 'locked' | 'solo'): boolean {
+  const own = !!t.trackState?.[trackId]?.[flag];
+  return flag === 'muted' ? own || soloMuted(t, trackId) : own;
 }
 
 /**
