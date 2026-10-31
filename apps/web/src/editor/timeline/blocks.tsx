@@ -75,7 +75,7 @@ export function TrackHeader({ id, name, h, strong, kind, onHeight }: { id: strin
   const soloOff = useEditor((s) => !!s.project && soloMuted(s.project.timeline, id));
   const sendOp = useEditor((s) => s.sendOp);
   const set = (patch: { hidden?: boolean; muted?: boolean; locked?: boolean; solo?: boolean }, note: string) => sendOp({ op: { type: 'set_track_state', trackId: id, patch }, note });
-  const compact = h < 30;
+  const compact = h < 24; // trilha muito baixa: só o rótulo e os botões
   return (
     <div className={`group relative flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5 ${state?.hidden || state?.muted || soloOff ? 'opacity-60' : ''}`} style={{ height: h }}>
       <span className={`w-6 shrink-0 rounded-ui-sm text-center font-mono text-ui-xs font-semibold leading-4 ${strong ? 'bg-nc-500/30 text-nc-300' : 'bg-ink-750 text-ink-300'}`}>{id}</span>
