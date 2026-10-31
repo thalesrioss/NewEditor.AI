@@ -17,7 +17,7 @@ export function TopBar({ project, leftOpen, rightOpen, onLeft, onRight, onExport
   const [statusErr, setStatusErr] = useState('');
   return (
     <header className="ne-titlebar flex h-11 shrink-0 items-center gap-2 border-b border-ink-750 bg-ink-900 px-2">
-      <a href="#/" className="rounded-[var(--radius-ui-md)] p-1.5 text-ink-400 hover:bg-ink-800 hover:text-white" title="Projetos (Kanban)" aria-label="Voltar aos projetos">
+      <a href="#/" className="rounded-ui-md p-1.5 text-ink-400 hover:bg-ink-800 hover:text-white" title="Projetos (Kanban)" aria-label="Voltar aos projetos">
         <ArrowLeft size={16} />
       </a>
       <img src="/logo-mark.png" alt="NewContent" className="h-5" />
@@ -56,7 +56,7 @@ export function TopBar({ project, leftOpen, rightOpen, onLeft, onRight, onExport
 
       <div className="ml-auto flex items-center gap-1.5">
         <span className={`flex items-center gap-1 text-ui-xs ${connected ? 'text-ink-400' : 'text-amber-300'}`} title={connected ? `Tudo salvo no servidor (v${project.version})${history.undoLabel ? ` · último: ${history.undoLabel}` : ''}` : 'Sem conexão com o servidor — tentando de novo'}>
-          {connected ? <Check size={12} className="text-[var(--color-ok)]" /> : null}
+          {connected ? <Check size={12} className="text-ok" /> : null}
           {connected ? 'Salvo' : 'reconectando…'}
         </span>
         <Notifications />
@@ -74,7 +74,7 @@ export function TopBar({ project, leftOpen, rightOpen, onLeft, onRight, onExport
         <button
           onClick={onExport}
           disabled={!project.timeline.main.length}
-          className="ml-1 flex h-8 items-center gap-1.5 rounded-[var(--radius-ui-md)] nc-gradient px-3.5 text-ui-sm font-semibold text-white shadow-[var(--shadow-ui-1)] transition hover:brightness-110 disabled:opacity-40"
+          className="ml-1 flex h-8 items-center gap-1.5 rounded-ui-md nc-gradient px-3.5 text-ui-sm font-semibold text-white shadow-ui-1 transition hover:brightness-110 disabled:opacity-40"
           title="Exportar o vídeo (⌘E)"
         >
           <Download size={14} /> Exportar
@@ -163,11 +163,11 @@ function ProjectName({ project }: { project: Project }) {
           if (e.key === 'Escape') (setV(project.name), setEditing(false));
         }}
         aria-label="Nome do projeto"
-        className="w-56 rounded-[var(--radius-ui-sm)] border border-nc-500 bg-ink-800 px-2 py-0.5 text-ui-sm text-white outline-none"
+        className="w-56 rounded-ui-sm border border-nc-500 bg-ink-800 px-2 py-0.5 text-ui-sm text-white outline-none"
       />
     );
   return (
-    <button onClick={() => setEditing(true)} className="max-w-[260px] truncate rounded-[var(--radius-ui-sm)] px-1.5 py-0.5 text-ui-sm font-semibold text-ink-100 hover:bg-ink-800" title="Clique para renomear">
+    <button onClick={() => setEditing(true)} className="max-w-[260px] truncate rounded-ui-sm px-1.5 py-0.5 text-ui-sm font-semibold text-ink-100 hover:bg-ink-800" title="Clique para renomear">
       {project.name}
     </button>
   );

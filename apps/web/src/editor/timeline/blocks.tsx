@@ -173,7 +173,7 @@ export function CaptionLane({ pps, pad, h, selectedKey }: { pps: number; pad: nu
               </button>
             )}
             {isEditing ? (
-              <CaptionInput cue={c} cues={cues} autoFocus onDone={() => setEditing(null)} className="absolute top-0 left-0 h-full min-w-[240px] rounded-ui-sm border border-teal-300 bg-ink-900 px-1.5 text-ui-xs text-white shadow-xl outline-none" />
+              <CaptionInput cue={c} cues={cues} autoFocus onDone={() => setEditing(null)} className="absolute top-0 left-0 h-full min-w-[240px] rounded-ui-sm border border-teal-300 bg-ink-900 px-1.5 text-ui-xs text-white shadow-ui-2 outline-none" />
             ) : (
               <span className={`block truncate px-1 text-ui-xs leading-[18px] ${c.hidden ? 'text-ink-400 line-through' : 'text-teal-50'}`}>
                 {c.edited && <span className="mr-0.5 text-amber-300">✎</span>}

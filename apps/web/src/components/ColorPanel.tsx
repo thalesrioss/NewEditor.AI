@@ -52,7 +52,7 @@ export function ColorPanel() {
   useEffect(() => setG(saved), [assetId, doClipe, clipId, JSON.stringify(saved)]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => setDraft(null), [setDraft]);
   if (!project) return null;
-  if (!videos.length) return <p className="p-4 text-xs text-ink-400">Sem vídeo no projeto.</p>;
+  if (!videos.length) return <p className="p-4 text-ui-sm text-ink-400">Sem vídeo no projeto.</p>;
 
   const live = (next: ColorGrade) => {
     setG(next);
@@ -71,7 +71,7 @@ export function ColorPanel() {
     <div className="scroll-thin h-full space-y-4 overflow-y-auto p-4">
       <div className="flex items-center gap-2">
         <Palette size={14} className="text-ink-300" />
-        <select value={assetId} disabled={doClipe} onChange={(e) => setAssetId(e.target.value)} className="min-w-0 flex-1 rounded-md border border-ink-700 bg-ink-800 px-2 py-1 text-ui-xs text-ink-100 focus:outline-none">
+        <select value={assetId} disabled={doClipe} onChange={(e) => setAssetId(e.target.value)} className="min-w-0 flex-1 rounded-ui-md border border-ink-700 bg-ink-800 px-2 py-1 text-ui-xs text-ink-100 focus:outline-none">
           {videos.map((a) => (
             <option key={a.id} value={a.id}>
               {a.role === 'fala' ? 'Fala · ' : 'B-roll · '}
@@ -81,9 +81,9 @@ export function ColorPanel() {
         </select>
       </div>
 
-      <div role="radiogroup" aria-label="Alvo da cor" className="grid grid-cols-2 gap-1 rounded-lg border border-ink-700 p-0.5 text-ui-xs">
+      <div role="radiogroup" aria-label="Alvo da cor" className="grid grid-cols-2 gap-1 rounded-ui-md border border-ink-700 p-0.5 text-ui-xs">
         {(['arquivo', 'clipe'] as const).map((k) => (
-          <button key={k} role="radio" aria-checked={alvo === k} disabled={k === 'clipe' && !clip} onClick={() => (setDraft(null), setAlvo(k))} className={`rounded-md px-2 py-1 font-medium disabled:opacity-40 ${alvo === k ? 'bg-ink-700 text-ink-50' : 'text-ink-300 hover:text-ink-100'}`}>
+          <button key={k} role="radio" aria-checked={alvo === k} disabled={k === 'clipe' && !clip} onClick={() => (setDraft(null), setAlvo(k))} className={`rounded-ui-md px-2 py-1 font-medium disabled:opacity-40 ${alvo === k ? 'bg-ink-700 text-ink-50' : 'text-ink-300 hover:text-ink-100'}`}>
             {k === 'arquivo' ? 'Arquivo (todos os clipes)' : 'Este clipe'}
           </button>
         ))}
@@ -123,7 +123,7 @@ export function ColorPanel() {
           }
           setBusy(false);
         }}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg nc-gradient px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+        className="flex w-full items-center justify-center gap-1.5 rounded-ui-md nc-gradient px-3 py-2 text-ui-sm font-semibold text-white disabled:opacity-40"
       >
         <Wand2 size={13} /> {busy ? 'Medindo o original…' : 'Corrigir automático para Rec.709'}
       </button>
@@ -131,7 +131,7 @@ export function ColorPanel() {
 
       <label className="block space-y-1">
         <span className="text-ui-xs font-medium text-ink-400">Câmera / perfil de gravação</span>
-        <select value={g.input} onChange={(e) => commit({ ...g, input: e.target.value as InputTransform }, `Entrada de cor: ${e.target.selectedOptions[0]?.text}`)} className="w-full rounded-md border border-ink-700 bg-ink-800 px-2 py-1.5 text-xs text-ink-100 focus:outline-none">
+        <select value={g.input} onChange={(e) => commit({ ...g, input: e.target.value as InputTransform }, `Entrada de cor: ${e.target.selectedOptions[0]?.text}`)} className="w-full rounded-ui-md border border-ink-700 bg-ink-800 px-2 py-1.5 text-ui-sm text-ink-100 focus:outline-none">
           {INPUT_TRANSFORMS.map((t) => (
             <option key={t.id} value={t.id}>
               {t.label}
@@ -151,10 +151,10 @@ export function ColorPanel() {
       <Texture g={g} live={live} commit={commit} />
 
       <div className="flex gap-1.5 border-t border-ink-750 pt-3">
-        <button aria-label="Segure para ver o original" onMouseDown={() => setCompare(true)} onMouseUp={() => setCompare(false)} onMouseLeave={() => setCompare(false)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-600 py-1.5 text-ui-xs text-ink-200 hover:border-nc-500" title="Segure para ver o original">
+        <button aria-label="Segure para ver o original" onMouseDown={() => setCompare(true)} onMouseUp={() => setCompare(false)} onMouseLeave={() => setCompare(false)} className="flex flex-1 items-center justify-center gap-1.5 rounded-ui-md border border-ink-600 py-1.5 text-ui-xs text-ink-200 hover:border-nc-500" title="Segure para ver o original">
           <Eye size={13} /> Segure: antes
         </button>
-        <button aria-label="Zerar ajustes (mantém a entrada da câmera)" onClick={() => commit({ ...NEUTRAL_GRADE, input: g.input }, doClipe ? 'Tirou a grade do clipe' : 'Zerou os ajustes de cor')} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-200 hover:border-rose-400" title="Zerar ajustes (mantém a entrada da câmera)">
+        <button aria-label="Zerar ajustes (mantém a entrada da câmera)" onClick={() => commit({ ...NEUTRAL_GRADE, input: g.input }, doClipe ? 'Tirou a grade do clipe' : 'Zerou os ajustes de cor')} className="flex items-center gap-1.5 rounded-ui-md border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-200 hover:border-rose-400" title="Zerar ajustes (mantém a entrada da câmera)">
           <RotateCcw size={13} /> Zerar
         </button>
       </div>
@@ -203,7 +203,7 @@ function Looks({ g, live, commit }: { g: ColorGrade; live: (x: ColorGrade) => vo
     <section className="space-y-2.5 border-t border-ink-750 pt-3">
       <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Look (CinePRO Looks)</h4>
       {g.lut ? (
-        <div className="space-y-2 rounded-[var(--radius-ui-md)] border border-nc-500/40 bg-nc-500/10 p-2">
+        <div className="space-y-2 rounded-ui-md border border-nc-500/40 bg-nc-500/10 p-2">
           <div className="flex items-center gap-2 text-ui-xs text-ink-100">
             <span className="min-w-0 flex-1 truncate" title={g.lut.nome}>
               {g.lut.nome}
@@ -215,29 +215,29 @@ function Looks({ g, live, commit }: { g: ColorGrade; live: (x: ColorGrade) => vo
           <RangeField label="Força" value={Math.round(g.lut.strength * 100)} min={0} max={100} step={5} unit="%" resetTo={100} onLive={(v) => live({ ...g, lut: { ...g.lut!, strength: v / 100 } })} onCommit={(v) => commit({ ...g, lut: { ...g.lut!, strength: v / 100 } }, `Look a ${v}%`)} />
         </div>
       ) : (
-        <p className="text-ui-2xs leading-snug text-ink-400">Nenhum look aplicado. O look entra depois da conversão e das primárias.</p>
+        <p className="text-ui-xs leading-snug text-ink-400">Nenhum look aplicado. O look entra depois da conversão e das primárias.</p>
       )}
-      <label className="flex items-center gap-1.5 rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-900 px-2">
+      <label className="flex items-center gap-1.5 rounded-ui-md border border-ink-700 bg-ink-900 px-2">
         <Search size={12} className="text-ink-400" />
         <input value={busca} onChange={(e) => setBusca(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder={`Buscar nos looks${total ? ` (${total})` : ''}`} aria-label="Buscar looks" className="w-full bg-transparent py-1 text-ui-xs text-ink-100 outline-none" />
       </label>
-      {erro && <p className="text-ui-2xs text-rose-300">{erro}</p>}
+      {erro && <p className="text-ui-xs text-rose-300">{erro}</p>}
       <div className="scroll-thin max-h-64 space-y-2 overflow-y-auto">
         {grupos.map(([grupo, list]) => (
           <div key={grupo}>
-            <div className="mb-0.5 truncate text-ui-2xs font-semibold text-ink-400" title={grupo}>
+            <div className="mb-0.5 truncate text-ui-xs font-semibold text-ink-400" title={grupo}>
               {grupo}
             </div>
             <div className="flex flex-wrap gap-1">
               {list.map((it) => (
-                <Button key={it.id} size="sm" variant={g.lut?.id === it.id ? 'primary' : 'secondary'} className="!h-6 max-w-full !px-2 !text-ui-2xs" title={`${it.categoria}/${it.pasta}/${it.nome}`} onClick={() => commit({ ...g, lut: { id: it.id, nome: it.nome, strength: g.lut?.strength ?? 1 } }, `Look: ${it.nome}`)}>
+                <Button key={it.id} size="sm" variant={g.lut?.id === it.id ? 'primary' : 'secondary'} className="!h-6 max-w-full !px-2 !text-ui-xs" title={`${it.categoria}/${it.pasta}/${it.nome}`} onClick={() => commit({ ...g, lut: { id: it.id, nome: it.nome, strength: g.lut?.strength ?? 1 } }, `Look: ${it.nome}`)}>
                   <span className="truncate">{it.nome}</span>
                 </Button>
               ))}
             </div>
           </div>
         ))}
-        {itens && !itens.length && <p className="text-ui-2xs text-ink-400">Nenhum look com esse nome.</p>}
+        {itens && !itens.length && <p className="text-ui-xs text-ink-400">Nenhum look com esse nome.</p>}
       </div>
     </section>
   );
@@ -258,7 +258,7 @@ function Wheels({ g, live, commit }: LiveCommit) {
   return (
     <section className="space-y-2 border-t border-ink-750 pt-3">
       <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Rodas de cor</h4>
-      <div className="flex rounded-[var(--radius-ui-md)] border border-ink-700 p-0.5" role="radiogroup" aria-label="Roda">
+      <div className="flex rounded-ui-md border border-ink-700 p-0.5" role="radiogroup" aria-label="Roda">
         {(
           [
             ['lift', 'Lift · sombras'],
@@ -266,7 +266,7 @@ function Wheels({ g, live, commit }: LiveCommit) {
             ['gain', 'Gain · altas'],
           ] as const
         ).map(([id, label]) => (
-          <button key={id} role="radio" aria-checked={which === id} onClick={() => setWhich(id)} className={`flex-1 rounded-[var(--radius-ui-sm)] py-1 text-ui-2xs font-semibold ${which === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
+          <button key={id} role="radio" aria-checked={which === id} onClick={() => setWhich(id)} className={`flex-1 rounded-ui-sm py-1 text-ui-xs font-semibold ${which === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
             {label}
           </button>
         ))}
@@ -300,7 +300,7 @@ function Hsl({ g, live, commit }: LiveCommit) {
         {HSL_BANDS.map((name, i) => {
           const on = bands[i] && (bands[i]!.h || bands[i]!.s || bands[i]!.l);
           return (
-            <button key={name} role="radio" aria-checked={band === i} title={name} onClick={() => setBand(i)} className={`h-6 flex-1 rounded-[var(--radius-ui-sm)] border-2 ${band === i ? 'border-white' : on ? 'border-nc-400' : 'border-transparent'}`} style={{ background: `hsl(${HSL_BAND_HUES[i]} 80% 50%)` }} />
+            <button key={name} role="radio" aria-checked={band === i} title={name} onClick={() => setBand(i)} className={`h-6 flex-1 rounded-ui-sm border-2 ${band === i ? 'border-white' : on ? 'border-nc-400' : 'border-transparent'}`} style={{ background: `hsl(${HSL_BAND_HUES[i]} 80% 50%)` }} />
           );
         })}
       </div>
@@ -324,7 +324,7 @@ function Curves({ g, live, commit }: LiveCommit) {
   return (
     <section className="space-y-2 border-t border-ink-750 pt-3">
       <h4 className="text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">Curvas</h4>
-      <div className="flex rounded-[var(--radius-ui-md)] border border-ink-700 p-0.5" role="radiogroup" aria-label="Canal">
+      <div className="flex rounded-ui-md border border-ink-700 p-0.5" role="radiogroup" aria-label="Canal">
         {(
           [
             ['luma', 'Luma'],
@@ -333,7 +333,7 @@ function Curves({ g, live, commit }: LiveCommit) {
             ['b', 'B'],
           ] as const
         ).map(([id, label]) => (
-          <button key={id} role="radio" aria-checked={ch === id} onClick={() => setCh(id)} className={`flex-1 rounded-[var(--radius-ui-sm)] py-1 text-ui-2xs font-semibold ${ch === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
+          <button key={id} role="radio" aria-checked={ch === id} onClick={() => setCh(id)} className={`flex-1 rounded-ui-sm py-1 text-ui-xs font-semibold ${ch === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
             {label}
           </button>
         ))}
@@ -360,7 +360,7 @@ function CurvePreview({ pts }: { pts: number[] }) {
     return `${(x * 100).toFixed(1)},${((1 - y) * 100).toFixed(1)}`;
   }).join(' ');
   return (
-    <svg viewBox="0 0 100 100" className="h-20 w-full rounded-[var(--radius-ui-sm)] border border-ink-700 bg-ink-900" aria-hidden="true">
+    <svg viewBox="0 0 100 100" className="h-20 w-full rounded-ui-sm border border-ink-700 bg-ink-900" aria-hidden="true">
       <line x1="0" y1="100" x2="100" y2="0" stroke="rgb(255 255 255 / 0.15)" strokeWidth="1" />
       <polyline points={d} fill="none" stroke="var(--color-nc-300)" strokeWidth="1.5" />
     </svg>

@@ -340,7 +340,7 @@ export function CerebroPage() {
   return (
     <div className="flex h-full flex-col bg-ink-900">
       <header className="ne-titlebar flex items-center gap-3 border-b border-ink-750 px-6 py-3">
-        <a href="#/" className="rounded-[var(--radius-ui-md)] p-1.5 text-ink-300 hover:bg-ink-800 hover:text-white" aria-label="Voltar ao Kanban">
+        <a href="#/" className="rounded-ui-md p-1.5 text-ink-300 hover:bg-ink-800 hover:text-white" aria-label="Voltar ao Kanban">
           <ArrowLeft size={18} />
         </a>
         <BrainCircuit size={20} className="text-nc-300" />
@@ -399,7 +399,7 @@ export function CerebroPage() {
             </button>
           )}
           {listOpen && matchList.length > 0 && (
-            <ul className="absolute top-full right-0 left-0 z-20 mt-1 max-h-72 overflow-y-auto rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-850 py-1 shadow-xl">
+            <ul className="absolute top-full right-0 left-0 z-20 mt-1 max-h-72 overflow-y-auto rounded-ui-md border border-ink-700 bg-ink-850 py-1 shadow-ui-2">
               {matchList.map((n) => (
                 <li key={n.id}>
                   <button
@@ -413,7 +413,7 @@ export function CerebroPage() {
                   >
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: sim.current?.byId.get(n.id)?.color ?? KIND_COLOR[n.kind] }} />
                     <span className="truncate">{n.label}</span>
-                    <span className="ml-auto shrink-0 text-ui-2xs text-ink-400">{CEREBRO_KIND_LABEL[n.kind]}</span>
+                    <span className="ml-auto shrink-0 text-ui-xs text-ink-400">{CEREBRO_KIND_LABEL[n.kind]}</span>
                   </button>
                 </li>
               ))}
@@ -453,11 +453,11 @@ export function CerebroPage() {
       <div className="relative flex min-h-0 flex-1">
         <div ref={wrap} className="relative min-w-0 flex-1 overflow-hidden">
           <canvas ref={canvas} className="block h-full w-full cursor-grab" aria-label="Grafo do Cérebro do Editor em 3D" />
-          {error && <p className="absolute top-3 left-3 rounded-[var(--radius-ui-md)] bg-rose-500/15 px-3 py-1.5 text-ui-sm text-rose-300">{error}</p>}
+          {error && <p className="absolute top-3 left-3 rounded-ui-md bg-rose-500/15 px-3 py-1.5 text-ui-sm text-rose-300">{error}</p>}
           {!graph && !error && <p className="absolute inset-0 flex items-center justify-center text-ui-sm text-ink-400">Lendo o vault…</p>}
 
           {graph && (
-            <div className="scroll-thin absolute top-3 left-3 max-h-[calc(100%-5rem)] w-60 overflow-y-auto rounded-[var(--radius-ui-lg)] border border-ink-750/80 bg-ink-900/80 p-2 backdrop-blur">
+            <div className="scroll-thin absolute top-3 left-3 max-h-[calc(100%-5rem)] w-60 overflow-y-auto rounded-ui-lg border border-ink-750/80 bg-ink-900/80 p-2 backdrop-blur">
               {graph.vaults.map((v) => {
                 const mine = graph.grupos.filter((g) => g.vault === v.id);
                 const allOff = mine.every((g) => hidden.has(g.id));
@@ -471,7 +471,7 @@ export function CerebroPage() {
                           return n;
                         })
                       }
-                      className="flex w-full items-center gap-2 rounded-[var(--radius-ui-sm)] px-1 py-1 text-left hover:bg-ink-800"
+                      className="flex w-full items-center gap-2 rounded-ui-sm px-1 py-1 text-left hover:bg-ink-800"
                       title={v.papel}
                       aria-pressed={!allOff}
                     >
@@ -487,7 +487,7 @@ export function CerebroPage() {
                         const sample = graph.nodes.find((n) => n.group === g.id && !isHub(n)) ?? graph.nodes.find((n) => n.group === g.id);
                         const color = sample ? (sim.current?.byId.get(sample.id)?.color ?? KIND_COLOR[sample.kind]) : '#fff';
                         return (
-                          <button key={g.id} onClick={() => toggleGroup(g.id)} className={`flex w-full items-center gap-2 rounded-[var(--radius-ui-sm)] py-0.5 pr-1.5 pl-4 text-left text-ui-xs hover:bg-ink-800 ${off ? 'text-ink-500' : 'text-ink-200'}`} aria-pressed={!off}>
+                          <button key={g.id} onClick={() => toggleGroup(g.id)} className={`flex w-full items-center gap-2 rounded-ui-sm py-0.5 pr-1.5 pl-4 text-left text-ui-xs hover:bg-ink-800 ${off ? 'text-ink-500' : 'text-ink-200'}`} aria-pressed={!off}>
                             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: off ? 'transparent' : color, boxShadow: off ? `inset 0 0 0 1.5px ${color}` : 'none' }} />
                             <span className="truncate">{g.label}</span>
                             <span className="ml-auto text-ui-2xs text-ink-400">{g.n}</span>
@@ -498,7 +498,7 @@ export function CerebroPage() {
                   </div>
                 );
               })}
-              <div className="mt-2 border-t border-ink-750 px-1 pt-2 text-ui-2xs text-ink-400">
+              <div className="mt-2 border-t border-ink-750 px-1 pt-2 text-ui-xs text-ink-400">
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" /> padrão da casa
                 </div>
@@ -513,16 +513,16 @@ export function CerebroPage() {
           )}
 
           {hoverNode && !selNode && (
-            <div className="pointer-events-none absolute right-3 bottom-3 max-w-sm rounded-[var(--radius-ui-md)] border border-ink-750 bg-ink-900/90 px-3 py-2 backdrop-blur">
+            <div className="pointer-events-none absolute right-3 bottom-3 max-w-sm rounded-ui-md border border-ink-750 bg-ink-900/90 px-3 py-2 backdrop-blur">
               <div className="text-ui-sm font-medium text-white">{hoverNode.label}</div>
-              <div className="text-ui-2xs text-ink-400">
+              <div className="text-ui-xs text-ink-400">
                 <span style={{ color: VAULT_COLOR[hoverNode.vault] }}>{graph?.vaults.find((v) => v.id === hoverNode.vault)?.label}</span> · {CEREBRO_KIND_LABEL[hoverNode.kind]} · {hoverNode.camada === 'oficio' ? 'ofício' : hoverNode.camada === 'pessoal' ? 'pessoal' : 'cliente'}
                 {hoverNode.path ? ` · ${hoverNode.path}` : ''}
               </div>
               {hoverNode.excerpt && <p className="mt-1 line-clamp-2 text-ui-xs text-ink-300">{hoverNode.excerpt}</p>}
             </div>
           )}
-          <p className="pointer-events-none absolute bottom-3 left-3 text-ui-2xs text-ink-500">arraste para girar · roda para aproximar · clique para ler · duplo clique para centralizar · Esc limpa</p>
+          <p className="pointer-events-none absolute bottom-3 left-3 text-ui-xs text-ink-500">arraste para girar · roda para aproximar · clique para ler · duplo clique para centralizar · Esc limpa</p>
         </div>
 
         {graph && selNode && <NoteDrawer graph={graph} node={selNode} colorOf={(id) => sim.current?.byId.get(id)?.color ?? '#fff'} onSelect={(id) => select(id)} onFocus={(id) => {
@@ -573,7 +573,7 @@ function NoteDrawer({ graph, node, colorOf, onSelect, onFocus, onClose }: { grap
         <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colorOf(node.id) }} />
         <div className="min-w-0 flex-1">
           <div className="text-ui-md font-semibold text-white">{node.label}</div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-ui-2xs text-ink-400">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-ui-xs text-ink-400">
             <span className="rounded px-1.5 py-px font-semibold" style={{ background: `${VAULT_COLOR[node.vault]}22`, color: VAULT_COLOR[node.vault] }}>{vault?.label}</span>
             <span className="rounded bg-ink-750 px-1.5 py-px">{CEREBRO_KIND_LABEL[node.kind]}</span>
             <span className={`rounded px-1.5 py-px font-semibold ${node.camada === 'oficio' ? 'bg-ink-700 text-ink-200' : node.camada === 'pessoal' ? 'bg-nc-500/20 text-nc-300' : 'bg-amber-400/15 text-amber-300'}`} title={CEREBRO_CAMADA_LABEL[node.camada]}>
@@ -585,7 +585,7 @@ function NoteDrawer({ graph, node, colorOf, onSelect, onFocus, onClose }: { grap
             {node.mtime > 0 && <span>· {new Date(node.mtime).toLocaleDateString('pt-BR')}</span>}
             <span>· {total} ligações</span>
           </div>
-          {node.path && <div className="mt-1 truncate font-mono text-ui-2xs text-ink-500" title={node.path}>{node.path}</div>}
+          {node.path && <div className="mt-1 truncate font-mono text-ui-xs text-ink-500" title={node.path}>{node.path}</div>}
         </div>
         <IconButton label="Fechar" onClick={onClose}>
           <X size={15} />
@@ -608,23 +608,23 @@ function NoteDrawer({ graph, node, colorOf, onSelect, onFocus, onClose }: { grap
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {links.length > 0 && (
           <div className="border-b border-ink-750 px-4 py-3">
-            <div className="mb-1.5 text-ui-2xs font-semibold tracking-wide text-ink-400 uppercase">Ligações</div>
+            <div className="mb-1.5 text-ui-xs font-semibold tracking-wide text-ink-400 uppercase">Ligações</div>
             {links.map(([kind, list]) => (
               <div key={kind} className="mb-2">
-                <div className="text-ui-2xs text-ink-400">
+                <div className="text-ui-xs text-ink-400">
                   {CEREBRO_EDGE_LABEL[kind]} · {list.length}
                 </div>
                 <ul className="mt-0.5">
                   {list.slice(0, 14).map((l) => (
                     <li key={l.id}>
-                      <button onClick={() => onSelect(l.id)} onDoubleClick={() => onFocus(l.id)} className="flex w-full items-center gap-2 rounded-[var(--radius-ui-sm)] px-1.5 py-0.5 text-left text-ui-xs text-ink-200 hover:bg-ink-800">
+                      <button onClick={() => onSelect(l.id)} onDoubleClick={() => onFocus(l.id)} className="flex w-full items-center gap-2 rounded-ui-sm px-1.5 py-0.5 text-left text-ui-xs text-ink-200 hover:bg-ink-800">
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: colorOf(l.id) }} />
                         <span className="truncate">{l.label}</span>
                         {(kind === 'decisao' || kind === 'correcao') && l.w > 1 && <span className="ml-auto text-ui-2xs text-ink-400">×{l.w}</span>}
                       </button>
                     </li>
                   ))}
-                  {list.length > 14 && <li className="px-1.5 text-ui-2xs text-ink-500">… e mais {list.length - 14}</li>}
+                  {list.length > 14 && <li className="px-1.5 text-ui-xs text-ink-500">… e mais {list.length - 14}</li>}
                 </ul>
               </div>
             ))}
@@ -635,7 +635,7 @@ function NoteDrawer({ graph, node, colorOf, onSelect, onFocus, onClose }: { grap
           {note ? (
             <>
               <Markdown text={note.content} />
-              {note.truncated && <p className="mt-3 text-ui-2xs text-ink-500">Prévia: a nota é maior — abra no Obsidian para ler inteira.</p>}
+              {note.truncated && <p className="mt-3 text-ui-xs text-ink-500">Prévia: a nota é maior — abra no Obsidian para ler inteira.</p>}
             </>
           ) : !isNote ? (
             <p className="text-ui-sm text-ink-300">{node.excerpt}</p>
@@ -656,7 +656,7 @@ function Markdown({ text }: { text: string }) {
   let key = 0;
   const inline = (s: string) => {
     const parts = s.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-    return parts.map((p, k) => (p.startsWith('**') ? <strong key={k} className="font-semibold text-white">{p.slice(2, -2)}</strong> : p.startsWith('`') ? <code key={k} className="rounded bg-ink-750 px-1 font-mono text-[0.92em] text-nc-300">{p.slice(1, -1)}</code> : p));
+    return parts.map((p, k) => (p.startsWith('**') ? <strong key={k} className="font-semibold text-white">{p.slice(2, -2)}</strong> : p.startsWith('`') ? <code key={k} className="rounded bg-ink-750 px-1 font-mono text-ui-xs text-nc-300">{p.slice(1, -1)}</code> : p));
   };
   while (i < lines.length) {
     const l = lines[i]!;
@@ -666,7 +666,7 @@ function Markdown({ text }: { text: string }) {
       if (fence) i++;
       while (i < lines.length && (fence ? !/^```/.test(lines[i]!) : /^\s*\|/.test(lines[i]!))) block.push(lines[i++]!);
       if (fence) i++;
-      out.push(<pre key={key++} className="scroll-thin my-2 overflow-x-auto rounded-[var(--radius-ui-md)] bg-ink-900 p-2 font-mono text-[11px] leading-snug text-ink-200">{block.join('\n')}</pre>);
+      out.push(<pre key={key++} className="scroll-thin my-2 overflow-x-auto rounded-ui-md bg-ink-900 p-2 font-mono text-ui-xs leading-snug text-ink-200">{block.join('\n')}</pre>);
       continue;
     }
     const h = /^(#{1,6})\s+(.*)$/.exec(l);

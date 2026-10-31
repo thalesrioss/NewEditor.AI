@@ -101,7 +101,7 @@ export function AvatarBust({ state, size = 48 }: { state: AgentState; size?: num
 
 function ThoughtBubble({ style }: { style: React.CSSProperties }) {
   return (
-    <div style={style} className="absolute flex items-center gap-1 rounded-full border border-ink-600 bg-ink-800 px-2 py-1 shadow-lg">
+    <div style={style} className="absolute flex items-center gap-1 rounded-full border border-ink-600 bg-ink-800 px-2 py-1 shadow-ui-1">
       {[0, 1, 2].map((i) => (
         <span key={i} className="block h-1.5 w-1.5 rounded-full bg-nc-300" style={{ animation: `dots 1.2s ${i * 0.2}s infinite` }} />
       ))}

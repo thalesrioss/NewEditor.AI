@@ -173,7 +173,7 @@ export function TextLayer({ frameH, aspect }: { frameH: number; aspect: number }
             if (e.key === 'Enter') save();
           }}
           onBlur={save}
-          className="absolute inset-x-[6%] -translate-y-1/2 rounded-[var(--radius-ui-md)] border-2 border-nc-400 bg-black/80 px-2 py-1 text-center text-ui-lg font-bold text-white outline-none"
+          className="absolute inset-x-[6%] -translate-y-1/2 rounded-ui-md border-2 border-nc-400 bg-black/80 px-2 py-1 text-center text-ui-lg font-bold text-white outline-none"
           style={{ top: `${caps.position * 100}%`, pointerEvents: 'auto' }}
         />
       )}
@@ -218,7 +218,7 @@ export function AudioCard({ asset, t }: { asset: MediaAsset; t: number }) {
           return <span key={i} className="block w-[4px] rounded-full" style={{ height: `${h * 100}%`, background: i === bars / 2 ? '#fff' : 'linear-gradient(#4f84ff,#00b4ff)', opacity: i < bars / 2 ? 0.5 : 1 }} />;
         })}
       </div>
-      <div className="text-xs text-ink-400">{asset.name} · áudio</div>
+      <div className="text-ui-sm text-ink-400">{asset.name} · áudio</div>
     </div>
   );
 }
@@ -227,7 +227,7 @@ export function EmptyPlayer() {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-ink-400">
       <img src="/logo-mark.png" alt="" className="h-12 opacity-40 grayscale" />
-      <p className="text-sm">Arraste um vídeo para começar</p>
+      <p className="text-ui-md">Arraste um vídeo para começar</p>
     </div>
   );
 }

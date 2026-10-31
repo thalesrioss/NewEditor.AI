@@ -227,7 +227,7 @@ function CaptionProps({ id }: { id: string }) {
     <Panel title={`Legenda ${i + 1} de ${cues.length} · LG`}>
       <Section title="Texto">
         <Row k="Na timeline" v={`${timecode(c.start, fps)} → ${timecode(c.end, fps)}`} />
-        {c.hidden ? <p className="text-ui-xs text-ink-400 line-through">{cueText(c)}</p> : <CaptionInput cue={c} cues={cues} className="input w-full py-1.5 text-xs" />}
+        {c.hidden ? <p className="text-ui-xs text-ink-400 line-through">{cueText(c)}</p> : <CaptionInput cue={c} cues={cues} className="input w-full py-1.5 text-ui-sm" />}
         {c.edited && <p className="text-ui-xs text-ink-400">Automático: "{c.original}"</p>}
         <p className="text-ui-xs leading-snug text-ink-400">Enter no meio divide · ⌫ no começo junta com a de cima · Delete no fim junta com a de baixo</p>
         {c.coveredBy && (
@@ -312,16 +312,16 @@ function ProjectProps() {
         </label>
       </Section>
       <Section title="Briefing">
-        <textarea value={brief} onChange={(e) => setBrief(e.target.value)} onBlur={() => brief !== project.brief && void api.updateProject(project.id, { brief })} onKeyDown={(e) => e.stopPropagation()} rows={5} className="input resize-none text-xs" placeholder="O que o cliente pediu…" />
+        <textarea value={brief} onChange={(e) => setBrief(e.target.value)} onBlur={() => brief !== project.brief && void api.updateProject(project.id, { brief })} onKeyDown={(e) => e.stopPropagation()} rows={5} className="input resize-none text-ui-sm" placeholder="O que o cliente pediu…" />
       </Section>
       <Section title="Regras editoriais">
         {warnings.length === 0 ? (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+          <div className="flex items-center gap-1.5 text-ui-sm text-emerald-400">
             <CheckCircle2 size={13} /> Sem alertas — nenhum B-roll ou motion repetido mais de 2×.
           </div>
         ) : (
           warnings.map((w, i) => (
-            <button key={i} onClick={() => w.overlayIds[0] && select({ kind: 'overlay', id: w.overlayIds[0] })} className={`flex w-full items-start gap-1.5 rounded-[var(--radius-ui-md)] px-2 py-1.5 text-left text-ui-sm ${w.level === 'erro' ? 'bg-rose-500/10 text-rose-300' : 'bg-amber-400/10 text-amber-200'}`}>
+            <button key={i} onClick={() => w.overlayIds[0] && select({ kind: 'overlay', id: w.overlayIds[0] })} className={`flex w-full items-start gap-1.5 rounded-ui-md px-2 py-1.5 text-left text-ui-sm ${w.level === 'erro' ? 'bg-rose-500/10 text-rose-300' : 'bg-amber-400/10 text-amber-200'}`}>
               <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w.message}
             </button>
           ))
@@ -351,8 +351,8 @@ function Panel({ title, subtitle, children }: { title: string; subtitle?: string
 function Section({ title, children, open: initial = true }: { title: string; children: React.ReactNode; open?: boolean }) {
   const [open, setOpen] = useState(initial);
   return (
-    <section className="rounded-[var(--radius-ui-md)] border border-ink-750 bg-ink-800/40">
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-ui-2xs font-semibold tracking-wide text-ink-300 uppercase hover:text-white" aria-expanded={open}>
+    <section className="rounded-ui-md border border-ink-750 bg-ink-800/40">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-ui-xs font-semibold tracking-wide text-ink-300 uppercase hover:text-white" aria-expanded={open}>
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         {title}
       </button>
@@ -375,7 +375,7 @@ function Toggle({ label, hint, on, onChange }: { label: string; hint?: string; o
     <label className="flex items-center justify-between gap-3 text-ui-xs text-ink-200">
       <span>
         {label}
-        {hint && <span className="block text-ui-2xs text-ink-400">{hint}</span>}
+        {hint && <span className="block text-ui-xs text-ink-400">{hint}</span>}
       </span>
       <button role="switch" aria-checked={on} onClick={() => onChange(!on)} className={`relative h-4 w-7 shrink-0 rounded-full transition ${on ? 'bg-nc-500' : 'bg-ink-600'}`}>
         <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition ${on ? 'left-3.5' : 'left-0.5'}`} />
@@ -401,7 +401,7 @@ function DurationControl({ value, onCommit }: { value: number; onCommit: (d: num
 
 function Danger({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex w-full items-center justify-center gap-1.5 rounded-[var(--radius-ui-md)] border border-rose-500/40 py-1.5 text-ui-xs text-rose-300 hover:bg-rose-500/10">
+    <button onClick={onClick} className="flex w-full items-center justify-center gap-1.5 rounded-ui-md border border-rose-500/40 py-1.5 text-ui-xs text-rose-300 hover:bg-rose-500/10">
       <Trash2 size={13} /> {children}
     </button>
   );
@@ -459,7 +459,7 @@ function MotionEditor({ item, spec }: { item: OverlayItem; spec: MotionSpec }) {
             const beats = texts.length === spec.beats.length ? spec.beats : texts.map((_, i) => +(a + ((b - a) * i) / Math.max(1, texts.length - 1)).toFixed(3));
             commit({ template, texts, beats, key: words ? Math.min(spec.key ?? 0, texts.length - 1) : spec.key }, `Motion virou ${MOTION_TEMPLATES[template].label}`);
           }}
-          className="input py-1 text-xs"
+          className="input py-1 text-ui-sm"
         >
           {Object.entries(MOTION_TEMPLATES).map(([id, t]) => (
             <option key={id} value={id}>
@@ -470,12 +470,12 @@ function MotionEditor({ item, spec }: { item: OverlayItem; spec: MotionSpec }) {
       </label>
       <label className="block space-y-1">
         <span className="text-ui-xs font-medium text-ink-400">Texto na tela</span>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={saveText} onKeyDown={(e) => e.stopPropagation()} rows={shape.words ? 3 : Math.max(2, text.split('\n').length)} className="input resize-none text-xs" />
+        <textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={saveText} onKeyDown={(e) => e.stopPropagation()} rows={shape.words ? 3 : Math.max(2, text.split('\n').length)} className="input resize-none text-ui-sm" />
         <span className="block text-ui-xs text-ink-400">{shape.hint}</span>
       </label>
       <label className="block space-y-1">
         <span className="text-ui-xs font-medium text-ink-400">Kicker (rótulo pequeno)</span>
-        <input value={kicker} onChange={(e) => setKicker(e.target.value)} onBlur={() => kicker !== (spec.kicker ?? '') && commit({ kicker: kicker || undefined }, 'Editou o kicker do motion')} onKeyDown={(e) => e.stopPropagation()} className="input py-1 text-xs" placeholder="—" />
+        <input value={kicker} onChange={(e) => setKicker(e.target.value)} onBlur={() => kicker !== (spec.kicker ?? '') && commit({ kicker: kicker || undefined }, 'Editou o kicker do motion')} onKeyDown={(e) => e.stopPropagation()} className="input py-1 text-ui-sm" placeholder="—" />
       </label>
       {spec.template === 'contraste' && <Toggle label='Riscar o primeiro lado ("não é X, é Y")' on={spec.variant === 'negacao'} onChange={(v) => commit({ variant: v ? 'negacao' : 'par' }, 'Ajustou o contraste')} />}
       <Toggle label="SFX do motion" hint={`${motionCues(spec, item.duration).length} efeitos${spec.sfx !== false ? `: ${[...new Set(motionCues(spec, item.duration).map((c) => SFX_LABEL[c.kind]))].join(' · ')}` : ''}`} on={spec.sfx !== false} onChange={(v) => commit({ sfx: v ? undefined : false }, v ? 'Ligou o som do motion' : 'Silenciou o motion')} />
@@ -527,12 +527,12 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
     <>
       <Section title="Texto">
         {spec.motivo && <p className="text-ui-xs text-ink-400">Por quê: {spec.motivo}</p>}
-        <textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={saveText} onKeyDown={(e) => e.stopPropagation()} rows={2} className="input resize-none text-xs" aria-label="Texto do lettering (palavra-chave entre asteriscos)" />
-        <span className="block text-ui-2xs text-ink-400">Palavra-chave entre *asteriscos*.</span>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} onBlur={saveText} onKeyDown={(e) => e.stopPropagation()} rows={2} className="input resize-none text-ui-sm" aria-label="Texto do lettering (palavra-chave entre asteriscos)" />
+        <span className="block text-ui-xs text-ink-400">Palavra-chave entre *asteriscos*.</span>
       </Section>
       <Section title="Posição">
         <RangeField label="Altura" value={Math.round((spec.y ?? caps?.position ?? 0.72) * 100)} min={10} max={92} step={1} unit="%" resetTo={Math.round((caps?.position ?? 0.72) * 100)} onCommit={(v) => commit({ ...spec, y: v / 100 }, `Lettering em ${v}% do quadro`)} />
-        <div className="flex rounded-[var(--radius-ui-md)] border border-ink-700 p-0.5" role="radiogroup" aria-label="Alinhamento do lettering">
+        <div className="flex rounded-ui-md border border-ink-700 p-0.5" role="radiogroup" aria-label="Alinhamento do lettering">
           {(
             [
               ['left', 'Esquerda'],
@@ -540,7 +540,7 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
               ['right', 'Direita'],
             ] as const
           ).map(([id, label]) => (
-            <button key={id} role="radio" aria-checked={(spec.align ?? 'center') === id} onClick={() => commit({ ...spec, align: id }, `Lettering à ${label.toLowerCase()}`)} className={`flex-1 rounded-[var(--radius-ui-sm)] py-1 text-ui-xs font-semibold ${(spec.align ?? 'center') === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
+            <button key={id} role="radio" aria-checked={(spec.align ?? 'center') === id} onClick={() => commit({ ...spec, align: id }, `Lettering à ${label.toLowerCase()}`)} className={`flex-1 rounded-ui-sm py-1 text-ui-xs font-semibold ${(spec.align ?? 'center') === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
               {label}
             </button>
           ))}
@@ -550,9 +550,9 @@ function LetteringEditor({ item, spec }: { item: OverlayItem; spec: LetteringSpe
       <Section title="Estilo">
         <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Estilo do lettering">
           {(Object.keys(LETTERING_STYLES) as LetteringStyleId[]).map((id) => (
-            <button key={id} role="radio" aria-checked={spec.estilo === id} onClick={() => spec.estilo !== id && commit({ ...spec, estilo: id }, `Lettering em ${LETTERING_STYLES[id].label}`)} className={`overflow-hidden rounded-[var(--radius-ui-md)] border text-left transition ${spec.estilo === id ? 'border-nc-400 ring-2 ring-nc-500/40' : 'border-ink-700 hover:border-ink-500'}`}>
+            <button key={id} role="radio" aria-checked={spec.estilo === id} onClick={() => spec.estilo !== id && commit({ ...spec, estilo: id }, `Lettering em ${LETTERING_STYLES[id].label}`)} className={`overflow-hidden rounded-ui-md border text-left transition ${spec.estilo === id ? 'border-nc-400 ring-2 ring-nc-500/40' : 'border-ink-700 hover:border-ink-500'}`}>
               <StylePreview spec={{ ...spec, estilo: id, accent: undefined }} className="h-[72px] w-full" />
-              <span className="block truncate px-1 py-0.5 text-ui-2xs text-ink-300">{LETTERING_STYLES[id].label}</span>
+              <span className="block truncate px-1 py-0.5 text-ui-xs text-ink-300">{LETTERING_STYLES[id].label}</span>
             </button>
           ))}
         </div>
@@ -603,7 +603,7 @@ function TemplateCliente({ spec, commit }: { spec: LetteringSpec; commit: (next:
   const [font, setFont] = useState(spec.template?.font ?? 'Helvetica Neue');
   useEffect(() => setFont(spec.template?.font ?? 'Helvetica Neue'), [spec.template?.font]);
   return (
-    <div className="space-y-2 rounded-[var(--radius-ui-md)] border border-ink-700 p-2">
+    <div className="space-y-2 rounded-ui-md border border-ink-700 p-2">
       <label className="block space-y-1 text-ui-xs text-ink-300">
         Fonte (nome instalado no Mac)
         <input value={font} onChange={(e) => setFont(e.target.value)} onBlur={() => font.trim() !== (spec.template?.font ?? '') && set({ font: font.trim() || undefined }, `Lettering em ${font.trim() || 'Helvetica Neue'}`)} onKeyDown={(e) => e.stopPropagation()} className="input py-1 text-ui-xs" aria-label="Fonte do template do cliente" />
@@ -700,12 +700,12 @@ function PadraoEditorial({ project }: { project: import('@neweditor/core').Proje
   return (
     <Section title="Padrão de edição">
       <Row k="Valendo agora" v={nome} />
-      {project.profileId === PERSONALIZADO_ID && <p className="text-ui-2xs leading-snug text-ink-400">O agente segue o que está nesta timeline: zoom, legenda, lettering, trilha, cor e B-roll são lidos daqui a cada passada.</p>}
-      {atual?.origem && <p className="text-ui-2xs leading-snug text-ink-400">Lido da edição "{atual.origem.projectName}".</p>}
+      {project.profileId === PERSONALIZADO_ID && <p className="text-ui-xs leading-snug text-ink-400">O agente segue o que está nesta timeline: zoom, legenda, lettering, trilha, cor e B-roll são lidos daqui a cada passada.</p>}
+      {atual?.origem && <p className="text-ui-xs leading-snug text-ink-400">Lido da edição "{atual.origem.projectName}".</p>}
       <Button size="sm" variant="secondary" className="w-full" icon={<BookMarked size={13} />} disabled={!project.timeline.main.length} onClick={() => setOpen(true)}>
         Tornar esta edição o padrão editorial…
       </Button>
-      <p className="text-ui-2xs leading-snug text-ink-400">Grava o que você fez aqui como o padrão do cliente para um formato (Reels, Shorts, YouTube…). Vale para as próximas peças dele.</p>
+      <p className="text-ui-xs leading-snug text-ink-400">Grava o que você fez aqui como o padrão do cliente para um formato (Reels, Shorts, YouTube…). Vale para as próximas peças dele.</p>
       {msg && <p className="text-ui-xs text-emerald-300">{msg}</p>}
       {open && (
         <PadraoEditorialDialog
@@ -771,7 +771,7 @@ function FormatSection({ wide }: { wide: boolean }) {
             ['fps', fps, setFps],
           ] as const
         ).map(([label, v, set]) => (
-          <label key={label} className="block space-y-0.5 text-ui-2xs text-ink-400">
+          <label key={label} className="block space-y-0.5 text-ui-xs text-ink-400">
             {label}
             <input
               value={v}
@@ -785,7 +785,7 @@ function FormatSection({ wide }: { wide: boolean }) {
           </label>
         ))}
       </div>
-      <p className="text-ui-2xs leading-snug text-ink-400">Pares, 64–8192 px. Legenda e letterings têm altura relativa e acompanham. {tl.formatoManual ? 'Formato escolhido: o bruto não o muda.' : 'Formato veio do primeiro vídeo.'}</p>
+      <p className="text-ui-xs leading-snug text-ink-400">Pares, 64–8192 px. Legenda e letterings têm altura relativa e acompanham. {tl.formatoManual ? 'Formato escolhido: o bruto não o muda.' : 'Formato veio do primeiro vídeo.'}</p>
       <Row k="Duração" v={`${formatTime(tl.main.reduce((a, c) => a + clipDuration(c), 0), true)} · ${tl.main.length} clipes · ${tl.overlays.length} camadas`} />
       {wide && (
         <>

@@ -46,7 +46,7 @@ export function ContextMenu() {
   const x = Math.min(menu.x, window.innerWidth - w - 8);
   const y = Math.min(menu.y, window.innerHeight - 8 - 36 * menu.items.length);
   return (
-    <div role="menu" onMouseDown={(e) => e.stopPropagation()} className="anim-pop fixed z-[var(--z-popover)] min-w-[220px] rounded-[var(--radius-ui-md)] border border-ink-600 bg-ink-850 p-1 shadow-[var(--shadow-ui-2)]" style={{ left: x, top: y, width: w }}>
+    <div role="menu" onMouseDown={(e) => e.stopPropagation()} className="anim-pop fixed z-[var(--z-popover)] min-w-[220px] rounded-ui-md border border-ink-600 bg-ink-850 p-1 shadow-ui-2" style={{ left: x, top: y, width: w }}>
       {menu.items.map((it, i) =>
         it === 'sep' ? (
           <div key={i} className="my-1 h-px bg-ink-700" />
@@ -59,11 +59,11 @@ export function ContextMenu() {
               setMenu(null);
               it.onClick();
             }}
-            className={`flex w-full items-center gap-2 rounded-[var(--radius-ui-sm)] px-2 py-1.5 text-left text-ui-xs disabled:opacity-40 ${it.danger ? 'text-rose-300 hover:bg-rose-500/15' : 'text-ink-100 hover:bg-nc-500/25'}`}
+            className={`flex w-full items-center gap-2 rounded-ui-sm px-2 py-1.5 text-left text-ui-xs disabled:opacity-40 ${it.danger ? 'text-rose-300 hover:bg-rose-500/15' : 'text-ink-100 hover:bg-nc-500/25'}`}
           >
             <span className="w-4 text-ink-400">{it.icon}</span>
             <span className="flex-1">{it.label}</span>
-            {it.shortcut && <kbd className="font-mono text-ui-2xs text-ink-400">{it.shortcut}</kbd>}
+            {it.shortcut && <kbd className="font-mono text-ui-xs text-ink-400">{it.shortcut}</kbd>}
           </button>
         ),
       )}

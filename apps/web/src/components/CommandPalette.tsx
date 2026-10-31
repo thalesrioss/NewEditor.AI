@@ -155,7 +155,7 @@ export function CommandPalette({ onExport }: { onExport: () => void }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex items-start justify-center bg-black/50 pt-[12vh]" onMouseDown={() => setOpen(false)}>
-      <div role="dialog" aria-label="Paleta de comandos" onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-lg overflow-hidden rounded-[var(--radius-ui-lg)] border border-ink-600 bg-ink-850 shadow-[var(--shadow-ui-3)]">
+      <div role="dialog" aria-label="Paleta de comandos" onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-lg overflow-hidden rounded-ui-lg border border-ink-600 bg-ink-850 shadow-ui-3">
         <div className="flex items-center gap-2 border-b border-ink-750 px-3">
           <Command size={14} className="text-ink-400" />
           <input
@@ -176,7 +176,7 @@ export function CommandPalette({ onExport }: { onExport: () => void }) {
             placeholder="Ação ou pedido ao agente… (ex.: tira a pausa longa aqui)"
             className="h-11 min-w-0 flex-1 bg-transparent text-ui-md text-ink-100 placeholder:text-ink-400 focus:outline-none"
           />
-          <kbd className="rounded border border-ink-600 px-1 text-ui-2xs text-ink-400">Esc</kbd>
+          <kbd className="rounded border border-ink-600 px-1 text-ui-xs text-ink-400">Esc</kbd>
         </div>
         <ul className="max-h-80 overflow-y-auto py-1">
           {list.map((a, k) => (
@@ -184,9 +184,9 @@ export function CommandPalette({ onExport }: { onExport: () => void }) {
               <button onMouseEnter={() => setI(k)} onClick={() => pick(a)} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-ui-sm ${k === i ? 'bg-nc-500/15 text-white' : 'text-ink-200'}`}>
                 <span className="flex-1">
                   {a.label}
-                  {a.hint && <span className="ml-2 text-ui-2xs text-ink-400">{a.hint}</span>}
+                  {a.hint && <span className="ml-2 text-ui-xs text-ink-400">{a.hint}</span>}
                 </span>
-                {a.keys && <kbd className="rounded border border-ink-600 px-1 font-mono text-ui-2xs text-ink-400">{a.keys}</kbd>}
+                {a.keys && <kbd className="rounded border border-ink-600 px-1 font-mono text-ui-xs text-ink-400">{a.keys}</kbd>}
               </button>
             </li>
           ))}

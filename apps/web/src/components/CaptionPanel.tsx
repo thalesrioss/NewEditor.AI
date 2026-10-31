@@ -57,7 +57,7 @@ export function CaptionPanel() {
     <div className="scroll-thin h-full space-y-4 overflow-y-auto p-3">
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-ink-300 uppercase">
+          <h3 className="flex items-center gap-1.5 text-ui-sm font-semibold tracking-wide text-ink-300 uppercase">
             <Captions size={14} /> Legenda automática
           </h3>
           <Toggle on={caps.enabled} onChange={(v) => set({ enabled: v }, v ? 'Ligou a legenda automática' : 'Desligou a legenda')} />
@@ -66,7 +66,7 @@ export function CaptionPanel() {
       </section>
 
       <section className="space-y-2 border-t border-ink-750 pt-3">
-        <h4 className="text-ui-2xs font-semibold tracking-wide text-ink-400 uppercase">Presets</h4>
+        <h4 className="text-ui-xs font-semibold tracking-wide text-ink-400 uppercase">Presets</h4>
         <div className="grid grid-cols-2 gap-1.5">
           {all.map((p) => (
             <PresetCard key={p.nome} preset={p} active={same(p)} onApply={() => apply(p)} onDelete={presets.includes(p) ? () => api.deleteCaptionPreset(p.nome).then(setPresets).catch(() => undefined) : undefined} />
@@ -81,7 +81,7 @@ export function CaptionPanel() {
       <Group title="Blocos">
         <div className="grid grid-cols-2 gap-1.5">
           {(['reels', 'frase'] as const).map((st) => (
-            <button key={st} onClick={() => set({ style: st })} className={`rounded-lg border px-2 py-2 text-left text-ui-xs transition ${caps.style === st ? 'border-nc-500 bg-nc-500/15 text-white' : 'border-ink-700 text-ink-300 hover:border-ink-500'}`}>
+            <button key={st} onClick={() => set({ style: st })} className={`rounded-ui-md border px-2 py-2 text-left text-ui-xs transition ${caps.style === st ? 'border-nc-500 bg-nc-500/15 text-white' : 'border-ink-700 text-ink-300 hover:border-ink-500'}`}>
               <div className="font-semibold">{st === 'reels' ? 'Reels' : 'Frase'}</div>
               <div className="text-ink-400">{st === 'reels' ? 'blocos curtos, fortes' : 'frases inteiras'}</div>
             </button>
@@ -111,7 +111,7 @@ export function CaptionPanel() {
           <Select value={d.wordAnim} options={CAPTION_WORD_ANIMS} onChange={(v) => set({ wordAnim: v as CaptionWordAnim }, `Palavra falada: ${CAPTION_WORD_ANIMS[v as CaptionWordAnim]}`)} />
         </Row>
         {(d.animIn !== 'none' || d.animOut !== 'none') && <RangeField label="Duração da entrada/saída" value={Math.round(d.animDur * 100)} min={6} max={60} step={2} unit="/100 s" resetTo={18} onCommit={(v) => set({ animDur: v / 100 })} />}
-        <p className="text-ui-2xs leading-snug text-ink-400">Em talk head a legenda limpa lê mais rápido; animação é escolha do padrão do cliente (vocabulário no Cérebro).</p>
+        <p className="text-ui-xs leading-snug text-ink-400">Em talk head a legenda limpa lê mais rápido; animação é escolha do padrão do cliente (vocabulário no Cérebro).</p>
       </Group>
 
       <Group title="Posição e transformação">
@@ -126,7 +126,7 @@ export function CaptionPanel() {
       <Group title="Tipografia">
         <div className="grid grid-cols-5 gap-1">
           {(Object.keys(CAPTION_FONTS) as CaptionFont[]).map((f) => (
-            <button key={f} onClick={() => set({ font: f })} className={`rounded-md border px-1 py-1.5 text-ui-2xs ${d.font === f ? 'border-nc-500 bg-nc-500/15 text-white' : 'border-ink-700 text-ink-300 hover:border-ink-500'}`} style={{ fontFamily: CAPTION_FONTS[f].family }} title={CAPTION_FONTS[f].label}>
+            <button key={f} onClick={() => set({ font: f })} className={`rounded-ui-md border px-1 py-1.5 text-ui-xs ${d.font === f ? 'border-nc-500 bg-nc-500/15 text-white' : 'border-ink-700 text-ink-300 hover:border-ink-500'}`} style={{ fontFamily: CAPTION_FONTS[f].family }} title={CAPTION_FONTS[f].label}>
               Aa
             </button>
           ))}
@@ -190,14 +190,14 @@ function PresetCard({ preset: p, active, onApply, onDelete }: { preset: CaptionP
   const caps: CaptionSettings = { ...DEFAULT_CAPTIONS, ...p.legenda, enabled: true, position: 0.5, x: 0.5, width: 92 };
   const H = 96;
   return (
-    <div className={`group relative overflow-hidden rounded-[var(--radius-ui-md)] border transition ${active ? 'border-nc-400 ring-2 ring-nc-500/40' : 'border-ink-700 hover:border-ink-500'}`}>
+    <div className={`group relative overflow-hidden rounded-ui-md border transition ${active ? 'border-nc-400 ring-2 ring-nc-500/40' : 'border-ink-700 hover:border-ink-500'}`}>
       <button onClick={onApply} className="block w-full text-left" title={Object.entries(p.legenda).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}>
         <div className="relative w-full bg-gradient-to-b from-ink-700 to-ink-900" style={{ height: H }}>
           <div className="ne-text-layer" style={{ ['--u' as string]: `${H / 100}px`, fontSize: 0 }}>
             <div className={`ne-caption ${caps.style}${caps.box ? ' boxed' : ''}`} style={inlineToObject(captionInlineStyle({ ...caps, size: Math.min(caps.size ?? (caps.style === 'reels' ? 3.6 : 2.7), 5) * 2.2 }))} dangerouslySetInnerHTML={{ __html: `<span>${cueHtml(SAMPLE, caps, 0.5)}</span>` }} />
           </div>
         </div>
-        <div className="truncate px-1.5 py-1 text-ui-2xs text-ink-300">{p.nome}</div>
+        <div className="truncate px-1.5 py-1 text-ui-xs text-ink-300">{p.nome}</div>
       </button>
       {onDelete && (
         <button aria-label={`Apagar preset ${p.nome}`} onClick={onDelete} className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-ink-300 opacity-0 group-hover:opacity-100 hover:text-rose-300">
@@ -216,7 +216,7 @@ function clean(c: CaptionSettings): CaptionSettings {
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3 border-t border-ink-750 pt-3">
-      <h4 className="text-ui-2xs font-semibold tracking-wide text-ink-400 uppercase">{title}</h4>
+      <h4 className="text-ui-xs font-semibold tracking-wide text-ink-400 uppercase">{title}</h4>
       {children}
     </section>
   );
@@ -224,7 +224,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-xs text-ink-300">
+    <label className="flex items-center justify-between gap-2 text-ui-sm text-ink-300">
       <span className="truncate">{label}</span>
       {children}
     </label>
@@ -245,10 +245,10 @@ function Select<T extends string>({ value, options, onChange }: { value: T; opti
 
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <label className="flex items-center justify-between gap-2 text-xs text-ink-300">
+    <label className="flex items-center justify-between gap-2 text-ui-sm text-ink-300">
       <span className="truncate">{label}</span>
       <span className="flex items-center gap-1.5">
-        <span className="font-mono text-ui-2xs text-ink-400">{value.toUpperCase()}</span>
+        <span className="font-mono text-ui-xs text-ink-400">{value.toUpperCase()}</span>
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="h-6 w-8 cursor-pointer rounded border border-ink-600 bg-transparent" aria-label={label} />
       </span>
     </label>

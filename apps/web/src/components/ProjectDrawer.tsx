@@ -28,13 +28,13 @@ export function ProjectDrawer({ p, onClose, onChange, onDelete }: { p: Project &
   const rows: { step: StepId; real?: number; est?: number }[] = [...new Set([...timings.map(([s]) => s), ...est.map((e) => e.step)])].map((step) => ({ step, real: p.timings?.[step]?.seconds, est: est.find((e) => e.step === step)?.seconds }));
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex justify-end bg-black/40" onMouseDown={onClose}>
-      <aside onMouseDown={(e) => e.stopPropagation()} className="anim-pop flex h-full w-[420px] max-w-full flex-col border-l border-ink-700 bg-ink-850 shadow-[var(--shadow-ui-3)]">
+      <aside onMouseDown={(e) => e.stopPropagation()} className="anim-pop flex h-full w-[420px] max-w-full flex-col border-l border-ink-700 bg-ink-850 shadow-ui-3">
         <div className="flex items-start gap-2 border-b border-ink-750 p-4">
           <div className="min-w-0 flex-1">
-            {p.client && <div className="text-ui-2xs font-semibold tracking-wide text-nc-300 uppercase">{p.client}</div>}
+            {p.client && <div className="text-ui-xs font-semibold tracking-wide text-nc-300 uppercase">{p.client}</div>}
             <div className="text-ui-lg leading-snug font-semibold text-white">{p.name}</div>
           </div>
-          <a href={`#/p/${p.id}`} className="rounded-[var(--radius-ui-md)] p-1.5 text-ink-300 hover:bg-ink-800 hover:text-white" aria-label="Abrir no editor" title="Abrir no editor">
+          <a href={`#/p/${p.id}`} className="rounded-ui-md p-1.5 text-ink-300 hover:bg-ink-800 hover:text-white" aria-label="Abrir no editor" title="Abrir no editor">
             <ExternalLink size={16} />
           </a>
           <IconButton label="Fechar" onClick={onClose}>
@@ -64,7 +64,7 @@ export function ProjectDrawer({ p, onClose, onChange, onDelete }: { p: Project &
           </div>
 
           {p.task && (
-            <section className="space-y-1 rounded-[var(--radius-ui-md)] bg-ink-800 p-3">
+            <section className="space-y-1 rounded-ui-md bg-ink-800 p-3">
               <div className="font-semibold text-ink-100">Briefing do Gestor</div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-ink-300">
                 <span>Formato: <b className="text-ink-100">{p.task.formato ?? '—'}</b></span>
@@ -80,7 +80,7 @@ export function ProjectDrawer({ p, onClose, onChange, onDelete }: { p: Project &
             </section>
           )}
           {!p.task && p.brief && (
-            <section className="rounded-[var(--radius-ui-md)] bg-ink-800 p-3">
+            <section className="rounded-ui-md bg-ink-800 p-3">
               <div className="mb-1 font-semibold text-ink-100">Briefing</div>
               <p className="whitespace-pre-wrap text-ink-300">{p.brief}</p>
             </section>
@@ -133,9 +133,9 @@ export function ProjectDrawer({ p, onClose, onChange, onDelete }: { p: Project &
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[var(--radius-ui-md)] bg-ink-800 p-2">
+    <div className="rounded-ui-md bg-ink-800 p-2">
       <div className="text-ui-md font-semibold text-white">{value}</div>
-      <div className="text-ui-2xs text-ink-400">{label}</div>
+      <div className="text-ui-xs text-ink-400">{label}</div>
     </div>
   );
 }

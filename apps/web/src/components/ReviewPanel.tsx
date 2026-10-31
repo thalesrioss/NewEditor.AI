@@ -101,13 +101,13 @@ export function ReviewPanel() {
       <audio ref={audio} onTimeUpdate={(e) => e.currentTarget.currentTime >= stopAt.current && (e.currentTarget.pause(), setPlaying(null))} onEnded={() => setPlaying(null)} />
       <div className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         {status === 'revisao' ? (
-          <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
-            <div className="text-xs font-semibold text-amber-200">Revisão da decupagem</div>
+          <div className="rounded-ui-md border border-amber-400/30 bg-amber-400/5 p-3">
+            <div className="text-ui-sm font-semibold text-amber-200">Revisão da decupagem</div>
             <p className="mt-1 text-ui-xs leading-snug text-ink-300">O agente decupou. Confira só as decisões abaixo — ouça, restaure o que ficou melhor, corrija a grafia — e aprove para ele finalizar com cor, legenda, motions e letterings.</p>
             <p className="mt-1.5 text-ui-xs text-ink-400">Para mexer na copy à vontade: na aba Transcrição, selecione palavras para cortar ou restaurar; duplo clique numa palavra corrige a grafia.</p>
           </div>
         ) : (
-          <div className="rounded-lg border border-ink-700 bg-ink-800/60 p-3 text-ui-xs leading-snug text-ink-300">
+          <div className="rounded-ui-md border border-ink-700 bg-ink-800/60 p-3 text-ui-xs leading-snug text-ink-300">
             {project.review?.aprovadaEm ? `Decupagem aprovada em ${new Date(project.review.aprovadaEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.` : 'Esta decupagem ainda não passou pela revisão.'}
             <button onClick={() => void api.updateProject(project.id, { status: 'revisao' })} className="mt-2 block text-ui-xs font-semibold text-nc-300 hover:text-white">
               Voltar para a revisão da decupagem
@@ -203,20 +203,20 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
   };
 
   return (
-    <div className="space-y-2 rounded-lg border border-ink-750 bg-ink-800 p-2.5">
+    <div className="space-y-2 rounded-ui-md border border-ink-750 bg-ink-800 p-2.5">
       <div className="flex items-center gap-1.5">
-        <span className={`rounded px-1.5 py-px text-ui-2xs font-semibold ${KIND_STYLE[d.kind]}`}>{KIND_LABEL[d.kind]}</span>
+        <span className={`rounded px-1.5 py-px text-ui-xs font-semibold ${KIND_STYLE[d.kind]}`}>{KIND_LABEL[d.kind]}</span>
         {d.at !== null && (
           <button aria-label="Levar o cursor até aqui" onClick={() => seek(d.at!)} className="font-mono text-ui-xs text-ink-400 hover:text-white" title="Levar o cursor até aqui">
             {formatTime(d.at)}
           </button>
         )}
-        <button aria-label="Ouvir no bruto" onClick={onListen} className="ml-auto flex items-center gap-1 rounded-md bg-ink-700 px-1.5 py-0.5 text-ui-xs text-ink-100 hover:bg-nc-500" title="Ouvir no bruto">
+        <button aria-label="Ouvir no bruto" onClick={onListen} className="ml-auto flex items-center gap-1 rounded-ui-md bg-ink-700 px-1.5 py-0.5 text-ui-xs text-ink-100 hover:bg-nc-500" title="Ouvir no bruto">
           {playing ? <Pause size={11} /> : <Play size={11} />} ouvir
         </button>
       </div>
       {isWord ? (
-        <div className="text-sm font-semibold text-white">{d.text}</div>
+        <div className="text-ui-md font-semibold text-white">{d.text}</div>
       ) : (
         <p className={`line-clamp-3 text-ui-sm leading-snug ${d.removalId ? 'text-ink-400 line-through decoration-ink-600' : 'text-ink-200'}`}>"{d.text}"</p>
       )}
@@ -234,8 +234,8 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
             </div>
           )}
           <div className="flex gap-1.5">
-            <input value={fix} onChange={(e) => setFix(e.target.value)} onKeyDown={(e) => (e.stopPropagation(), e.key === 'Enter' && fix.trim() && applyFix(fix.trim()))} className="input min-w-0 flex-1 py-1 text-xs" />
-            <button onClick={() => fix.trim() && fix.trim() !== d.text && applyFix(fix.trim())} className="flex items-center gap-1 rounded-md bg-nc-500 px-2 text-ui-xs font-semibold text-white hover:brightness-110">
+            <input value={fix} onChange={(e) => setFix(e.target.value)} onKeyDown={(e) => (e.stopPropagation(), e.key === 'Enter' && fix.trim() && applyFix(fix.trim()))} className="input min-w-0 flex-1 py-1 text-ui-sm" />
+            <button onClick={() => fix.trim() && fix.trim() !== d.text && applyFix(fix.trim())} className="flex items-center gap-1 rounded-ui-md bg-nc-500 px-2 text-ui-xs font-semibold text-white hover:brightness-110">
               <SpellCheck size={12} /> Corrigir
             </button>
           </div>
@@ -252,16 +252,16 @@ function DoubtCard({ d, playing, onListen, onResolve }: { d: ReviewDoubt; playin
       {d.swap && <p className="text-ui-xs leading-snug text-ink-400">Ficou no lugar: <span className="text-ink-300">"{d.swap.text}"</span></p>}
       <div className="flex gap-1.5">
         {d.removalId && d.swap && project.timeline.removals.some((r) => r.id === d.removalId) && (
-          <button onClick={() => void api.swapTake(project.id, d.id)} className="flex flex-1 items-center justify-center gap-1 rounded-md border border-ink-600 py-1 text-ui-xs text-ink-100 hover:border-emerald-400 hover:text-emerald-300" title="Volta esta tomada e corta a que tinha ficado">
+          <button onClick={() => void api.swapTake(project.id, d.id)} className="flex flex-1 items-center justify-center gap-1 rounded-ui-md border border-ink-600 py-1 text-ui-xs text-ink-100 hover:border-emerald-400 hover:text-emerald-300" title="Volta esta tomada e corta a que tinha ficado">
             <RotateCcw size={12} /> Trocar por esta
           </button>
         )}
         {d.removalId && !d.swap && project.timeline.removals.some((r) => r.id === d.removalId) && (
-          <button onClick={() => sendOp({ op: { type: 'restore', removalId: d.removalId! }, note: `Restaurou na revisão: "${d.text.slice(0, 40)}…"` })} className="flex flex-1 items-center justify-center gap-1 rounded-md border border-ink-600 py-1 text-ui-xs text-ink-100 hover:border-emerald-400 hover:text-emerald-300">
+          <button onClick={() => sendOp({ op: { type: 'restore', removalId: d.removalId! }, note: `Restaurou na revisão: "${d.text.slice(0, 40)}…"` })} className="flex flex-1 items-center justify-center gap-1 rounded-ui-md border border-ink-600 py-1 text-ui-xs text-ink-100 hover:border-emerald-400 hover:text-emerald-300">
             <RotateCcw size={12} /> Restaurar
           </button>
         )}
-        <button onClick={() => (isWord && guardarTermo(strip(d.text)), onResolve())} className="flex flex-1 items-center justify-center gap-1 rounded-md border border-ink-600 py-1 text-ui-xs text-ink-300 hover:border-nc-500 hover:text-white">
+        <button onClick={() => (isWord && guardarTermo(strip(d.text)), onResolve())} className="flex flex-1 items-center justify-center gap-1 rounded-ui-md border border-ink-600 py-1 text-ui-xs text-ink-300 hover:border-nc-500 hover:text-white">
           <Check size={12} /> {isWord ? 'Está certo' : 'O agente acertou'}
         </button>
       </div>
@@ -289,7 +289,7 @@ function QcSection() {
   const block = qc?.issues.filter((i) => i.severidade === 'bloqueia') ?? [];
   const warn = qc?.issues.filter((i) => i.severidade === 'avisa') ?? [];
   return (
-    <section className={`rounded-[var(--radius-ui-md)] border p-3 ${block.length ? 'border-rose-500/40 bg-rose-500/5' : warn.length ? 'border-amber-400/30 bg-amber-400/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
+    <section className={`rounded-ui-md border p-3 ${block.length ? 'border-rose-500/40 bg-rose-500/5' : warn.length ? 'border-amber-400/30 bg-amber-400/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
       <div className="flex items-center gap-2">
         <ShieldCheck size={14} className={block.length ? 'text-rose-300' : warn.length ? 'text-amber-300' : 'text-emerald-300'} />
         <span className="text-ui-xs font-semibold text-ink-100">QC {qc ? `· ${block.length} bloqueio(s), ${warn.length} aviso(s)` : ''}</span>
@@ -308,7 +308,7 @@ function QcSection() {
         </Button>
       </div>
       {qc?.render && (
-        <p className="mt-1 text-ui-2xs text-ink-400">
+        <p className="mt-1 text-ui-xs text-ink-400">
           Render: {qc.render.lufs?.toFixed(1) ?? '?'} LUFS · pico {qc.render.truePeak?.toFixed(1) ?? '?'} dBTP{qc.render.blackFrames ? ` · ${qc.render.blackFrames} quadro(s) preto(s)` : ''}
         </p>
       )}

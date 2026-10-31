@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { MessageSquare } from 'lucide-react';
 import { sourceToTimeline, type Removal } from '@neweditor/core';
 import { api, type ReviewDoubt } from '../../lib/api.ts';
 import { useEditor } from '../../lib/store.ts';
@@ -49,20 +50,18 @@ export function AgentMarks({ pps, pad }: { pps: number; pad: number }) {
               title={c.items.map((r) => `${KIND_STYLE[r.kind]?.label ?? r.kind} · ${(r.out - r.in).toFixed(1)}s · ${r.reason}${r.by === 'agent' ? ' (agente)' : ''}`).join('\n')}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => setOpen(open === i ? null : i)}
-              className="block h-3 w-2.5 rounded-sm text-[0px] hover:scale-125"
+              className="block h-3 w-2.5 rounded-sm hover:scale-125"
               style={{ background: color, opacity: c.items.some((r) => r.by === 'agent') ? 1 : 0.55 }}
-            >
-              ✂
-            </button>
+            />
             {open === i && (
-              <div className="anim-pop absolute top-4 left-0 z-[var(--z-popover)] w-64 space-y-1 rounded-[var(--radius-ui-md)] border border-ink-600 bg-ink-850 p-2 shadow-[var(--shadow-ui-2)]" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="anim-pop absolute top-4 left-0 z-[var(--z-popover)] w-64 space-y-1 rounded-ui-md border border-ink-600 bg-ink-850 p-2 shadow-ui-2" onMouseDown={(e) => e.stopPropagation()}>
                 {c.items.map((r) => (
                   <div key={r.id} className="flex items-start gap-2 text-ui-xs">
                     <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: KIND_STYLE[r.kind]?.color }} />
                     <span className="min-w-0 flex-1 text-ink-200">
                       {KIND_STYLE[r.kind]?.label ?? r.kind} · {(r.out - r.in).toFixed(1)}s<span className="block text-ink-400">{r.reason}</span>
                     </span>
-                    <button className="shrink-0 rounded px-1.5 py-0.5 text-ui-2xs font-semibold text-nc-300 hover:bg-nc-500/20" onClick={() => (sendOp({ op: { type: 'restore', removalId: r.id }, note: 'Restaurou um corte' }), setOpen(null))}>
+                    <button className="shrink-0 rounded px-1.5 py-0.5 text-ui-xs font-semibold text-nc-300 hover:bg-nc-500/20" onClick={() => (sendOp({ op: { type: 'restore', removalId: r.id }, note: 'Restaurou um corte' }), setOpen(null))}>
                       Restaurar
                     </button>
                   </div>
@@ -79,10 +78,10 @@ export function AgentMarks({ pps, pad }: { pps: number; pad: number }) {
           title={`${c.by === 'cliente' ? 'Cliente' : 'Você'}: ${c.text}${c.status !== 'aberto' ? ` (${c.status})` : ''}`}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => (seek(c.at), openRightTab('revisao'))}
-          className={`absolute top-0 h-3 w-3 rounded-full border text-[8px] leading-3 hover:scale-125 ${c.status === 'aberto' ? 'border-violet-200 bg-violet-400 text-ink-950' : c.status === 'manual' ? 'border-amber-200 bg-amber-400 text-ink-950' : 'border-ink-500 bg-ink-600 text-ink-300'}`}
+          className={`absolute top-0 h-3 w-3 flex items-center justify-center rounded-full border hover:scale-125 ${c.status === 'aberto' ? 'border-violet-200 bg-violet-400 text-ink-950' : c.status === 'manual' ? 'border-amber-200 bg-amber-400 text-ink-950' : 'border-ink-500 bg-ink-600 text-ink-300'}`}
           style={{ left: c.at * pps - 6 }}
         >
-          💬
+          <MessageSquare size={7} strokeWidth={3} aria-hidden />
         </button>
       ))}
       {doubtMarks.map(({ t, d }) => (

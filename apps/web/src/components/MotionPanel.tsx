@@ -46,7 +46,7 @@ export function MotionPanel() {
               setView(id);
               if (id === 'refs') void reload();
             }}
-            className={`flex-1 rounded-md px-2 py-1.5 text-ui-xs font-semibold transition ${view === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}
+            className={`flex-1 rounded-ui-md px-2 py-1.5 text-ui-xs font-semibold transition ${view === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}
           >
             {label}
           </button>
@@ -108,7 +108,7 @@ function VideoView({ lib, onOpenRef }: { lib: Lib | null; onOpenRef: (id: string
     <div className="scroll-thin h-full space-y-3 overflow-y-auto p-3">
       {err && <p className="text-ui-xs text-ink-400">{err}</p>}
       {r && (
-        <section className="space-y-2 rounded-lg border border-ink-750 bg-ink-800/60 p-3">
+        <section className="space-y-2 rounded-ui-md border border-ink-750 bg-ink-800/60 p-3">
           <h4 className="text-ui-xs font-semibold tracking-wide text-ink-400 uppercase">Leitura da história</h4>
           <div className="flex flex-wrap gap-1">
             {r.tema.map((t) => (
@@ -142,11 +142,11 @@ function VideoView({ lib, onOpenRef }: { lib: Lib | null; onOpenRef: (id: string
         </section>
       )}
 
-      <section className="flex items-center gap-2.5 rounded-lg border border-ink-750 bg-ink-800/60 p-2.5">
-        <RefThumb refItem={ref} className="h-12 w-16 shrink-0 rounded-md" />
+      <section className="flex items-center gap-2.5 rounded-ui-md border border-ink-750 bg-ink-800/60 p-2.5">
+        <RefThumb refItem={ref} className="h-12 w-16 shrink-0 rounded-ui-md" />
         <div className="min-w-0 flex-1">
           <div className="text-ui-xs font-semibold tracking-wide text-ink-400 uppercase">Obra-alvo {story?.ref?.auto ? '· sugerida' : ''}</div>
-          <div className="truncate text-xs font-semibold text-ink-100">{story?.ref?.obra ?? 'Estilo da casa'}</div>
+          <div className="truncate text-ui-sm font-semibold text-ink-100">{story?.ref?.obra ?? 'Estilo da casa'}</div>
           {story?.ref && <div className="line-clamp-2 text-ui-xs leading-snug text-ink-400">{story.ref.why}</div>}
           {ref && <Palette colors={ref.paleta} />}
         </div>
@@ -162,7 +162,7 @@ function VideoView({ lib, onOpenRef }: { lib: Lib | null; onOpenRef: (id: string
       <button
         disabled={busy || !story}
         onClick={() => void api.motionsAuto(project.id).catch((e: Error) => setErr(e.message))}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg nc-gradient px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+        className="flex w-full items-center justify-center gap-1.5 rounded-ui-md nc-gradient px-3 py-2 text-ui-sm font-semibold text-white disabled:opacity-40"
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
         {busy ? activity.message || 'Trabalhando…' : motions.some((m) => m.o.by === 'agent') ? 'Refazer motions narrativos' : 'Criar motions narrativos'}
@@ -173,14 +173,14 @@ function VideoView({ lib, onOpenRef }: { lib: Lib | null; onOpenRef: (id: string
           <button
             key={o.id}
             onClick={() => (seek(start), select({ kind: 'overlay', id: o.id }))}
-            className="block w-full rounded-lg border border-ink-750 bg-ink-800 p-2.5 text-left transition hover:border-nc-500"
+            className="block w-full rounded-ui-md border border-ink-750 bg-ink-800 p-2.5 text-left transition hover:border-nc-500"
           >
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-ui-xs text-ink-400">{formatTime(start)}</span>
-              <span className={`rounded px-1.5 py-px text-ui-2xs font-semibold ${FUNC_STYLE[spec.funcao]}`}>{NARRATIVE_FUNCTIONS[spec.funcao].label}</span>
+              <span className={`rounded px-1.5 py-px text-ui-xs font-semibold ${FUNC_STYLE[spec.funcao]}`}>{NARRATIVE_FUNCTIONS[spec.funcao].label}</span>
               <span className="truncate text-ui-xs font-semibold text-ink-100">{MOTION_TEMPLATES[spec.template].label}</span>
-              <span className="ml-auto font-mono text-ui-2xs text-ink-400">{(end - start).toFixed(1)}s</span>
-              {o.by === 'human' && <span className="text-ui-2xs text-nc-300" title="Ajustado à mão: o agente não refaz">✋</span>}
+              <span className="ml-auto font-mono text-ui-xs text-ink-400">{(end - start).toFixed(1)}s</span>
+              {o.by === 'human' && <span className="text-ui-xs text-nc-300" title="Ajustado à mão: o agente não refaz">✋</span>}
             </div>
             <p className="mt-1 line-clamp-2 text-ui-xs leading-snug text-ink-300">"{spec.fala}"</p>
             <p className="mt-0.5 line-clamp-2 text-ui-xs leading-snug text-ink-400">{spec.ideia}</p>
@@ -198,7 +198,7 @@ function SfxVolume() {
   const sendOp = useEditor((s) => s.sendOp);
   const db = useEditor((s) => s.project?.timeline.motionSfxDb ?? 0);
   return (
-    <div className="rounded-[var(--radius-ui-md)] border border-ink-750 bg-ink-800/60 px-3 py-2">
+    <div className="rounded-ui-md border border-ink-750 bg-ink-800/60 px-3 py-2">
       <RangeField
         label="SFX dos motions"
         icon={<Volume2 size={12} className="text-ink-400" />}
@@ -226,7 +226,7 @@ function RefsView({ lib, reload, open, setOpen }: { lib: Lib | null; reload: () 
   const [draft, setDraft] = useState<LinkMeta | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  if (!lib) return <p className="p-4 text-xs text-ink-400">Carregando…</p>;
+  if (!lib) return <p className="p-4 text-ui-sm text-ink-400">Carregando…</p>;
   const current = open ? lib.refs.find((r) => r.id === open) : undefined;
   if (current) return <RefDetail refItem={current} lib={lib} reload={reload} onBack={() => setOpen(null)} />;
   if (draft) return <AddRef draft={draft} lib={lib} onCancel={() => setDraft(null)} onSaved={async (r) => (await reload(), setDraft(null), setLink(''), setOpen(r.id))} />;
@@ -249,11 +249,11 @@ function RefsView({ lib, reload, open, setOpen }: { lib: Lib | null; reload: () 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <form onSubmit={fetchLink} className="flex gap-1.5 border-b border-ink-750 p-3">
-        <div className="flex flex-1 items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800 px-2">
+        <div className="flex flex-1 items-center gap-1.5 rounded-ui-md border border-ink-700 bg-ink-800 px-2">
           <Link2 size={13} className="shrink-0 text-ink-400" />
           <input value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Link da referência (Behance, YouTube…)" className="min-w-0 flex-1 bg-transparent py-1.5 text-ui-xs text-ink-100 placeholder:text-ink-400 focus:outline-none" />
         </div>
-        <button disabled={busy} className="rounded-lg nc-gradient px-2.5 text-white disabled:opacity-50" title="Adicionar referência">
+        <button disabled={busy} className="rounded-ui-md nc-gradient px-2.5 text-white disabled:opacity-50" title="Adicionar referência">
           {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
         </button>
       </form>
@@ -270,7 +270,7 @@ function RefsView({ lib, reload, open, setOpen }: { lib: Lib | null; reload: () 
           <RefCard key={r.id} r={r} target={project.timeline.motionRef === r.id} onClick={() => setOpen(r.id)} />
         ))}
         {!lib.refs.length && <ImportBrain onDone={reload} />}
-        {lib.refs.length > 0 && !shown.length && <p className="col-span-2 pt-6 text-center text-xs text-ink-400">Nada aqui ainda.</p>}
+        {lib.refs.length > 0 && !shown.length && <p className="col-span-2 pt-6 text-center text-ui-sm text-ink-400">Nada aqui ainda.</p>}
       </div>
     </div>
   );
@@ -279,19 +279,19 @@ function RefsView({ lib, reload, open, setOpen }: { lib: Lib | null; reload: () 
 function RefCard({ r, target, onClick }: { r: MotionRef; target: boolean; onClick: () => void }) {
   const uses = r.usos.reduce((a, u) => a + u.motions, 0);
   return (
-    <button onClick={onClick} className={`group overflow-hidden rounded-lg border bg-ink-800 text-left transition hover:border-nc-500 ${target ? 'border-nc-500' : 'border-ink-700'}`} title={r.obra}>
+    <button onClick={onClick} className={`group overflow-hidden rounded-ui-md border bg-ink-800 text-left transition hover:border-nc-500 ${target ? 'border-nc-500' : 'border-ink-700'}`} title={r.obra}>
       <div className="relative aspect-[4/3] bg-ink-900">
         <RefThumb refItem={r} className="absolute inset-0" />
         {target ? (
-          <span className="absolute top-1 left-1 rounded bg-nc-500 px-1 text-ui-2xs font-semibold text-white">obra-alvo</span>
+          <span className="absolute top-1 left-1 rounded bg-nc-500 px-1 text-ui-xs font-semibold text-white">obra-alvo</span>
         ) : r.usos.length ? (
-          <span className="absolute top-1 left-1 rounded bg-black/70 px-1 text-ui-2xs font-semibold text-ink-100">usada {uses > 0 ? `${uses}×` : ''}</span>
+          <span className="absolute top-1 left-1 rounded bg-black/70 px-1 text-ui-xs font-semibold text-ink-100">usada {uses > 0 ? `${uses}×` : ''}</span>
         ) : null}
-        {r.quadros.length > 0 && <span className="absolute right-1 bottom-1 rounded bg-black/70 px-1 font-mono text-ui-2xs text-white">{r.quadros.length} quadros</span>}
+        {r.quadros.length > 0 && <span className="absolute right-1 bottom-1 rounded bg-black/70 px-1 font-mono text-ui-xs text-white">{r.quadros.length} quadros</span>}
       </div>
       <div className="space-y-1 px-1.5 py-1.5">
         <div className="line-clamp-2 text-ui-xs leading-tight font-medium text-ink-100">{r.obra}</div>
-        <div className="truncate text-ui-2xs text-ink-400">{r.familias[0] ?? r.categoria}</div>
+        <div className="truncate text-ui-xs text-ink-400">{r.familias[0] ?? r.categoria}</div>
         <Palette colors={r.paleta} />
       </div>
     </button>
@@ -323,7 +323,7 @@ function ImportBrain({ onDone }: { onDone: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   return (
-    <div className="col-span-2 space-y-2 rounded-lg border border-dashed border-ink-600 p-4 text-center">
+    <div className="col-span-2 space-y-2 rounded-ui-md border border-dashed border-ink-600 p-4 text-center">
       <Sparkles size={18} className="mx-auto text-nc-300" />
       <p className="text-ui-xs leading-snug text-ink-300">Biblioteca vazia. Cole o link de um motion que você gosta acima, ou traga as referências do seu Motion Studio.</p>
       <button
@@ -339,7 +339,7 @@ function ImportBrain({ onDone }: { onDone: () => Promise<void> }) {
           }
           setBusy(false);
         }}
-        className="rounded-lg border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-100 hover:border-nc-500 disabled:opacity-50"
+        className="rounded-ui-md border border-ink-600 px-3 py-1.5 text-ui-xs text-ink-100 hover:border-nc-500 disabled:opacity-50"
       >
         {busy ? 'Importando…' : 'Importar do Motion Studio - Brain'}
       </button>
@@ -388,16 +388,16 @@ function AddRef({ draft, lib, onCancel, onSaved }: { draft: LinkMeta; lib: Lib; 
       <button onClick={onCancel} className="flex items-center gap-1 text-ui-xs text-ink-400 hover:text-white">
         <ArrowLeft size={13} /> Voltar
       </button>
-      <div className="relative aspect-video overflow-hidden rounded-lg bg-ink-900">
+      <div className="relative aspect-video overflow-hidden rounded-ui-md bg-ink-900">
         {cover ? <img src={cover} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : <div className="flex h-full flex-col items-center justify-center gap-1 text-ui-xs text-ink-400"><ImagePlus size={18} />Cole (⌘V) ou arraste uma imagem para a capa</div>}
       </div>
       <p className="truncate text-ui-xs text-ink-400">{draft.link}</p>
-      {draft.bloqueado && !capa && <p className="rounded-md bg-amber-500/10 px-2 py-1.5 text-ui-xs leading-snug text-amber-200">Esse site não deixa ler a página automaticamente. Tire um print da obra e cole aqui (⌘V) ou arraste a imagem — a paleta sai dela.</p>}
+      {draft.bloqueado && !capa && <p className="rounded-ui-md bg-amber-500/10 px-2 py-1.5 text-ui-xs leading-snug text-amber-200">Esse site não deixa ler a página automaticamente. Tire um print da obra e cole aqui (⌘V) ou arraste a imagem — a paleta sai dela.</p>}
       <Field label="Nome da obra">
-        <input value={obra} onChange={(e) => setObra(e.target.value)} onKeyDown={(e) => e.stopPropagation()} className="input py-1.5 text-xs" />
+        <input value={obra} onChange={(e) => setObra(e.target.value)} onKeyDown={(e) => e.stopPropagation()} className="input py-1.5 text-ui-sm" />
       </Field>
       <Field label="Categoria">
-        <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="input py-1.5 text-xs">
+        <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="input py-1.5 text-ui-sm">
           {lib.categorias.map((c) => (
             <option key={c}>{c}</option>
           ))}
@@ -407,10 +407,10 @@ function AddRef({ draft, lib, onCancel, onSaved }: { draft: LinkMeta; lib: Lib; 
         <Chips all={lib.familias} value={familias} onChange={setFamilias} />
       </Field>
       <Field label="Serve para (temas)">
-        <input value={serve} onChange={(e) => setServe(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="filosofia, dados, emoção…" className="input py-1.5 text-xs" />
+        <input value={serve} onChange={(e) => setServe(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="filosofia, dados, emoção…" className="input py-1.5 text-ui-sm" />
       </Field>
       <Field label="O que você quer desse motion? (um por linha)">
-        <textarea value={roubar} onChange={(e) => setRoubar(e.target.value)} onKeyDown={(e) => e.stopPropagation()} rows={3} className="input resize-none text-xs" placeholder="Palavra-conceito dourada sobre a imagem…" />
+        <textarea value={roubar} onChange={(e) => setRoubar(e.target.value)} onKeyDown={(e) => e.stopPropagation()} rows={3} className="input resize-none text-ui-sm" placeholder="Palavra-conceito dourada sobre a imagem…" />
       </Field>
       {err && <p className="text-ui-xs text-rose-400">{err}</p>}
       <button
@@ -425,7 +425,7 @@ function AddRef({ draft, lib, onCancel, onSaved }: { draft: LinkMeta; lib: Lib; 
             setBusy(false);
           }
         }}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg nc-gradient py-2 text-xs font-semibold text-white disabled:opacity-40"
+        className="flex w-full items-center justify-center gap-1.5 rounded-ui-md nc-gradient py-2 text-ui-sm font-semibold text-white disabled:opacity-40"
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar referência (.md)
       </button>
@@ -463,11 +463,11 @@ function RefDetail({ refItem: r, lib, reload, onBack }: { refItem: MotionRef; li
       <button onClick={onBack} className="flex items-center gap-1 text-ui-xs text-ink-400 hover:text-white">
         <ArrowLeft size={13} /> Referências
       </button>
-      <div className="overflow-hidden rounded-lg bg-ink-900">
+      <div className="overflow-hidden rounded-ui-md bg-ink-900">
         <RefThumb refItem={r} className="aspect-video w-full" />
       </div>
       <div>
-        <h3 className="text-sm leading-tight font-semibold text-white">{r.obra}</h3>
+        <h3 className="text-ui-md leading-tight font-semibold text-white">{r.obra}</h3>
         <p className="mt-0.5 text-ui-xs text-ink-400">
           {r.categoria}
           {r.familias.length ? ` · ${r.familias.join(' · ')}` : ''}
@@ -485,12 +485,12 @@ function RefDetail({ refItem: r, lib, reload, onBack }: { refItem: MotionRef; li
         <button
           disabled={!!busy || isTarget}
           onClick={act('usar', () => api.useRef(project.id, r.id))}
-          className="flex items-center justify-center gap-1.5 rounded-lg nc-gradient py-2 text-xs font-semibold text-white disabled:opacity-50"
+          className="flex items-center justify-center gap-1.5 rounded-ui-md nc-gradient py-2 text-ui-sm font-semibold text-white disabled:opacity-50"
         >
           {isTarget ? <Check size={13} /> : <Sparkles size={13} />} {isTarget ? 'Obra-alvo deste vídeo' : hasMotions ? 'Usar neste vídeo (veste os motions)' : 'Usar como obra-alvo deste vídeo'}
         </button>
         {!hasMotions && (
-          <button disabled={!!busy} onClick={act('criar', () => api.motionsAuto(project.id, r.id))} className="rounded-lg border border-ink-600 py-1.5 text-ui-xs text-ink-100 hover:border-nc-500 disabled:opacity-50">
+          <button disabled={!!busy} onClick={act('criar', () => api.motionsAuto(project.id, r.id))} className="rounded-ui-md border border-ink-600 py-1.5 text-ui-xs text-ink-100 hover:border-nc-500 disabled:opacity-50">
             Criar os motions com esta referência
           </button>
         )}
@@ -528,7 +528,7 @@ function RefDetail({ refItem: r, lib, reload, onBack }: { refItem: MotionRef; li
           {r.quadros.map((q) => (
             <figure key={q.file} className="overflow-hidden rounded bg-ink-900">
               <img src={refUrl(r.id, q.file)} alt="" loading="lazy" className="aspect-video w-full object-cover" />
-              {q.legenda && q.legenda !== '—' && <figcaption className="line-clamp-2 px-1 py-0.5 text-ui-2xs leading-tight text-ink-400">{q.legenda}</figcaption>}
+              {q.legenda && q.legenda !== '—' && <figcaption className="line-clamp-2 px-1 py-0.5 text-ui-xs leading-tight text-ink-400">{q.legenda}</figcaption>}
             </figure>
           ))}
         </div>

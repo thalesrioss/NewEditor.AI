@@ -58,13 +58,13 @@ export function Notifications() {
 
   return (
     <div ref={box} className="relative">
-      <button aria-label="Notificações" onClick={() => setOpen(!open)} className="relative rounded-lg p-2 text-ink-300 hover:bg-ink-800 hover:text-white" title="Notificações">
+      <button aria-label="Notificações" onClick={() => setOpen(!open)} className="relative rounded-ui-md p-2 text-ink-300 hover:bg-ink-800 hover:text-white" title="Notificações">
         <Bell size={17} />
         {unread > 0 && <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-ui-2xs font-bold text-white">{unread}</span>}
       </button>
       {open && (
-        <div className="anim-pop absolute top-11 right-0 z-50 w-[340px] overflow-hidden rounded-xl border border-ink-700 bg-ink-850 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-ink-750 px-3 py-2 text-xs font-semibold text-ink-200">
+        <div className="anim-pop absolute top-11 right-0 z-50 w-[340px] overflow-hidden rounded-ui-lg border border-ink-700 bg-ink-850 shadow-ui-3">
+          <div className="flex items-center justify-between border-b border-ink-750 px-3 py-2 text-ui-sm font-semibold text-ink-200">
             Notificações
             {unread > 0 && (
               <button onClick={() => (void api.readNotifications(), setList((l) => l.map((x) => ({ ...x, read: true }))))} className="flex items-center gap-1 text-ui-xs font-normal text-ink-400 hover:text-white">
@@ -88,7 +88,7 @@ export function Notifications() {
         </div>
       )}
       {toast && (
-        <div role="status" className="anim-pop fixed right-5 bottom-5 z-[var(--z-toast)] flex max-w-sm items-start gap-2.5 rounded-[var(--radius-ui-lg)] border border-ink-600 bg-ink-850 p-3 text-left shadow-[var(--shadow-ui-2)]">
+        <div role="status" className="anim-pop fixed right-5 bottom-5 z-[var(--z-toast)] flex max-w-sm items-start gap-2.5 rounded-ui-lg border border-ink-600 bg-ink-850 p-3 text-left shadow-ui-2">
           <span className="mt-0.5">{icon(toast)}</span>
           <span className="min-w-0 flex-1">
             <span className="block text-ui-sm font-semibold text-white">{toast.kind === 'revisao' ? 'Decupagem para revisar' : 'Edição pronta'}</span>

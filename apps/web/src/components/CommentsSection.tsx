@@ -29,7 +29,7 @@ export function CommentsSection() {
     setText('');
   };
   return (
-    <section className="space-y-2 rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-800/60 p-3">
+    <section className="space-y-2 rounded-ui-md border border-ink-700 bg-ink-800/60 p-3">
       <div className="flex items-center gap-2">
         <MessageSquarePlus size={14} className="text-nc-300" />
         <span className="text-ui-xs font-semibold text-ink-100">Alterações {comments.length ? `· ${open.length} aberta(s) de ${comments.length}` : ''}</span>
@@ -52,7 +52,7 @@ export function CommentsSection() {
             placeholder={`Pedido em ${formatTime(playhead)}: "tira a parte em que ele gagueja", "dá um zoom aqui"…`}
             className="input resize-none text-ui-xs"
           />
-          <div className="flex items-center gap-2 text-ui-2xs text-ink-400">
+          <div className="flex items-center gap-2 text-ui-xs text-ink-400">
             De:
             {(['editor', 'cliente'] as const).map((b) => (
               <button key={b} onClick={() => setBy(b)} className={`rounded-full border px-2 py-px ${by === b ? 'border-nc-400 text-nc-300' : 'border-ink-700 hover:text-ink-200'}`}>
@@ -70,12 +70,12 @@ export function CommentsSection() {
           {[...comments]
             .sort((a, b) => a.at - b.at)
             .map((c) => (
-              <li key={c.id} className={`group rounded-[var(--radius-ui-sm)] px-2 py-1.5 text-ui-xs ${c.status === 'aberto' ? 'bg-ink-800' : c.status === 'manual' ? 'bg-amber-400/10' : 'bg-ink-850 opacity-70'}`}>
+              <li key={c.id} className={`group rounded-ui-sm px-2 py-1.5 text-ui-xs ${c.status === 'aberto' ? 'bg-ink-800' : c.status === 'manual' ? 'bg-amber-400/10' : 'bg-ink-850 opacity-70'}`}>
                 <div className="flex items-start gap-1.5">
                   <button className="font-mono text-ink-400 hover:text-white" onClick={() => seek(c.at)}>
                     {formatTime(c.at)}
                   </button>
-                  <span className={`rounded px-1 text-ui-2xs ${c.by === 'cliente' ? 'bg-violet-400/15 text-violet-300' : 'bg-ink-700 text-ink-300'}`}>{c.by}</span>
+                  <span className={`rounded px-1 text-ui-xs ${c.by === 'cliente' ? 'bg-violet-400/15 text-violet-300' : 'bg-ink-700 text-ink-300'}`}>{c.by}</span>
                   <span className={`min-w-0 flex-1 text-ink-200 ${c.status === 'feito' ? 'line-through decoration-ink-600' : ''}`}>{c.text}</span>
                   <span className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
                     {c.status !== 'feito' && (
@@ -88,13 +88,13 @@ export function CommentsSection() {
                     </IconButton>
                   </span>
                 </div>
-                {c.resposta && <div className={`mt-0.5 pl-10 text-ui-2xs ${c.status === 'manual' ? 'text-amber-200' : 'text-ink-400'}`}>{c.status === 'manual' ? 'Para fazer à mão — ' : 'Agente: '}{c.resposta.slice(0, 160)}</div>}
+                {c.resposta && <div className={`mt-0.5 pl-10 text-ui-xs ${c.status === 'manual' ? 'text-amber-200' : 'text-ink-400'}`}>{c.status === 'manual' ? 'Para fazer à mão — ' : 'Agente: '}{c.resposta.slice(0, 160)}</div>}
               </li>
             ))}
         </ul>
       )}
       {versions.length > 0 && (
-        <div className="border-t border-ink-750 pt-2 text-ui-2xs text-ink-400">
+        <div className="border-t border-ink-750 pt-2 text-ui-xs text-ink-400">
           Versões: {versions.map((v) => `v${v.n} ${v.label}`).join(' · ')}
           {diff && (
             <div className="mt-1 text-ink-300">

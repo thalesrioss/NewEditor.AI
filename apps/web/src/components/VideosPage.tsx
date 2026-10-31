@@ -66,7 +66,7 @@ export function VideosPage() {
       <header className="ne-titlebar flex items-center gap-3 border-b border-ink-750 px-6 py-4">
         <img src="/logo-mark.png" alt="NewContent" className="h-8" />
         <div>
-          <div className="text-base font-semibold">
+          <div className="text-ui-lg font-semibold">
             NewEditor<span className="nc-text-gradient">.AI</span>
           </div>
           <div className="text-ui-sm text-ink-400">
@@ -102,17 +102,17 @@ export function VideosPage() {
       )}
 
       <div className="scroll-thin min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
-        {erro && <div className="rounded-[var(--radius-ui-md)] border border-red-500/40 bg-red-500/10 px-4 py-2 text-ui-sm text-red-200">Não consegui ler os vídeos: {erro}</div>}
+        {erro && <div className="rounded-ui-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-ui-sm text-red-200">Não consegui ler os vídeos: {erro}</div>}
         {loaded && !erro && !videos.length && (
-          <div className="mx-auto max-w-md rounded-[var(--radius-ui-lg)] border border-ink-750 bg-ink-850 p-6 text-center text-ui-sm text-ink-300">
+          <div className="mx-auto max-w-md rounded-ui-lg border border-ink-750 bg-ink-850 p-6 text-center text-ui-sm text-ink-300">
             Nenhum vídeo editado ainda. Cada versão salva em <span className="font-mono">producao/&lt;cliente&gt;/&lt;card&gt;/entrega/</span> aparece aqui sozinha.
           </div>
         )}
         {visiveis.map((g) => (
-          <section key={g.card} className="rounded-[var(--radius-ui-lg)] border border-ink-750 bg-ink-850 p-4">
+          <section key={g.card} className="rounded-ui-lg border border-ink-750 bg-ink-850 p-4">
             <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
               <div className="text-ui-xs font-semibold tracking-wide text-nc-300 uppercase">{g.cliente}</div>
-              <div className="text-sm font-semibold text-white">{g.titulo}</div>
+              <div className="text-ui-md font-semibold text-white">{g.titulo}</div>
               {g.etapa && <span className="rounded-full bg-ink-750 px-2 py-0.5 text-ui-xs text-ink-200">{g.etapa}</span>}
               {g.editor && <span className="text-ui-xs text-ink-400">editor: {nomeEditor(g.editor)}</span>}
               {g.emEdicaoPor && (
@@ -132,7 +132,7 @@ export function VideosPage() {
                   </a>
                 )}
                 {g.projectId ? (
-                  <a href={`#/p/${g.projectId}`} className="flex items-center gap-1.5 rounded-lg nc-gradient px-3 py-1 text-xs font-semibold text-white" title="Abrir o projeto no editor para assumir a edição">
+                  <a href={`#/p/${g.projectId}`} className="flex items-center gap-1.5 rounded-ui-md nc-gradient px-3 py-1 text-ui-sm font-semibold text-white" title="Abrir o projeto no editor para assumir a edição">
                     <Film size={13} /> Abrir projeto
                   </a>
                 ) : (
@@ -143,7 +143,7 @@ export function VideosPage() {
             <div className="scroll-thin flex gap-3 overflow-x-auto pb-1">
               {g.versoes.map((v) => (
                 <button key={v.id} onClick={() => setTocando(v)} className="group w-[150px] shrink-0 text-left" title={v.arquivo}>
-                  <div className="relative aspect-[9/16] overflow-hidden rounded-[var(--radius-ui-md)] bg-black ring-1 ring-ink-750 transition group-hover:ring-nc-400">
+                  <div className="relative aspect-[9/16] overflow-hidden rounded-ui-md bg-black ring-1 ring-ink-750 transition group-hover:ring-nc-400">
                     <video src={`${v.url}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
                       <Play size={28} className="rounded-full bg-black/60 p-1.5 text-white" />
@@ -173,21 +173,21 @@ function PlayerModal({ v, onClose }: { v: VideoEditado; onClose: () => void }) {
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" onMouseDown={onClose}>
-      <div className="anim-pop flex max-h-full flex-col overflow-hidden rounded-2xl border border-ink-700 bg-ink-850 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="anim-pop flex max-h-full flex-col overflow-hidden rounded-ui-lg border border-ink-700 bg-ink-850 shadow-ui-3" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-ink-750 px-4 py-2.5">
-          <div className="text-sm font-semibold">
+          <div className="text-ui-md font-semibold">
             {v.titulo} {v.versao ? `· v${v.versao}` : ''}
           </div>
           <div className="truncate font-mono text-ui-xs text-ink-400">{v.arquivo}</div>
           {v.projectId && (
-            <a href={`#/p/${v.projectId}`} className="ml-auto flex items-center gap-1.5 rounded-lg border border-ink-700 px-3 py-1.5 text-xs font-semibold text-ink-200 hover:text-white">
+            <a href={`#/p/${v.projectId}`} className="ml-auto flex items-center gap-1.5 rounded-ui-md border border-ink-700 px-3 py-1.5 text-ui-sm font-semibold text-ink-200 hover:text-white">
               <Film size={13} /> Abrir projeto
             </a>
           )}
-          <a href={v.url} download={v.arquivo} className={`${v.projectId ? '' : 'ml-auto '}flex items-center gap-1.5 rounded-lg nc-gradient px-3 py-1.5 text-xs font-semibold text-white`}>
+          <a href={v.url} download={v.arquivo} className={`${v.projectId ? '' : 'ml-auto '}flex items-center gap-1.5 rounded-ui-md nc-gradient px-3 py-1.5 text-ui-sm font-semibold text-white`}>
             <Download size={13} /> Baixar
           </a>
-          <button aria-label="Fechar (Esc)" onClick={onClose} className="rounded-md p-1 text-ink-400 hover:text-white" title="Fechar (Esc)">
+          <button aria-label="Fechar (Esc)" onClick={onClose} className="rounded-ui-md p-1 text-ink-400 hover:text-white" title="Fechar (Esc)">
             <X size={16} />
           </button>
         </div>
