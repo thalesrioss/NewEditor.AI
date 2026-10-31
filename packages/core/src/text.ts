@@ -5,8 +5,8 @@
  * Padrão de lettering do Cérebro do Editor (brains/04_EDITOR.md): Helvetica Neue, caixa mista, branco,
  * âmbar #E8B44A nos acentos, sem tarja, sombra suave, em área negativa.
  */
-import { clipDuration, clipStarts, clipSpeed, resolveOverlay } from './timeline.ts';
-import type { Seconds, Timeline } from './types.ts';
+import { clipDuration, clipStarts, clipSpeed, resolveOverlay, sameWordAt, WORD_AT_EPS } from './timeline.ts';
+import type { CaptionEdit, Seconds, Timeline } from './types.ts';
 
 export type CaptionStyle = 'reels' | 'frase';
 
@@ -215,13 +215,13 @@ const HESITATION = /^(hum+|hm+|ahn+|han+|uh+|eh+|a{2,}h*|ã+)[.,!?…]*$/i;
 /** Palavras que ficaram no corte, na ordem e no tempo da TIMELINE (sem hesitação). */
 /** Texto de uma palavra com a correção de grafia da revisão, se houver. */
 export function fixedText(tl: Pick<Timeline, 'wordFixes'>, assetId: string, w: TextWord): string {
-  const f = tl.wordFixes?.find((x) => x.assetId === assetId && Math.abs(x.at - w.start) < 0.02);
+  const f = tl.wordFixes?.find((x) => x.assetId === assetId && sameWordAt(x.at, w.start));
   return f?.text ?? w.w;
 }
 
 /** Início e fim da palavra no bruto com a correção de tempo do editor (CH-0041); sem correção, os do ASR. */
 export function fixedTimes(tl: Pick<Timeline, 'wordFixes'>, assetId: string, w: TextWord): { start: number; end: number; mid: number } {
-  const f = tl.wordFixes?.find((x) => x.assetId === assetId && Math.abs(x.at - w.start) < 0.02);
+  const f = tl.wordFixes?.find((x) => x.assetId === assetId && sameWordAt(x.at, w.start));
   if (f?.start === undefined && f?.end === undefined) return { start: w.start, end: w.end, mid: w.c ?? (w.start + w.end) / 2 };
   const start = f.start ?? w.start;
   const end = f.end ?? w.end;
@@ -236,7 +236,7 @@ export function fixedTimes(tl: Pick<Timeline, 'wordFixes'>, assetId: string, w: 
 export function wordTimingError(tl: Timeline, assetId: string, words: TextWord[], ats: number[], duration?: number): string | null {
   const nome = (w: TextWord) => `'${fixedText(tl, assetId, w)}' (${w.start})`;
   for (const at of ats) {
-    const i = words.findIndex((w) => Math.abs(w.start - at) < 0.02);
+    const i = words.findIndex((w) => sameWordAt(w.start, at));
     if (i < 0) return `fix_words: não há palavra começando em ${at} s na transcrição deste asset`;
     const w = words[i]!;
     const t = fixedTimes(tl, assetId, w);
@@ -282,7 +282,29 @@ export function placeWords(tl: Timeline, transcripts: Record<string, TextWord[] 
 export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] | undefined>, s: CaptionSettings, opts: { includeHidden?: boolean } = {}): Cue[] {
   const placed = placeWords(tl, transcripts);
   const edits = tl.captionEdits ?? [];
-  const editOf = (w: CueWord | undefined) => (w?.src && edits.length ? edits.find((e) => e.assetId === w.src!.assetId && Math.abs(e.at - w.src!.at) < 0.02) : undefined);
+  // Cada ajuste vai para UMA palavra: a que começa no `at` dele ou, em ajuste antigo gravado fora do início exato
+  // (até 0,02 s), a mais próxima dele — nunca a vizinha (CH-0043). Ajustes que caem na mesma palavra se somam (o exato vence).
+  const byWord = new Map<string, CaptionEdit>();
+  const wordKey = (assetId: string, at: number) => `${assetId}@${at}`;
+  for (const exact of [true, false]) {
+    for (const e of edits) {
+      const ws = transcripts[e.assetId];
+      let at: number | undefined;
+      if (!ws) {
+        if (!exact) continue;
+        at = e.at;
+      }
+      else {
+        let best = Infinity;
+        for (const w of ws) if (Math.abs(w.start - e.at) < best) (best = Math.abs(w.start - e.at)), (at = w.start);
+        if (best >= (exact ? WORD_AT_EPS : 0.02) || (!exact && best < WORD_AT_EPS)) continue;
+      }
+      if (at === undefined) continue;
+      const prev = byWord.get(wordKey(e.assetId, at));
+      byWord.set(wordKey(e.assetId, at), exact ? { ...prev, ...e } : { ...e, ...prev });
+    }
+  }
+  const editOf = (w: CueWord | undefined) => (w?.src ? byWord.get(wordKey(w.src.assetId, w.src.at)) : undefined);
 
   const maxWords = s.maxWords ?? (s.style === 'reels' ? 2 : 6);
   const hardMax = s.maxWords ? s.maxWords : s.style === 'reels' ? 3 : 7;
@@ -353,7 +375,7 @@ export function buildCues(tl: Timeline, transcripts: Record<string, TextWord[] |
     if (forced) c.forced = true;
     // Altura própria: o ajuste do bloco vence o do trecho (`until`) que o contém.
     const src = c.words[0]!.src;
-    const zone = src && edits.find((z) => z.position !== undefined && z.until !== undefined && z.assetId === src.assetId && src.at >= z.at - 0.02 && src.at <= z.until + 0.02);
+    const zone = src && edits.find((z) => z.position !== undefined && z.until !== undefined && z.assetId === src.assetId && src.at >= z.at - WORD_AT_EPS && src.at <= z.until + WORD_AT_EPS);
     const position = e?.position ?? zone?.position;
     if (position !== undefined) c.position = position;
   }

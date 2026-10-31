@@ -11,7 +11,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fixedText, glossarioKey, glossarioWords, sourceToTimeline, type Project, type TextWord } from '@neweditor/core';
+import { fixedText, glossarioKey, glossarioWords, sameWordAt, sourceToTimeline, type Project, type TextWord } from '@neweditor/core';
 import { readTranscript } from './asr.ts';
 import { profileOf } from './profiles.ts';
 import { misspelled } from './spell.ts';
@@ -123,7 +123,7 @@ export async function reviewDoubts(p: Project): Promise<ReviewDoubt[]> {
     const tokens = kept.map((w) => strip(fixedText(tl, assetId, w))).filter((t) => t.length >= 3 && !/\d/.test(t) && !STOPLIKE.test(t));
     const wrong = await misspelled(tokens);
     for (const w of kept) {
-      const fixed = tl.wordFixes?.some((f) => f.text !== undefined && f.assetId === assetId && Math.abs(f.at - w.start) < 0.02);
+      const fixed = tl.wordFixes?.some((f) => f.text !== undefined && f.assetId === assetId && sameWordAt(f.at, w.start));
       if (fixed) continue;
       const t = strip(w.w);
       const sug = wrong.get(t);
