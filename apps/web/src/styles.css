@@ -76,11 +76,14 @@
   --z-toast: 90;
 }
 
-/* Foco visível em tudo que se opera pelo teclado. */
+/*
+ * Foco visível em tudo que se opera pelo teclado (BL-0160). Fora de @layer de propósito: vence `outline-none` e
+ * `focus:outline-none` das utilidades do Tailwind (que ficam em @layer utilities). O anel segue o raio do próprio
+ * elemento (não força raio: chip redondo continua redondo).
+ */
 :where(button, a, input, select, textarea, [role='button'], [role='tab'], [tabindex]):focus-visible {
   outline: 2px solid var(--color-nc-400);
   outline-offset: 2px;
-  border-radius: var(--radius-ui-sm);
 }
 
 /* Quem pediu menos movimento não vê avatar pulando nem confete. */
