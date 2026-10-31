@@ -269,4 +269,39 @@ describe('gate em vídeo sintético', () => {
     assert.equal(inter.falhas.length, 1, JSON.stringify(inter.falhas));
     assert.match(inter.falhas[0]!.onde!, /^2,50 s \(clipe 2, C3033_cam9x16_v7\.mov\)/);
   });
+
+  test('freeze-sob-fala: cartela de motion com alfa em tela cheia não reprova; freeze do falante sob lettering com fundo transparente segue reprovando (CH-0048)', { timeout: 120_000 }, async () => {
+    // Entrega com os quadros 30–44 parados (1,0–1,5 s) sob tom contínuo (fala o tempo todo).
+    const parado = path.join(tmp, 'parado.mp4');
+    ff(['-i', base, '-f', 'lavfi', '-i', TOM, '-filter_complex', '[0:v]split[a][r];[a][r]freezeframes=first=30:last=44:replace=29,format=yuv420p[v]', '-map', '[v]', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', '-r', '30000/1001', '-c:a', 'aac', '-ar', '48000', '-shortest', parado]);
+    // Motion do Studio com alfa (como o ProRes 4444): card opaco no quadro todo × faixa de lettering embaixo (21% do quadro).
+    const cheio = path.join(tmp, 'M2-terno.mov');
+    const faixa = path.join(tmp, 'L2-faixa.mov');
+    ff(['-f', 'lavfi', '-i', 'color=c=red:s=108x192:r=30000/1001:d=3,format=rgba', '-c:v', 'qtrle', '-pix_fmt', 'argb', cheio]);
+    ff(['-f', 'lavfi', '-i', "color=c=white:s=108x192:r=30000/1001:d=3,format=rgba,geq=r=255:g=255:b=255:a='if(gt(Y,150),255,0)'", '-c:v', 'qtrle', '-pix_fmt', 'argb', faixa]);
+    const proj = (motion: string) =>
+      ({
+        assets: [
+          { id: 'fala', name: 'C3821.MP4', path: '/nao-existe/C3821.MP4', kind: 'video', duration: 60, width: 180, height: 320, fps: 29.97, hasAudio: true, role: 'fala' },
+          { id: 'mo', name: path.basename(motion), path: motion, kind: 'video', duration: 3, width: 108, height: 192, fps: 29.97, hasAudio: false, alpha: true, role: 'broll' },
+        ],
+        timeline: {
+          fps: 29.97, width: 180, height: 320, removals: [], pins: [], tracks: [],
+          main: [{ id: 'c1', assetId: 'fala', in: 10, out: 14, by: 'agent' }],
+          overlays: [{ id: 'ov_m', trackId: 'V3', role: 'motion', anchor: { assetId: 'fala', at: 10.5 }, duration: 1.6, source: { type: 'media', assetId: 'mo', in: 0 }, by: 'agent' }],
+        },
+      }) as unknown as Project;
+    const freeze = async (motion: string) => {
+      const r = await qcTecnico(parado, { project: proj(motion) });
+      return { falhas: r.achados.filter((a) => a.regra === 'freeze-sob-fala' && !a.ok), avisos: r.avisos };
+    };
+    const card = await freeze(cheio);
+    assert.deepEqual(card.falhas, [], JSON.stringify(card.falhas));
+    assert.ok(card.avisos.some((a) => /sob motion\/gráfico em tela cheia/.test(a)), JSON.stringify(card.avisos));
+    // Contraprova: com a faixa de lettering (o falante à vista) o freeze é do plano do falante e reprova, no lugar certo.
+    const lettering = await freeze(faixa);
+    assert.equal(lettering.falhas.length, 1, JSON.stringify(lettering.falhas));
+    const at = lettering.falhas[0]!.at!;
+    assert.ok(at > 0.9 && at < 1.5, String(lettering.falhas[0]!.onde));
+  });
 });
