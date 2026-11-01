@@ -6,6 +6,7 @@ import { transcribe, writeCenters } from './asr.ts';
 import { analyze, speechChunks } from './decupagem/analyze.ts';
 import { makeEnvelope, makeProxy, makeThumbs, makeWav16k, probe, readEnvelope } from './media.ts';
 import { enqueue } from './jobs.ts';
+import { herdarPadraoCor } from './padrao-cor.ts';
 import { profileOf } from './profiles.ts';
 import { store } from './store.ts';
 
@@ -221,6 +222,7 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
       by: 'system',
       op: { type: 'set_main', clips: [...p.timeline.main, { id: uid('clip'), assetId: asset.id, in: 0, out: asset.duration, by: 'system', reason: 'material bruto' }], removals: [] },
     });
+    await herdarPadraoCor(projectId); // padrão de cor do cliente na fala que entrou (BL-0161)
   }
   store.setActivity(projectId, { state: 'idle', message: 'Material pronto' });
   return asset;
