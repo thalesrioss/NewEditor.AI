@@ -539,12 +539,26 @@ export function achadosProjeto(project: Pick<Project, 'assets' | 'timeline'>, me
 
   // Corte na entrega que a timeline não explica (dentro de um clipe, fora de overlay de outra coisa): troca de plano embutida no arquivo.
   if (med.cortes) {
-    const soltos = cortes.filter((t) => !usados.has(t) && !bordas.some((b) => Math.abs(b - t) <= 3 * quadro) && !coberto(t) && temFala({ start: t - 0.2, end: t + 0.2 }));
+    const candidatos = cortes.filter((t) => !usados.has(t) && !bordas.some((b) => Math.abs(b - t) <= 3 * quadro) && !coberto(t) && temFala({ start: t - 0.2, end: t + 0.2 }));
+    // Imagem lida direto do arquivo da câmera (C3033.MP4): o salto tem par no bruto por construção (o render lê o
+    // próprio bruto) e arquivo de câmera não traz outro trecho dentro. É tranco ou movimento de câmera ampliado pelo
+    // recorte, não corte embutido (CH-0047): vira aviso. Intermediário (cam9x16, punch-in, "cob") segue reprovando.
+    const imagemDoBruto = (t: number) => {
+      const loc = locate(tl, t);
+      const a = loc ? assets.get(loc.clip.cam ?? loc.clip.assetId) : undefined;
+      return !!a && a.kind === 'video' && (ehBruto(a.path) || ehBruto(a.name));
+    };
+    const doBruto = candidatos.filter(imagemDoBruto);
+    const soltos = candidatos.filter((t) => !imagemDoBruto(t));
+    for (const t of doBruto) {
+      const loc = locate(tl, t)!;
+      avisos.push(`salto de imagem em ${tt(t)} dentro do clipe ${loc.index + 1} (${nome(loc.clip.cam ?? loc.clip.assetId)}), lido direto do arquivo da câmera: tranco ou movimento de câmera, não corte embutido; confira a olho`);
+    }
     for (const t of soltos) {
       const loc = locate(tl, t);
       out.push({ regra: 'corte-embutido', ok: false, medido: 'troca de plano dentro de um clipe, sob fala (o arquivo já traz outro trecho)', limite: 'corte só onde a timeline corta', onde: `${tt(t)}${loc ? ` (clipe ${loc.index + 1}, ${nome(loc.clip.cam ?? loc.clip.assetId)})` : ''}`, at: t });
     }
-    if (!soltos.length) out.push({ regra: 'corte-embutido', ok: true, medido: 'todo corte da entrega está na timeline', limite: 'corte só onde a timeline corta' });
+    if (!soltos.length) out.push({ regra: 'corte-embutido', ok: true, medido: `todo corte da entrega está na timeline${doBruto.length ? ` (${doBruto.length} salto(s) de câmera dentro do bruto, aviso)` : ''}`, limite: 'corte só onde a timeline corta' });
   }
 
   // (d) 2ª câmera com sincronia medida (pelo áudio, confiança ≥ 0,8).

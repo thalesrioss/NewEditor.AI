@@ -243,4 +243,30 @@ describe('gate em vídeo sintético', () => {
     assert.equal(s.ok, false, s.medido);
     assert.ok(!r.avisos.some((a) => /padrão/.test(a)));
   });
+
+  test('corte-embutido: tranco de câmera no clipe lido do bruto não reprova; troca de plano num intermediário segue reprovando (CH-0047)', { timeout: 120_000 }, async () => {
+    // Mesmo plano o tempo todo, com o quadro deslocado de uma vez no quadro 75 (2,50 s): o tranco do C3033 ampliado pelo zoom 2.
+    const tranco = path.join(tmp, 'tranco.mp4');
+    ff(['-i', base, '-f', 'lavfi', '-i', TOM, '-vf', "crop=140:280:x='if(gte(n,75),40,10)':y='if(gte(n,75),36,10)',format=yuv420p", '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', '-r', '30000/1001', '-c:a', 'aac', '-ar', '48000', '-shortest', tranco]);
+    // Troca de plano de verdade no quadro 75: outro trecho, espelhado e com outra cor.
+    const corte = path.join(tmp, 'corte.mp4');
+    const fc = '[0:v]split[a][b];[a]trim=end_frame=75,setpts=PTS-STARTPTS[a1];[b]setpts=PTS-STARTPTS,hflip,hue=h=120[b1];[a1][b1]concat=n=2:v=1:a=0,trim=end_frame=120,crop=140:280:10:10,format=yuv420p[v]';
+    ff(['-i', base, '-f', 'lavfi', '-i', TOM, '-filter_complex', fc, '-map', '[v]', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '12', '-r', '30000/1001', '-c:a', 'aac', '-ar', '48000', '-shortest', corte]);
+    const proj = (arquivo: string) =>
+      ({
+        assets: [{ id: 'fala', name: path.basename(arquivo), path: arquivo, kind: 'video', duration: 60, width: 140, height: 280, fps: 29.97, hasAudio: true, role: 'fala' }],
+        timeline: { fps: 29.97, width: 140, height: 280, removals: [], pins: [], tracks: [], overlays: [], main: [{ id: 'c1', assetId: 'fala', in: 10, out: 12, by: 'agent' }, { id: 'c2', assetId: 'fala', in: 20, out: 22, by: 'agent' }] },
+      }) as unknown as Project;
+    const corteEmb = async (f: string, p: Project) => {
+      const r = await qcTecnico(f, { project: p });
+      return { falhas: r.achados.filter((a) => a.regra === 'corte-embutido' && !a.ok), avisos: r.avisos };
+    };
+    const bruto = await corteEmb(tranco, proj('/nao-existe/C3033.MP4'));
+    assert.deepEqual(bruto.falhas, [], JSON.stringify(bruto.falhas));
+    assert.ok(bruto.avisos.some((a) => /salto de imagem em 2,50 s dentro do clipe 2 \(C3033\.MP4\)/.test(a)), JSON.stringify(bruto.avisos));
+    // Contraprova: a troca de plano dentro de um intermediário (o arquivo já traz outro trecho) continua reprovando.
+    const inter = await corteEmb(corte, proj('/nao-existe/C3033_cam9x16_v7.mov'));
+    assert.equal(inter.falhas.length, 1, JSON.stringify(inter.falhas));
+    assert.match(inter.falhas[0]!.onde!, /^2,50 s \(clipe 2, C3033_cam9x16_v7\.mov\)/);
+  });
 });
