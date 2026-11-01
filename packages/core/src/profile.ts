@@ -9,7 +9,7 @@
 
 import type { CaptionSettings } from './text.ts';
 import type { ColorGrade } from './color.ts';
-import type { Timeline } from './types.ts';
+import type { MediaAsset, Timeline } from './types.ts';
 import { clipDuration, FLASH_FRAMES, resolveOverlay, timelineDuration } from './timeline.ts';
 
 export type Evidence = 'MEDIDO' | 'DERIVADO' | 'PREFERENCIA' | 'OFICIO' | 'HIPOTESE' | 'PADRAO';
@@ -123,7 +123,7 @@ export interface ClientProfile {
     ajustes?: CaptionSettings;
   };
   trilha: { lufsSobVoz: number; fadeIn: number; fadeOut: number; ducking: boolean; gainDb?: number };
-  cor: { input?: string; lut?: string; grade?: ColorGrade };
+  cor: { input?: string; lut?: string; grade?: ColorGrade; padrao?: PadraoCor };
   broll: {
     maxRepeticao: number;
     /** Cobertura cobre a frase inteira, do corte ao fim dela. */
@@ -140,6 +140,26 @@ export interface ClientProfile {
    */
   glossario?: string[];
   evidencia: Partial<Record<string, Evidence>>;
+}
+
+/**
+ * Padrão de cor do cliente (BL-0161): a grade que todo projeto novo do cliente recebe nos clipes da fala, como grade de
+ * clipe (por cima da conversão LOG do arquivo), e até PADRAO_COR_STILLS_MAX stills de referência, guardados na pasta do
+ * perfil (`stills` são os nomes dos arquivos lá).
+ */
+export interface PadraoCor {
+  grade: ColorGrade;
+  stills: string[];
+  salvoEm: string;
+  /** Projeto de onde a grade foi salva. */
+  origem?: { projectId: string; projectName: string };
+}
+export const PADRAO_COR_STILLS_MAX = 3;
+
+/** Clipes da faixa principal que recebem o padrão de cor: os de arquivo de fala, ainda sem grade de clipe. */
+export function clipesParaPadraoCor(tl: Timeline, assets: Pick<MediaAsset, 'id' | 'role'>[]): string[] {
+  const fala = new Set(assets.filter((a) => a.role === 'fala').map((a) => a.id));
+  return tl.main.filter((c) => fala.has(c.assetId) && !c.grade).map((c) => c.id);
 }
 
 export const DEFAULT_PROFILE: Omit<ClientProfile, 'id' | 'nome' | 'atualizadoEm'> = {
@@ -409,7 +429,9 @@ export function profileFromTimeline(tl: Timeline, base: ClientProfile, info: { i
   const caps = tl.captions;
   const grade = tl.main[0] ? tl.grades?.[tl.main[0].assetId] : undefined;
 
-  const p: Partial<ClientProfile> = { ...base, id: info.id, nome: info.nome, cliente: info.cliente, formatoPeca: info.formatoPeca, origem: info.origem, fonte: undefined, padraoCasa: false, validado: true, nota: undefined };
+  // O padrão de cor da base (BL-0161) é do cliente da base: não passa para outro perfil (os stills estão na pasta dela).
+  const { padrao: _padraoDaBase, ...corBase } = base.cor;
+  const p: Partial<ClientProfile> = { ...base, cor: corBase, id: info.id, nome: info.nome, cliente: info.cliente, formatoPeca: info.formatoPeca, origem: info.origem, fonte: undefined, padraoCasa: false, validado: true, nota: undefined };
   p.formato = { width: tl.width, height: tl.height, fps: tl.fps };
   M('formato');
   if (total > 5) {
@@ -449,7 +471,7 @@ export function profileFromTimeline(tl: Timeline, base: ClientProfile, info: { i
     M('trilha.lufsSobVoz');
   }
   if (grade) {
-    p.cor = { ...base.cor, input: grade.input, grade: { ...grade } };
+    p.cor = { ...corBase, input: grade.input, grade: { ...grade } };
     M('cor.input');
   }
   if (brolls.length) {

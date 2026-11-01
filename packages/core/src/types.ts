@@ -93,6 +93,10 @@ export interface Clip {
    * dela, no espaço de exibição Rec.709, sem conversão de entrada própria (`input` sempre 'rec709'). Ver `buildLut`.
    */
   grade?: import('./color.ts').ColorGrade;
+  /**
+   * A `grade` veio do padrão de cor do cliente (BL-0161): id do perfil. Some quando a grade do clipe é trocada à mão.
+   */
+  gradeHerdada?: string;
 }
 
 export interface FramingRamp {
@@ -533,7 +537,7 @@ export type TimelineOp =
   | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
   /** Grade por clipe sobre a do arquivo (BL-0159 C3), em um ou vários clipes (colar, "todos desta câmera"); null tira. */
-  | { type: 'set_clip_grade'; clipIds: string[]; grade: import('./color.ts').ColorGrade | null }
+  | { type: 'set_clip_grade'; clipIds: string[]; grade: import('./color.ts').ColorGrade | null; herdadaDe?: string }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
   | { type: 'set_motion_ref'; refId: string | null }

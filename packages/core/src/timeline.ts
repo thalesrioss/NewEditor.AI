@@ -475,6 +475,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
 
     case 'set_clip_grade': {
       // Grade do clipe sobre a do arquivo (BL-0159 C3): neutra ou null tira; vários clipes numa op = um passo no desfazer.
+      // `herdadaDe` (BL-0161) marca a grade como vinda do padrão de cor do perfil; sem ele, a marca sai.
       const ids = new Set(op.clipIds);
       if (!ids.size) throw new OpError('set_clip_grade: nenhum clipe');
       for (const id of ids) if (!t.main.some((c) => c.id === id)) throw new OpError(`set_clip_grade: clipe ${id} não existe`);
@@ -483,8 +484,8 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
         ...t,
         main: t.main.map((c) => {
           if (!ids.has(c.id)) return c;
-          const { grade: _drop, ...rest } = c;
-          return g && !isNeutral(g) ? { ...rest, grade: g } : rest;
+          const { grade: _drop, gradeHerdada: _h, ...rest } = c;
+          return g && !isNeutral(g) ? { ...rest, grade: g, ...(op.herdadaDe ? { gradeHerdada: op.herdadaDe } : {}) } : rest;
         }),
       };
     }
