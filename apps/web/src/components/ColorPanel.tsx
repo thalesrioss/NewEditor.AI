@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
+import { BookmarkPlus, ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
 import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
 import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor, type CopiaCor } from '../lib/cor-clipe.ts';
+import { scopeFrame } from '../lib/scopeSource.ts';
 import { useEditor } from '../lib/store.ts';
 import { Scopes } from './Scopes.tsx';
 import { Button, RangeField } from './ui.tsx';
@@ -90,7 +91,7 @@ export function ColorPanel() {
       </div>
       {doClipe && (
         <p className="text-ui-xs leading-snug text-ink-400">
-          Clipe {project.timeline.main.indexOf(clip!) + 1} ({nomeDe(clip!.cam ?? clip!.assetId)}): por cima da grade do arquivo, que já faz a conversão da câmera.{clip!.grade ? '' : ' Sem grade própria.'}
+          Clipe {project.timeline.main.indexOf(clip!) + 1} ({nomeDe(clip!.cam ?? clip!.assetId)}): por cima da grade do arquivo, que já faz a conversão da câmera.{clip!.grade ? (clip!.gradeHerdada ? ' Grade herdada do padrão de cor do cliente.' : '') : ' Sem grade própria.'}
         </p>
       )}
       <div className="flex flex-wrap gap-1.5">
@@ -158,8 +159,55 @@ export function ColorPanel() {
           <RotateCcw size={13} /> Zerar
         </button>
       </div>
+      <PadraoCliente projectId={project.id} g={g} />
       <p className="text-ui-xs leading-snug text-ink-400">Ordem da cadeia: conversão da câmera (LOG → Rec.709), luz e cor, e só então o look. É assim que o look do cliente cai igual em qualquer bruto. O export usa exatamente o mesmo LUT.</p>
     </div>
+  );
+}
+
+/** O quadro do player agora (já com a grade), sem o letterbox, em JPEG de até 1280 px: o still de referência do padrão. */
+function quadroAtual(): string | null {
+  const f = scopeFrame();
+  if (!f) return null;
+  const r = f.rect ?? { x: 0, y: 0, w: f.canvas.width, h: f.canvas.height };
+  const k = Math.min(1, 1280 / Math.max(r.w, r.h));
+  const cv = document.createElement('canvas');
+  [cv.width, cv.height] = [Math.round(r.w * k), Math.round(r.h * k)];
+  cv.getContext('2d')!.drawImage(f.canvas, r.x, r.y, r.w, r.h, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.85);
+}
+
+/**
+ * "Salvar como padrão do cliente" (BL-0161): a grade mostrada vai para o perfil do projeto (por cima da conversão da
+ * câmera, sem a entrada) e, se pedido, o quadro atual como still de referência (até 3 no perfil).
+ */
+function PadraoCliente({ projectId, g }: { projectId: string; g: ColorGrade }) {
+  const [comStill, setComStill] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
+  const salvar = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const still = comStill ? quadroAtual() : null;
+      const r = await api.salvarPadraoCor(projectId, g, still ? [still] : undefined);
+      setMsg({ ok: true, texto: `Padrão de cor de ${r.nome} salvo${r.padrao.stills.length ? ` (${r.padrao.stills.length} de 3 stills)` : ''}. Projeto novo do cliente nasce com ele nos clipes da fala.` });
+    } catch (e) {
+      setMsg({ ok: false, texto: (e as Error).message });
+    }
+    setBusy(false);
+  };
+  return (
+    <section className="space-y-2 border-t border-ink-750 pt-3">
+      <Button size="sm" variant="secondary" className="w-full" icon={<BookmarkPlus size={12} />} disabled={busy} onClick={salvar} title="A grade mostrada vira o padrão de cor do perfil deste projeto">
+        {busy ? 'Salvando…' : 'Salvar como padrão do cliente'}
+      </Button>
+      <label className="flex items-center gap-1.5 text-ui-2xs text-ink-400">
+        <input type="checkbox" checked={comStill} onChange={(e) => setComStill(e.target.checked)} />
+        Guardar o quadro atual como still de referência (até 3)
+      </label>
+      {msg && <p className={`text-ui-xs leading-snug ${msg.ok ? 'text-emerald-300/90' : 'text-rose-300'}`}>{msg.texto}</p>}
+    </section>
   );
 }
 

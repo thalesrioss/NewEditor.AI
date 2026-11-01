@@ -1,4 +1,4 @@
-import type { AppNotification, CaptionSettings, CerebroGraph, CerebroNote, ClientProfile, FormatoPeca, MediaAsset, Project, ProjectComment, ProjectStatus, ProjectTask, QcReport, StepId, Timeline, TimelineOp } from '@neweditor/core';
+import type { AppNotification, CaptionSettings, CerebroGraph, CerebroNote, ClientProfile, ColorGrade, FormatoPeca, MediaAsset, PadraoCor, Project, ProjectComment, ProjectStatus, ProjectTask, QcReport, StepId, Timeline, TimelineOp } from '@neweditor/core';
 
 async function req<T>(method: string, url: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
   const res = await fetch(url, {
@@ -116,6 +116,9 @@ export const api = {
   musicAudioUrl: (path: string) => `/api/library/music/audio?path=${encodeURIComponent(path)}`,
   useMusic: (id: string, path: string) => req<{ queued: boolean }>('POST', `/api/projects/${id}/music`, { path }),
   colorAuto: (id: string, assetId: string) => req<{ why: string }>('POST', `/api/projects/${id}/assets/${assetId}/color-auto`),
+  /** Padrão de cor do cliente (BL-0161): grade + até 3 stills (data URL) no perfil do projeto. */
+  padraoCor: (id: string) => req<{ perfil: string; nome: string; padrao: PadraoCor | null }>('GET', `/api/projects/${id}/padrao-cor`),
+  salvarPadraoCor: (id: string, grade: ColorGrade, stills?: string[]) => req<{ perfil: string; nome: string; padrao: PadraoCor }>('POST', `/api/projects/${id}/padrao-cor`, { grade, stills }),
   letteringAuto: (id: string, quantidade?: 'pouco' | 'medio' | 'muito') => req<{ queued: boolean }>('POST', `/api/projects/${id}/lettering-auto`, { quantidade }),
   letteringRef: (id: string, refId: string) => req<{ restyled: number }>('POST', `/api/projects/${id}/lettering-ref`, { refId }),
   importLettering: (path?: string) => req<ImportStatus>('POST', '/api/lettering/refs/import', { path }),
