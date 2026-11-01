@@ -5,7 +5,8 @@
  *  1. perfil de entrega (ffprobe): h264, yuv420p, faixa tv, bt709 nos 3 campos, fps nominal CFR, AAC 48 kHz;
  *  2. níveis: Y fora de 16–235 em mais de 0,5% dos pixels (código armazenado, ~1 quadro/s);
  *  3. saturação: SATAVG do centro do quadro abaixo de 0,7× a assinatura dos aprovados do cliente;
- *  4. imagem parada sob fala: freeze ≥ 0,15 s ou quadros repetidos em cadência (câmera lenta) com fala;
+ *  4. imagem parada sob fala: freeze ≥ 0,15 s ou quadros repetidos em cadência (câmera lenta) com fala, no plano do
+ *     falante (B-roll de terceiros e motion/gráfico com alfa opaco no quadro todo por cima não contam);
  *  5. com o projeto: escala efetiva > 1,25 (bruto nativo abaixo da entrega sem zoom nem recorte: aviso até 1,5×), velocidade ≠ 1 e congelamento sob fala, boca de outro momento
  *     (cobertura do mesmo falante fora do instante da voz, ou cobertura embutida no arquivo) e 2ª câmera sem
  *     sincronia medida.
@@ -60,6 +61,8 @@ export const LIMITES = {
   escalaNativa: 1.5,
   /** Quadros repetidos isolados em 1 s que fazem a cadência de câmera lenta. */
   cadencia: 4,
+  /** Fração do quadro com alfa opaco a partir da qual um motion/gráfico é tela cheia (o falante não aparece; CH-0048). */
+  telaCheia: 0.98,
 };
 
 export interface Trecho {
@@ -626,6 +629,63 @@ function cobertosPorOutro(project: Pick<Project, 'assets' | 'timeline'>): Trecho
   return out;
 }
 
+/**
+ * Fração do quadro de entrega que a camada com alfa cobre por inteiro (alfa ≥ 250), quadro a quadro, a partir de
+ * `srcIn` por `dur` s da fonte. Mesma geometria do render para camada com alfa (`overlayFit`: encaixa sem cortar,
+ * resto transparente), numa miniatura.
+ */
+export async function coberturaAlfa(file: string, kind: 'video' | 'image', srcIn: number, dur: number, W: number, H: number): Promise<number[]> {
+  const w = 64;
+  const h = Math.max(2, Math.round((w * H) / W / 2) * 2);
+  const geo = `alphaextract,scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=area,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,format=gray`;
+  const entrada = kind === 'image' ? ['-i', file, '-frames:v', '1'] : ['-ss', srcIn.toFixed(4), '-i', file, '-t', dur.toFixed(4)];
+  const raw = await run('ffmpeg', ['-v', 'error', ...entrada, '-an', '-vf', geo, '-f', 'rawvideo', '-pix_fmt', 'gray', '-']);
+  const n = w * h;
+  const out: number[] = [];
+  for (let i = 0; i + n <= raw.length; i += n) {
+    let op = 0;
+    for (let k = i; k < i + n; k++) if (raw[k]! >= 250) op++;
+    out.push(op / n);
+  }
+  return out;
+}
+
+/**
+ * Freeze sob motion/gráfico com alfa que cobre o quadro inteiro (cartela de fotos, card, relógio em tela cheia): o que
+ * parou é a cartela, o falante está fora do quadro (CH-0048). Mede o alfa do arquivo da camada no trecho do freeze;
+ * lettering ou faixa com fundo transparente deixa o falante à vista e o freeze segue valendo.
+ */
+export async function freezesSobTelaCheia(project: Pick<Project, 'assets' | 'timeline'>, freezes: Trecho[]): Promise<{ trechos: Trecho[]; avisos: string[] }> {
+  const tl = normalizeTimeline(project.timeline);
+  const assets = new Map(project.assets.map((a) => [a.id, a]));
+  const quadro = 1 / (tl.fps || 29.97);
+  const falante = new Set(tl.main.flatMap((c) => [c.assetId, ...(c.cam ? [c.cam] : [])]));
+  const sony = new Set([...falante].map((id) => clipeSony(assets.get(id)?.path ?? '')).filter(Boolean));
+  const trechos: Trecho[] = [];
+  const avisos: string[] = [];
+  for (const o of tl.overlays) {
+    if ((o.role !== 'broll' && o.role !== 'motion') || !overlayActive(tl, o) || o.source.type !== 'media') continue;
+    const a = assets.get(o.source.assetId);
+    if (!a?.alpha || (a.kind !== 'video' && a.kind !== 'image') || falante.has(a.id) || a.role === 'cam' || sony.has(clipeSony(a.path))) continue;
+    const pos = resolveOverlay(tl, o);
+    if (!pos) continue;
+    for (const f of freezes) {
+      const ini = Math.max(f.start, pos.start);
+      const fim = Math.min(f.end, pos.end);
+      if (fim - ini < quadro) continue;
+      const srcA = overlaySourceTime(o, ini - pos.start);
+      const srcB = overlaySourceTime(o, fim - pos.start);
+      const cob = await coberturaAlfa(a.path, a.kind, srcA, Math.max(srcB - srcA, quadro), tl.width, tl.height).catch(() => null);
+      if (!cob?.length) {
+        avisos.push(`alfa de ${o.id} (${path.basename(a.path)}) não legível: o freeze em ${trecho(ini, fim)} foi conferido como imagem do falante`);
+        continue;
+      }
+      if (Math.min(...cob) >= LIMITES.telaCheia) trechos.push({ start: ini, end: fim });
+    }
+  }
+  return { trechos, avisos };
+}
+
 /** Trechos da peça cuja imagem vem de fonte com fps diferente do da timeline (> 1%). */
 function fpsConvertidos(project: Pick<Project, 'assets' | 'timeline'>): Trecho[] {
   const tl = normalizeTimeline(project.timeline);
@@ -658,7 +718,15 @@ export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise
   // câmera lenta. Esses clipes ficam fora da regra de cadência (o freeze continua valendo).
   const conversao = opts.project ? fpsConvertidos(opts.project) : [];
   const lentas = camaraLenta(diffs, fpsArq).filter((l) => !conversao.some((c) => overlap(c, l) >= (l.end - l.start) * 0.5));
-  achados.push(...achadosMovimento(freezes, lentas, fala, opts.project ? cobertosPorOutro(opts.project) : []));
+  const fora = opts.project ? cobertosPorOutro(opts.project) : [];
+  if (opts.project) {
+    // Motion/gráfico com alfa em tela cheia por cima do freeze: a imagem parada é a cartela, não o falante (CH-0048).
+    const tc = await freezesSobTelaCheia(opts.project, freezes.filter((f) => f.end - f.start >= LIMITES.freeze - 1e-3));
+    fora.push(...tc.trechos);
+    avisos.push(...tc.avisos);
+    if (tc.trechos.length) avisos.push(`${tc.trechos.length} imagem(ns) parada(s) sob motion/gráfico em tela cheia (${tc.trechos.map((t) => trecho(t.start, t.end)).join(', ')}): é a cartela, não o falante; não reprova`);
+  }
+  achados.push(...achadosMovimento(freezes, lentas, fala, fora));
   if (opts.project) {
     const r = achadosProjeto(opts.project, { fala, cortes: cortesDe(diffs, fpsArq), duracao: perfil.duration });
     achados.push(...r.achados);
