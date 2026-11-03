@@ -137,6 +137,11 @@ describe('perfil de captura (BL-0175 F1)', () => {
     const m = await managedGrades(p);
     assert.deepEqual([m.grades.s?.input, m.grades.h?.input, m.grades.l?.input, m.grades.b?.input, m.grades.a, m.grades.n], ['slog3', 'hlg', 'applelog', 'bmdfilm5', undefined, undefined]);
     const nota = m.notes.find((n) => n.startsWith('perfil de captura:')) ?? '';
+    const { captureReport } = await import('./color-source.ts');
+    const rel = await captureReport(p);
+    assert.equal(rel.arquivos.length, 6);
+    assert.equal(rel.desconhecidas, 1, 'só o arquivo sem metadado');
+    assert.equal(rel.tabela, CAPTURE_TABLE_VERSION);
     for (const re of [/Câmera Sony ZV-E10, curva S-Log3\/S-Gamut3.Cine, conversão embutida/, /Câmera Apple iPhone 15 Pro, curva HLG/, /curva Apple Log/, /curva Blackmagic Film Gen5/, /Câmera samsung SM-S911B, curva Rec.709 \(SDR\), conversão nenhuma/, /curva desconhecida/])
       assert.match(nota, re);
   });
@@ -167,6 +172,30 @@ describe('perfil de captura (BL-0175 F1)', () => {
     assert.equal(classifyCapture({ ext: '.mov', probe: probe({ tags: { 'com.blackmagic-design.camera.gamma': 'Blackmagic Design Film', 'com.blackmagic-design.camera.colorscience': 'Gen 4' } }) }).fonte, 'desconhecida');
     // Tabela: toda linha aponta para uma entrada que o core converte.
     for (const r of CAPTURE_TABLE) assert.ok(buildLut({ ...NEUTRAL_GRADE, input: r.input }, 3).every(Number.isFinite), r.curva);
+  });
+
+  test('ingest: grava o perfil no asset, converte sem pergunta e o projeto mostra a linha; BRAW recusado com mensagem clara', { timeout: 120_000 }, async () => {
+    const { store } = await import('./store.ts');
+    await store.load();
+    const { ingest } = await import('./ingest.ts');
+    const linhas: string[] = [];
+    const orig = store.log.bind(store);
+    store.log = (id, by, text, sug) => (linhas.push(text), orig(id, by, text, sug));
+    try {
+      const pid = (await store.create('BL-0175 perfil de captura', '')).id;
+      const h = await ingest(pid, F.iphoneHlg, 'broll');
+      const n = await ingest(pid, F.nada, 'broll');
+      const p = store.get(pid);
+      assert.deepEqual([p.assets.find((x) => x.id === h.id)?.color?.curva, p.timeline.grades?.[h.id]?.input], ['hlg', 'hlg']);
+      assert.deepEqual([p.assets.find((x) => x.id === n.id)?.color?.fonte, p.timeline.grades?.[n.id]], ['desconhecida', undefined]);
+      assert.ok(linhas.some((l) => /^Perfil de captura de IMG_0001\.MOV: Câmera Apple iPhone 15 Pro, curva HLG \(BT\.2100\), conversão da casa/.test(l)), linhas.join('\n'));
+      assert.ok(linhas.some((l) => /^Perfil de captura de sem_metadado\.mp4: Câmera não identificada, curva desconhecida/.test(l)), linhas.join('\n'));
+      const braw = f('A003_C003.braw');
+      fs.writeFileSync(braw, 'não é vídeo');
+      await assert.rejects(ingest(pid, braw), /exporte em ProRes da câmera/);
+    } finally {
+      store.log = orig;
+    }
   });
 
   test('não regressão: Sony S-Log3 sai igual ao de antes (mesmos campos, mesma grade, mesma LUT)', async () => {

@@ -10,7 +10,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { BUILTIN_INPUT, captureLine, manageGrade, gradeWasForced, type ColorGrade, type InputTransform, type MediaAsset, type Project, type SourceColor } from '@neweditor/core';
+import { BUILTIN_INPUT, CAPTURE_TABLE_VERSION, captureLine, manageGrade, gradeWasForced, type ColorGrade, type InputTransform, type MediaAsset, type Project, type SourceColor } from '@neweditor/core';
 import { detectCapture, knownCapture } from './capture-profile.ts';
 
 /** Lê o XML da Sony (NonRealTimeMeta): curva, gamut e modelo. Curva desconhecida = null (não adivinha). */
@@ -121,6 +121,18 @@ export async function projectColors(p: Pick<Project, 'assets'>): Promise<Map<str
     if (c && c.input !== 'rec709') out.set(a.id, { ...c, fonte: 'herdado', de });
   }
   return out;
+}
+
+/**
+ * Perfil de captura do projeto (BL-0175): uma linha "Câmera X, curva Y, conversão Z" por vídeo, para o projeto e para a
+ * análise inicial (00_ANALISE_INICIAL, gerada fora do app, lê `GET /api/projects/:id/perfil-captura`).
+ */
+export async function captureReport(p: Pick<Project, 'assets'>): Promise<{ tabela: string; desconhecidas: number; arquivos: { assetId: string; nome: string; linha: string; cor: SourceColor }[] }> {
+  const colors = await projectColors(p);
+  const arquivos = p.assets
+    .filter((a) => colors.has(a.id))
+    .map((a) => ({ assetId: a.id, nome: a.name || path.basename(a.path), linha: captureLine(colors.get(a.id)!), cor: colors.get(a.id)! }));
+  return { tabela: CAPTURE_TABLE_VERSION, desconhecidas: arquivos.filter((x) => x.cor.fonte === 'desconhecida' || x.cor.confianca === 'desconhecida').length, arquivos };
 }
 
 /**
