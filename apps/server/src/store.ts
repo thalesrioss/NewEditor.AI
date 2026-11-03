@@ -61,7 +61,9 @@ class Store {
   private activity = new Map<string, AgentActivity>();
   private saveTimers = new Map<string, NodeJS.Timeout>();
 
+  /** Pasta do projeto. Id que não é um nome de pasta simples (`../x`, `a/b`) é 404: nunca sai de DATA_DIR (BL-0177). */
   dir(id: string): string {
+    if (!id || id === '.' || id === '..' || /[\\/]/.test(id)) throw Object.assign(new Error(`projeto ${id} não existe`), { statusCode: 404 });
     return path.join(DATA_DIR, id);
   }
 

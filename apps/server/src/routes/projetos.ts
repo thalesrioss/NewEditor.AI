@@ -80,6 +80,7 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
   /** Importa por caminho local (validação local: o arquivo fica onde está). */
   app.post<{ Params: { id: string }; Body: { path: string; role?: 'fala' | 'broll' | 'motion' } }>('/api/projects/:id/assets', async (req) => {
     const { id } = req.params;
+    store.get(id); // projeto inexistente = 404 antes de enfileirar (BL-0177)
     const file = req.body.path?.trim();
     if (!file || !path.isAbsolute(file)) throw erro('informe o caminho absoluto do arquivo');
     // Papel opcional: o render do Motion Studio entra já como motion (BL-0100); sem papel, o ingest decide como antes.
@@ -92,6 +93,8 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
   /** Importa por upload (arrastar arquivo para o Editor Brain). */
   app.post<{ Params: { id: string } }>('/api/projects/:id/upload', async (req) => {
     const { id } = req.params;
+    // Confere o projeto antes de montar o caminho: id inexistente (ou `..%2F`) = 404 e nada gravado (BL-0177).
+    store.get(id);
     const part = await req.file();
     if (!part) throw erro('nenhum arquivo');
     const dir = path.join(store.dir(id), 'uploads');
