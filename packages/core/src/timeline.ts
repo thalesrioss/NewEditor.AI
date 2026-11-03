@@ -2,6 +2,7 @@ import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Cli
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { clipGradeOf, isNeutral, normalizeGradeLut } from './color.ts';
 import { DEFAULT_CAPTIONS } from './text.ts';
+import { motivoCaptions, motivoLettering, motivoMotion, normalizeCaptions, normalizeOverlayStyle } from './estilo-seguro.ts';
 
 /** Menor duração de clipe que mantemos; abaixo disso é resíduo de corte. */
 export const MIN_CLIP: Seconds = 0.04;
@@ -29,7 +30,9 @@ export function normalizeTimeline(t: Partial<Timeline> & Pick<Timeline, 'fps' | 
     removals: t.removals ?? [],
     pins: t.pins ?? [],
     tracks: t.tracks?.length ? t.tracks : DEFAULT_TRACKS,
-    overlays: t.overlays ?? [],
+    overlays: (t.overlays ?? []).map(normalizeOverlayStyle),
+    // Cor/enum inválido gravado antes do BL-0177 cai no padrão: o projeto carrega e nada cru vai para o CSS.
+    ...(t.captions ? { captions: normalizeCaptions(t.captions) } : {}),
   } as Timeline;
 }
 
@@ -136,6 +139,13 @@ function anchorValid(t: Timeline, assetId: string, at: Seconds): boolean {
 export function anchorAt(t: Timeline, time: Seconds): { assetId: string; at: Seconds } | null {
   const loc = locate(t, time);
   return loc ? { assetId: loc.clip.assetId, at: loc.sourceTime } : null;
+}
+
+/** Cor e enum do motion/lettering de um overlay (BL-0177): fora da regra = OpError, nada cru vai para o HTML. */
+function checkOverlayStyle(op: string, item: Pick<OverlayItem, 'source'>): void {
+  const s = item.source;
+  const ruim = s?.type === 'motion' ? motivoMotion(s.motion) : s?.type === 'lettering' ? motivoLettering(s.lettering) : undefined;
+  if (ruim) throw new OpError(`${op}: ${ruim}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +445,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       if (!track.roles.includes(op.item.role)) throw new OpError(`add_overlay: a trilha ${track.label} não aceita ${op.item.role}`);
       if (op.item.duration < MIN_CLIP) throw new OpError('add_overlay: duração curta demais');
       if (!anchorValid(t, op.item.anchor.assetId, op.item.anchor.at)) throw new OpError('add_overlay: o ponto de âncora não está na timeline');
+      checkOverlayStyle('add_overlay', op.item);
       const item: OverlayItem = { ...op.item, id: op.item.id ?? uid('ov'), by };
       return { ...t, overlays: [...t.overlays, item] };
     }
@@ -493,8 +504,10 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       // Troca o objeto inteiro, mas o que é obrigatório e faltou (JSON da API) vem do padrão: `{ font }` sozinho deixava
       // `position` indefinida e a legenda ia para o topo (BL-0100).
       const c = { ...op.captions };
+      const ruim = motivoCaptions(c);
+      if (ruim) throw new OpError(`set_captions: ${ruim}`);
       for (const k of ['enabled', 'uppercase', 'highlight'] as const) if (typeof c[k] !== 'boolean') c[k] = DEFAULT_CAPTIONS[k];
-      if (c.style !== 'reels' && c.style !== 'frase') c.style = DEFAULT_CAPTIONS.style;
+      if (c.style === undefined) c.style = DEFAULT_CAPTIONS.style;
       if (typeof c.position !== 'number' || !Number.isFinite(c.position)) c.position = DEFAULT_CAPTIONS.position;
       return { ...t, captions: c };
     }
@@ -537,9 +550,11 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id && o.source.type === 'text' ? { ...o, source: { type: 'text' as const, text: op.text } } : o)) };
     case 'set_overlay_motion':
       if (!t.overlays.some((o) => o.id === op.id && o.source.type === 'motion')) throw new OpError('motion não encontrado');
+      checkOverlayStyle('set_overlay_motion', { source: { type: 'motion', motion: op.motion } });
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id ? { ...o, by: by === 'human' ? by : o.by, source: { type: 'motion' as const, motion: op.motion } } : o)) };
     case 'set_overlay_lettering':
       if (!t.overlays.some((o) => o.id === op.id && o.role === 'lettering')) throw new OpError('lettering não encontrado');
+      checkOverlayStyle('set_overlay_lettering', { source: { type: 'lettering', lettering: op.lettering } });
       return { ...t, overlays: t.overlays.map((o) => (o.id === op.id ? { ...o, by: by === 'human' ? by : o.by, source: { type: 'lettering' as const, lettering: op.lettering } } : o)) };
     case 'set_overlay_sfx':
       if (!t.overlays.some((o) => o.id === op.id)) throw new OpError('overlay não encontrado');
