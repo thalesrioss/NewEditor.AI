@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Download, FolderOpen, X } from 'lucide-react';
-import { formatTime } from '@neweditor/core';
+import { formatTime, silencedAudioTracks } from '@neweditor/core';
 import { api } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { Button, IconButton } from './ui.tsx';
@@ -23,6 +23,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     api.entregaPresets().then((r) => (setPresets(r.presets), setPasta(r.pasta))).catch(() => undefined);
   }, []);
+  const calado = silencedAudioTracks(project.timeline);
   const block = project.qc?.issues.filter((i) => i.severidade === 'bloqueia') ?? [];
   const go = async () => {
     setBusy(true);
@@ -80,6 +81,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             {pasta}/{(project.client ?? 'sem-cliente').toLowerCase()}/…
           </span>
         </div>
+        {calado.length > 0 && (
+          <p role="alert" className="rounded-ui-md bg-amber-400/10 px-3 py-2 text-ui-xs text-amber-200">
+            Sai sem som no export: {calado.map((c) => (c.why === 'solo' ? `${c.trackId} (${c.soloIds.join(', ')} em solo)` : `${c.trackId} (muda)`)).join(' · ')}. Tire o solo ou o mudo no cabeçalho da trilha se não for de propósito.
+          </p>
+        )}
         {err && <p className="text-ui-xs text-rose-400">{err}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>

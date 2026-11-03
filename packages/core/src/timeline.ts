@@ -750,6 +750,29 @@ export function editorialWarnings(t: Timeline, assetName: (id: string) => string
     if (resolveOverlay(tl, o) === null) out.push({ level: 'aviso', message: 'Overlay órfão: o trecho de fala onde ele estava foi cortado', overlayIds: [o.id] });
     else if (o.role === 'broll' && o.duration < MIN_BROLL) out.push({ level: 'aviso', message: `B-roll de ${o.duration.toFixed(1)}s — abaixo de ${MIN_BROLL}s vira "pisca"`, overlayIds: [o.id] });
   }
+  for (const s of silencedAudioTracks(tl)) {
+    out.push({ level: 'aviso', message: `${s.trackId} sem som no export: ${s.why === 'solo' ? `${s.soloIds.join(', ')} em solo` : 'trilha muda'}`, overlayIds: [] });
+  }
+  return out;
+}
+
+/**
+ * Trilhas de som com conteúdo que o export vai calar, por mudo ou por solo de outra trilha (BL-0160): solo
+ * esquecido na A3 tira a voz da peça. A1 = fala (clipes); A2 = SFX (inclui os sintetizados dos motions); A3 = trilha.
+ */
+export function silencedAudioTracks(t: Timeline): { trackId: string; why: 'mudo' | 'solo'; soloIds: string[] }[] {
+  const soloIds = Object.entries(t.trackState ?? {}).filter(([id, s]) => isAudioTrack(id) && !!s?.solo).map(([id]) => id);
+  const ids = ['A1', ...(t.tracks ?? DEFAULT_TRACKS).filter((k) => k.kind === 'audio').map((k) => k.id)];
+  const out: { trackId: string; why: 'mudo' | 'solo'; soloIds: string[] }[] = [];
+  for (const id of [...new Set(ids)]) {
+    const has =
+      id === 'A1'
+        ? t.main.length > 0
+        : (t.overlays ?? []).some((o) => o.trackId === id || (id === MOTION_SFX_TRACK && (o.role === 'motion' || o.role === 'lettering')));
+    if (!has) continue;
+    if (t.trackState?.[id]?.muted) out.push({ trackId: id, why: 'mudo', soloIds });
+    else if (soloMuted(t, id)) out.push({ trackId: id, why: 'solo', soloIds });
+  }
   return out;
 }
 

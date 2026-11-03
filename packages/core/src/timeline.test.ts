@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, flashShutterCues, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
+import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, flashShutterCues, locate, normalizeTimeline, overlayActive, resolveOverlay, silencedAudioTracks, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
 import { DEFAULT_TRACKS, TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN, type Timeline } from './types.ts';
 import { buildCues, DEFAULT_CAPTIONS } from './text.ts';
 import { gradePixel, NEUTRAL_GRADE } from './color.ts';
@@ -280,6 +280,18 @@ test('limpeza da voz: liga com a intensidade, limita a 0–1 e 0 desliga (sai do
   assert.equal(applyOp(on, { type: 'set_voice_denoise', amount: 3 }, 'human').voiceDenoise, 1);
   const off = applyOp(on, { type: 'set_voice_denoise', amount: 0 }, 'human');
   assert.equal('voiceDenoise' in off, false);
+});
+
+test('solo esquecido na A3 ou trilha muda vira aviso de export sem som (BL-0160)', () => {
+  let t = applyOp(base(), { type: 'add_overlay', item: { trackId: 'A3', role: 'music', anchor: { assetId: 'a', at: 0 }, duration: 10, source: { type: 'media', assetId: 'm', in: 0 } } }, 'human');
+  assert.deepEqual(silencedAudioTracks(t), []);
+  assert.equal(editorialWarnings(t).some((w) => w.message.includes('sem som')), false);
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { solo: true } }, 'human');
+  // A1 (fala) cala por causa do solo; A2 vazia não entra
+  assert.deepEqual(silencedAudioTracks(t), [{ trackId: 'A1', why: 'solo', soloIds: ['A3'] }]);
+  assert.ok(editorialWarnings(t).some((w) => w.level === 'aviso' && w.message === 'A1 sem som no export: A3 em solo'));
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { solo: false, muted: true } }, 'human');
+  assert.deepEqual(silencedAudioTracks(t).map((s) => [s.trackId, s.why]), [['A3', 'mudo']]);
 });
 
 test('estado da trilha: ocultar/mudo valem para o overlay certo; false limpa e some do JSON', () => {
