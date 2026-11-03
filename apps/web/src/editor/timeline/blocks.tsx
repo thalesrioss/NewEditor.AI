@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftToLine, ArrowRightToLine, Eye, EyeOff, Headphones, Lock, MessageSquarePlus, Scissors, SkipBack, Trash2, Unlock, Volume2, VolumeX, Zap } from 'lucide-react';
+import { ArrowLeftToLine, ArrowRightToLine, Eye, EyeOff, Headphones, Lock, MessageSquarePlus, Palette, Scissors, SkipBack, Trash2, Unlock, Volume2, VolumeX, Zap } from 'lucide-react';
 import { anchorAt, clipSpeed, clipStarts, cutEndAfter, formatTime, letteringCues, MOTION_TEMPLATES, motionCues, overlaySourceTime, resolveOverlay, soloMuted, timelineDuration, trackFlag, TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN, type Clip, type MediaAsset, type OverlayItem, type OverlayRole, type Track, DEFAULT_CAPTIONS } from '@neweditor/core';
 import { api, mediaUrl } from '../../lib/api.ts';
 import { CaptionInput, captionActions, cueText, useCaptionCues } from '../../lib/captions.tsx';
@@ -317,6 +317,11 @@ export function ClipBlock({ clip, index, x, w, h, pps, selected, asset }: { clip
         {clip.speed && Math.abs(clip.speed - 1) > 0.01 && <span className="rounded bg-black/70 px-1 text-ui-xs font-semibold text-white">{clip.speed}×</span>}
         {clip.freeze ? <span className="rounded bg-black/70 px-1 text-ui-xs text-white">❄ {clip.freeze.toFixed(1)}s</span> : null}
         {clip.flash && <span className="rounded bg-amber-300/90 px-1 text-ui-xs font-bold text-ink-950">⚡</span>}
+        {clip.gradeHerdada && clip.grade && (
+          <span className="flex items-center rounded bg-violet-300/90 px-1 text-ink-950" title={`Cor herdada do padrão do cliente (perfil ${clip.gradeHerdada}). Mexer na cor do clipe tira a marca.`}>
+            <Palette size={10} />
+          </span>
+        )}
         {clip.zoom && clip.zoom > 1 && (
           <span className="rounded bg-cyan-nc/90 px-1 text-ui-xs font-bold text-ink-950">
             {clip.zoom}×{clip.zoomTo ? `→${clip.zoomTo}×` : ''}

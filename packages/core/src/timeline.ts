@@ -237,7 +237,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'restore': {
       const r = t.removals.find((x) => x.id === op.removalId);
       if (!r) throw new OpError(`restore: trecho ${op.removalId} não existe`);
-      const restored: Clip = { id: uid('clip'), assetId: r.assetId, in: r.in, out: r.out, by, reason: `restaurado: ${r.reason}` };
+      // Trecho de volta ao lado de um clipe com o padrão de cor do cliente (BL-0161): volta com a mesma grade herdada.
+      const vizinho = t.main.find((c) => c.assetId === r.assetId && c.gradeHerdada && c.grade && (Math.abs(c.out - r.in) < 1e-3 || Math.abs(c.in - r.out) < 1e-3));
+      const restored: Clip = { id: uid('clip'), assetId: r.assetId, in: r.in, out: r.out, by, reason: `restaurado: ${r.reason}`, ...(vizinho ? { grade: vizinho.grade, gradeHerdada: vizinho.gradeHerdada } : {}) };
       // Insere na posição cronológica da fonte (antes do primeiro clipe do mesmo asset que começa depois dele).
       let idx = t.main.length;
       for (let i = 0; i < t.main.length; i++) {
@@ -702,7 +704,7 @@ export function coalesce(main: Clip[]): Clip[] {
   const out: Clip[] = [];
   for (const c of main) {
     const prev = out[out.length - 1];
-    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y && !a.framingTo && !b.framingTo;
+    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y && !a.framingTo && !b.framingTo && a.gradeHerdada === b.gradeHerdada && JSON.stringify(a.grade) === JSON.stringify(b.grade);
     if (prev && prev.assetId === c.assetId && Math.abs(prev.out - c.in) < 1e-3 && same(prev, c)) {
       out[out.length - 1] = { ...prev, out: c.out };
     } else out.push(c);

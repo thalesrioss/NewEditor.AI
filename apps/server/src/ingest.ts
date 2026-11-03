@@ -213,7 +213,16 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
   await Promise.all([video, audio]);
   store.log(projectId, 'agent', `${asset.name} pronto em ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 
-  // Primeira montagem = a fala inteira, para o humano já poder assistir; a 2ª bruta entra em seguida.
+  await entrarNaMontagemCrua(projectId, asset);
+  store.setActivity(projectId, { state: 'idle', message: 'Material pronto' });
+  return asset;
+}
+
+/**
+ * Primeira montagem = a fala inteira, para o humano já poder assistir; a 2ª bruta entra em seguida. A fala que entra
+ * recebe o padrão de cor do cliente do perfil do projeto, marcado como herdado (BL-0161).
+ */
+export async function entrarNaMontagemCrua(projectId: string, asset: MediaAsset): Promise<void> {
   const p = store.get(projectId);
   const cur = p.assets.find((x) => x.id === asset.id) ?? asset;
   if (cur.role === 'fala' && !p.timeline.main.some((c) => c.assetId === asset.id) && (p.timeline.main.length === 0 || isRaw(p.timeline))) {
@@ -222,10 +231,8 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
       by: 'system',
       op: { type: 'set_main', clips: [...p.timeline.main, { id: uid('clip'), assetId: asset.id, in: 0, out: asset.duration, by: 'system', reason: 'material bruto' }], removals: [] },
     });
-    await herdarPadraoCor(projectId); // padrão de cor do cliente na fala que entrou (BL-0161)
+    await herdarPadraoCor(projectId);
   }
-  store.setActivity(projectId, { state: 'idle', message: 'Material pronto' });
-  return asset;
 }
 
 /** Ao subir o servidor: completa papéis antigos e RETOMA toda importação que ficou pela metade. */

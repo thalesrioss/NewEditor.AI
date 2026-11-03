@@ -10,6 +10,7 @@ import { cineproCube } from '../cinepro.ts';
 import { estimateRemaining } from '../estimate.ts';
 import { ingest, rebuild, setRole } from '../ingest.ts';
 import { cancelJobsFor, enqueue } from '../jobs.ts';
+import { herdarPadraoCor } from '../padrao-cor.ts';
 import { houseProfile } from '../profiles.ts';
 import { runQc } from '../qc.ts';
 import { anotarOpHumana, canalDaTela, fecharSessaoHumana, registrarDaTela } from '../registro-tela.ts';
@@ -46,6 +47,7 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
   app.patch<{ Params: { id: string }; Body: { name?: string; brief?: string; status?: ProjectStatus; client?: string; dueAt?: string; profileId?: string | null } }>('/api/projects/:id', async (req) => {
     const { name, brief, status, client, dueAt, profileId } = req.body;
     const cur = store.get(req.params.id);
+    const perfilAntes = cur.profileId;
     // Portão de entrega: só vai para "Entregue" com o QC sem bloqueio (e o corte vira gabarito do benchmark).
     if (status === 'entregue' && cur.status !== 'entregue') {
       const qc = cur.qc?.fase ? cur.qc : await runQc(cur.id);
@@ -63,7 +65,13 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
       await fecharSessaoHumana(cur.id);
       void registrarDaTela(cur, canal, { tipo: aprovou ? 'aprovacao' : 'reprovacao', pedido: aprovou ? 'Aprovou a entrega (card para Entregue no Editor Brain)' : `Reprovou a versão: card de ${cur.status === 'editado' ? 'Editado' : 'Entregue'} de volta para Alteração`, antes: `status ${cur.status}`, depois: `status ${status}`, ref: `tela:${cur.id}:status:${status}:${cur.version}` });
     }
-    return store.update(req.params.id, patch);
+    const atualizado = store.update(req.params.id, patch);
+    // Escolheu (ou trocou) o perfil do cliente com a fala já na montagem: o padrão de cor dele entra agora (BL-0161).
+    if (profileId !== undefined && atualizado.profileId !== perfilAntes) {
+      await herdarPadraoCor(req.params.id);
+      return store.get(req.params.id);
+    }
+    return atualizado;
   });
   /** Apagar projeto (Kanban): cancela o que estiver na fila e move a pasta para data/_lixeira (reversível à mão). */
   app.delete<{ Params: { id: string } }>('/api/projects/:id', async (req) => {

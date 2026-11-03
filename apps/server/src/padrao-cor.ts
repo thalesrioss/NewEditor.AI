@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { clipesParaPadraoCor, clipGradeOf, isNeutral, PADRAO_COR_STILLS_MAX, PERSONALIZADO_ID, type ClientProfile, type ColorGrade, type PadraoCor, type Project } from '@neweditor/core';
+import { clipesHerdadosDeOutro, clipesParaPadraoCor, clipGradeOf, isNeutral, PADRAO_COR_STILLS_MAX, PERSONALIZADO_ID, type ClientProfile, type ColorGrade, type PadraoCor, type Project } from '@neweditor/core';
 import { getProfile, patchProfile, perfilGravadoDoProjeto, profileOf, PROFILES_DIR } from './profiles.ts';
 import { store } from './store.ts';
 
@@ -86,11 +86,16 @@ export const perfilDoProjetoParaCor = (p: Project): Promise<ClientProfile> => pe
  */
 export async function herdarPadraoCor(projectId: string): Promise<number> {
   const p = store.get(projectId);
-  if (p.profileId === PERSONALIZADO_ID) return 0;
-  const prof = await profileOf(p).catch(() => null);
+  const prof = p.profileId === PERSONALIZADO_ID ? null : await profileOf(p).catch(() => null);
   const padrao = prof?.cor.padrao;
-  if (!prof || !padrao || isNeutral(clipGradeOf(padrao.grade))) return 0;
-  const ids = clipesParaPadraoCor(p.timeline, p.assets);
+  if (!prof || !padrao || isNeutral(clipGradeOf(padrao.grade))) {
+    // O projeto trocou para um perfil sem padrão: a grade herdada do cliente anterior sai (a posta à mão fica).
+    const outros = clipesHerdadosDeOutro(p.timeline, prof?.id);
+    if (outros.length) store.apply(projectId, { by: 'system', op: { type: 'set_clip_grade', clipIds: outros, grade: null }, note: `Tirei a cor herdada do padrão de outro cliente de ${outros.length} clipe(s): ${prof ? `${prof.nome} não tem padrão de cor` : 'o perfil do projeto não guarda padrão de cor'}` });
+    return 0;
+  }
+  // Sem grade de clipe, ou herdada de outro perfil (o projeto trocou de cliente): recebe a deste.
+  const ids = clipesParaPadraoCor(p.timeline, p.assets, prof.id);
   if (!ids.length) return 0;
   store.apply(projectId, { by: 'system', op: { type: 'set_clip_grade', clipIds: ids, grade: padrao.grade, herdadaDe: prof.id }, note: `Cor do padrão de ${prof.nome} em ${ids.length} clipe(s) da fala, por cima da conversão da câmera` });
   return ids.length;

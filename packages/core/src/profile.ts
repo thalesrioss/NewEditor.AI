@@ -156,10 +156,18 @@ export interface PadraoCor {
 }
 export const PADRAO_COR_STILLS_MAX = 3;
 
-/** Clipes da faixa principal que recebem o padrão de cor: os de arquivo de fala, ainda sem grade de clipe. */
-export function clipesParaPadraoCor(tl: Timeline, assets: Pick<MediaAsset, 'id' | 'role'>[]): string[] {
+/**
+ * Clipes da faixa principal que recebem o padrão de cor: os de arquivo de fala ainda sem grade de clipe e, com
+ * `perfilId`, os que herdaram o padrão de OUTRO perfil (o projeto trocou de cliente). Grade posta à mão não entra.
+ */
+export function clipesParaPadraoCor(tl: Timeline, assets: Pick<MediaAsset, 'id' | 'role'>[], perfilId?: string): string[] {
   const fala = new Set(assets.filter((a) => a.role === 'fala').map((a) => a.id));
-  return tl.main.filter((c) => fala.has(c.assetId) && !c.grade).map((c) => c.id);
+  return tl.main.filter((c) => fala.has(c.assetId) && (!c.grade || (perfilId !== undefined && !!c.gradeHerdada && c.gradeHerdada !== perfilId))).map((c) => c.id);
+}
+
+/** Clipes com grade herdada de um perfil que não é `perfilId` (para tirar quando o perfil novo não tem padrão). */
+export function clipesHerdadosDeOutro(tl: Timeline, perfilId: string | undefined): string[] {
+  return tl.main.filter((c) => c.gradeHerdada && c.gradeHerdada !== perfilId).map((c) => c.id);
 }
 
 export const DEFAULT_PROFILE: Omit<ClientProfile, 'id' | 'nome' | 'atualizadoEm'> = {
