@@ -98,7 +98,19 @@ export async function patchProfile(id: string, patch: Partial<ClientProfile>): P
   for (const k of ['formato', 'peca', 'corte', 'zoom', 'lettering', 'motion', 'flash', 'sfx', 'legenda', 'trilha', 'cor', 'broll'] as const) {
     if (patch[k]) (merged as unknown as Record<string, unknown>)[k] = { ...(cur[k] as object), ...(patch[k] as object) };
   }
+  // O padrão de cor (BL-0161) só muda pelas rotas /padrao-cor: a tela de Perfis aberta antes manda o padrão velho junto.
+  merged.cor = { ...merged.cor, padrao: cur.cor.padrao };
+  if (!merged.cor.padrao) delete merged.cor.padrao;
   return save(merged);
+}
+
+/** Grava o padrão de cor do perfil (só pelas rotas /padrao-cor; `null` tira). */
+export async function gravarPadraoCor(id: string, padrao: ClientProfile['cor']['padrao'] | null): Promise<ClientProfile> {
+  const cur = await getProfile(id);
+  if (cur.id !== id) throw Object.assign(new Error('perfil não existe'), { statusCode: 404 });
+  const cor = { ...cur.cor, padrao: padrao ?? undefined };
+  if (!cor.padrao) delete cor.padrao;
+  return save({ ...cur, cor });
 }
 
 /**

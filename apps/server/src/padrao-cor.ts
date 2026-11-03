@@ -6,13 +6,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { clipesHerdadosDeOutro, clipesParaPadraoCor, clipGradeOf, isNeutral, PADRAO_COR_STILLS_MAX, PERSONALIZADO_ID, type ClientProfile, type ColorGrade, type PadraoCor, type Project } from '@neweditor/core';
-import { getProfile, patchProfile, perfilGravadoDoProjeto, profileOf, PROFILES_DIR } from './profiles.ts';
+import { getProfile, gravarPadraoCor, perfilGravadoDoProjeto, profileOf, PROFILES_DIR } from './profiles.ts';
 import { store } from './store.ts';
 
 const erro = (message: string, statusCode: number) => Object.assign(new Error(message), { statusCode });
 const STILL_MIME: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
 export const stillsDir = (profileId: string): string => path.join(PROFILES_DIR, profileId, 'stills');
+
+/** Nome de still que o servidor grava (`salvarPadraoCor`); qualquer outro (`..`, barra) nunca vira caminho. */
+export const nomeDeStill = (nome: string): boolean => /^still-\d+-\d+\.(jpg|png|webp)$/.test(nome);
 
 /** O perfil gravado com esse id (sem cair no padrão da casa). */
 async function perfil(id: string): Promise<ClientProfile> {
@@ -54,7 +57,7 @@ export async function salvarPadraoCor(profileId: string, body: { grade?: unknown
     gravados.push(nome);
   }
   const padrao: PadraoCor = { grade: clipGradeOf(g), stills: [...atuais, ...gravados], salvoEm: new Date().toISOString(), ...(origem ? { origem: { projectId: origem.id, projectName: origem.name } } : {}) };
-  await patchProfile(prof.id, { cor: { ...prof.cor, padrao } });
+  await gravarPadraoCor(prof.id, padrao);
   return padrao;
 }
 
@@ -62,17 +65,17 @@ export async function salvarPadraoCor(profileId: string, body: { grade?: unknown
 export async function apagarStill(profileId: string, nome: string): Promise<PadraoCor> {
   const prof = await perfil(profileId);
   const padrao = prof.cor.padrao;
-  if (!padrao?.stills.includes(nome)) throw erro('still não existe', 404);
+  if (!nomeDeStill(nome) || !padrao?.stills.includes(nome)) throw erro('still não existe', 404);
   await fs.rm(path.join(stillsDir(prof.id), nome), { force: true });
   const next = { ...padrao, stills: padrao.stills.filter((s) => s !== nome) };
-  await patchProfile(prof.id, { cor: { ...prof.cor, padrao: next } });
+  await gravarPadraoCor(prof.id, next);
   return next;
 }
 
 /** Caminho de um still do padrão (só os listados no perfil). */
 export async function stillFile(profileId: string, nome: string): Promise<string> {
   const padrao = await lerPadraoCor(profileId);
-  if (!padrao?.stills.includes(nome)) throw erro('still não existe', 404);
+  if (!nomeDeStill(nome) || !padrao?.stills.includes(nome)) throw erro('still não existe', 404);
   return path.join(stillsDir(profileId), nome);
 }
 

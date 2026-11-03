@@ -177,4 +177,45 @@ describe('padrão de cor do Equity: herança no projeto novo e gate (BL-0161)', 
     assert.ok(r.achados.some((x) => x.regra === 'saturacao'));
     assert.ok(!r.achados.some((x) => x.regra === 'padrao-cor'));
   });
+
+  test('gate: projeto do Equity que não herdou (cor à mão antes do padrão) fica no gate de antes, com aviso', { timeout: 120_000 }, async () => {
+    const { store } = await import('./store.ts');
+    const { assinaturaDoCliente, gateTecnico } = await import('./qc-gate.ts');
+    const { qcTecnico } = await import('./qc-tecnico.ts');
+    const id = await novoProjeto('Equity lote antigo');
+    await escolherPerfil(id, 'daniel');
+    await falaNaMontagem(id, entregaA);
+    const mao: ColorGrade = { ...NEUTRAL_GRADE, contrast: 0.05 };
+    store.apply(id, { by: 'human', op: { type: 'set_clip_grade', clipIds: store.get(id).timeline.main.map((c) => c.id), grade: mao } });
+    await escolherPerfil(id, 'equity');
+    assert.deepEqual(await herdados(id), ['-', '-', '-']);
+    const p = store.get(id);
+    const r = await gateTecnico(p, entregaA);
+    assert.ok(!r.achados.some((x) => x.regra === 'padrao-cor'), JSON.stringify(r.achados));
+    const antes = await qcTecnico(entregaA, { project: p, assinatura: await assinaturaDoCliente(p) });
+    assert.deepEqual(r.achados, antes.achados, 'mesmos achados do gate de antes');
+    assert.equal(r.aprovado, antes.aprovado);
+    assert.ok(r.avisos.some((x) => /padrão de cor de Equity salvo depois deste projeto/.test(x)), JSON.stringify(r.avisos));
+  });
+
+  test('PATCH do perfil não mexe no padrão de cor; still com nome fora do padrão (..) dá 404', async () => {
+    const { getProfile, gravarPadraoCor } = await import('./profiles.ts');
+    const antes = (await getProfile('equity')).cor.padrao!;
+    assert.equal(antes.stills.length, 1);
+    // A tela de Perfis aberta antes manda o perfil inteiro, com um padrão velho (e um nome de still forjado).
+    const velho = { grade: { ...NEUTRAL_GRADE, saturation: 0.5 }, stills: ['../../equity.json'], salvoEm: '2026-01-01T00:00:00.000Z' };
+    const r = await app.inject({ method: 'PATCH', url: '/api/perfis/equity', payload: { notas: ['tela velha'], cor: { input: 'rec709', padrao: velho } } });
+    assert.equal(r.statusCode, 200, r.body);
+    const depois = await getProfile('equity');
+    assert.deepEqual(depois.cor.padrao, antes, 'o padrão só muda pelas rotas /padrao-cor');
+    assert.equal(depois.cor.input, 'rec709', 'o resto de cor do PATCH vale');
+    // Mesmo que um nome forjado chegue ao perfil, ler ou apagar nunca sai da pasta dos stills.
+    await gravarPadraoCor('equity', { ...antes, stills: [...antes.stills, '../../equity.json'] });
+    const fora = encodeURIComponent('../../equity.json');
+    assert.equal((await app.inject({ method: 'GET', url: `/api/perfis/equity/padrao-cor/stills/${fora}` })).statusCode, 404);
+    assert.equal((await app.inject({ method: 'DELETE', url: `/api/perfis/equity/padrao-cor/stills/${fora}` })).statusCode, 404);
+    assert.ok(fs.existsSync(path.join(perfisDir, 'equity.json')));
+    assert.equal((await app.inject({ method: 'GET', url: `/api/perfis/equity/padrao-cor/stills/${antes.stills[0]}` })).statusCode, 200);
+    await gravarPadraoCor('equity', antes);
+  });
 });

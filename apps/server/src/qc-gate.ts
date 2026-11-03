@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Project } from '@neweditor/core';
 import { DATA_ROOT, ROOT } from './config.ts';
-import { stillsDir } from './padrao-cor.ts';
+import { nomeDeStill, stillsDir } from './padrao-cor.ts';
 import { profileOf } from './profiles.ts';
 import { qcTecnico, referenciaDosStills, tabelaQc, type Assinatura, type QcTecnico, type ReferenciaCor } from './qc-tecnico.ts';
 import { clienteDoProjeto } from './registro-thales.ts';
@@ -22,8 +22,11 @@ export async function padraoCorDoProjeto(p: Pick<Project, 'profileId' | 'timelin
   const prof = await profileOf(p as Project).catch(() => undefined);
   const padrao = prof?.cor.padrao;
   if (!prof || !padrao) return {};
+  // Só julga pelo padrão o projeto que o seguiu (≥1 clipe da fala herdou dele). Projeto feito antes do padrão, ou com a
+  // cor à mão, fica no gate de antes: salvar o padrão hoje não reprova o lote que já estava em andamento.
+  if (!p.timeline.main.some((c) => c.gradeHerdada === prof.id)) return { aviso: `padrão de cor de ${prof.nome} salvo depois deste projeto (nenhum clipe herdou): não conferido, saturação contra a assinatura` };
   if (!padrao.stills.length) return { aviso: `o padrão de cor de ${prof.nome} não tem still de referência: saturação contra a assinatura, luma não conferida` };
-  const files = padrao.stills.map((s) => path.join(stillsDir(prof.id), s));
+  const files = padrao.stills.filter(nomeDeStill).map((s) => path.join(stillsDir(prof.id), s));
   try {
     return { ref: await referenciaDosStills(files, `padrão de cor de ${prof.nome} (${files.length} still${files.length > 1 ? 's' : ''})`) };
   } catch (e) {
