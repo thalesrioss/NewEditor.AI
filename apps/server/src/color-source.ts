@@ -84,13 +84,35 @@ export const clipStem = (name: string | undefined): string | null => (name ? (/^
  * asset do projeto, ou o bruto na pasta das falas). A câmera derivada converte como o bruto e com a faixa do bruto
  * (o recorte em ProRes leva a faixa cheia do bruto para a legal, que a decodificação expande de volta ao código).
  */
-export async function projectColors(p: Pick<Project, 'assets'>): Promise<Map<string, SourceColor>> {
+export async function projectColors(p: Pick<Project, 'assets'>, novos?: ReadonlySet<string>): Promise<Map<string, SourceColor>> {
+  return (await projectColorsDetalhe(p, novos)).colors;
+}
+
+/**
+ * Asset ingerido COM o perfil de captura (BL-0175): tem `color.tabela`, ou está entrando agora (`novos`, no ingest).
+ * Asset de antes não tem `color` (ou tem a do XML, sem tabela) e segue o caminho de antes: só XML e herdado convertem.
+ */
+const comPerfil = (a: MediaAsset, novos?: ReadonlySet<string>): boolean => !!a.color?.tabela || !!novos?.has(a.id);
+
+/**
+ * `projectColors` com o que o perfil de captura detectou e NÃO aplicou: vídeo de projeto antigo (sem perfil) que agora
+ * seria lido como HLG, Apple Log, Blackmagic… Converter mudaria a cor de um projeto já aprovado e o `manageGrade`
+ * zeraria a grade Rec.709 salva; fica como antes, com aviso na nota do render.
+ */
+export async function projectColorsDetalhe(p: Pick<Project, 'assets'>, novos?: ReadonlySet<string>): Promise<{ colors: Map<string, SourceColor>; naoAplicadas: { assetId: string; nome: string; cor: SourceColor }[] }> {
   const out = new Map<string, SourceColor>();
+  const naoAplicadas: { assetId: string; nome: string; cor: SourceColor }[] = [];
   const videos = p.assets.filter((a) => a.kind === 'video' && !a.alpha);
   for (const a of videos) {
     // Cor gravada no asset vale; `desconhecida` gravada é lida de novo (o bruto pode ter chegado depois).
     const c = knownCapture(a.color) ? a.color : await detectCapture(a.path).catch(() => null);
-    if (c) out.set(a.id, c);
+    if (!c) continue;
+    if (c !== a.color && !comPerfil(a, novos) && c.fonte !== 'xml') {
+      // Projeto antigo: antes só o XML decidia. A curva nova não entra; Rec.709 por tag/marca/codec dá o mesmo de antes.
+      if (knownCapture(c) && c.input !== 'rec709') naoAplicadas.push({ assetId: a.id, nome: a.name || path.basename(a.path), cor: c });
+      continue;
+    }
+    out.set(a.id, c);
   }
   const rawDirs = [...new Set(videos.filter((a) => out.get(a.id)?.fonte === 'xml').map((a) => path.dirname(a.path)))];
   for (const a of videos) {
@@ -120,7 +142,7 @@ export async function projectColors(p: Pick<Project, 'assets'>): Promise<Map<str
     // A faixa é a do bruto: o recorte feito direito (pc→tv) volta ao código na decodificação; bruto tv segue tv.
     if (c && c.input !== 'rec709') out.set(a.id, { ...c, fonte: 'herdado', de });
   }
-  return out;
+  return { colors: out, naoAplicadas: naoAplicadas.filter((x) => !out.has(x.assetId)) };
 }
 
 /**
@@ -140,7 +162,7 @@ export async function captureReport(p: Pick<Project, 'assets'>): Promise<{ tabel
  * em Rec.709 sobre LOG é corrigida na entrada, com aviso. `notes` vai para o resultado do render.
  */
 export async function managedGrades(p: Pick<Project, 'assets' | 'timeline'>, grades = p.timeline.grades): Promise<{ grades: Record<string, ColorGrade>; colors: Map<string, SourceColor>; notes: string[] }> {
-  const colors = await projectColors(p);
+  const { colors, naoAplicadas } = await projectColorsDetalhe(p);
   const out: Record<string, ColorGrade> = { ...(grades ?? {}) };
   const notes: string[] = [];
   const forced: string[] = [];
@@ -158,6 +180,7 @@ export async function managedGrades(p: Pick<Project, 'assets' | 'timeline'>, gra
   const perfis = new Set<string>();
   for (const c of colors.values()) perfis.add(captureLine(c));
   if (perfis.size) notes.push(`perfil de captura: ${[...perfis].join('; ')}`);
+  for (const x of naoAplicadas) notes.push(`perfil de captura detectou em ${x.nome}: ${captureLine(x.cor)}. Não aplicado: o projeto é de antes do perfil de captura; aplique na aba Cor`);
   if (forced.length) notes.push(`ATENÇÃO: grade feita como Rec.709 em arquivo LOG (${forced.slice(0, 4).join(', ')}${forced.length > 4 ? '…' : ''}): convertida pela entrada do arquivo; contraste, saturação e curvas daquela grade foram zerados (eram compensação do LOG lavado), ficou o balanço de branco: revise a cor sobre a imagem convertida`);
   return { grades: out, colors, notes };
 }

@@ -32,7 +32,7 @@ export async function ingest(projectId: string, filePath: string, role?: MediaAs
   const segundaBruta = hasFala && meta.kind === 'video' && meta.hasAudio && meta.duration >= 60 && isRaw(p0.timeline);
   const asset: MediaAsset = { id: uid('ast'), name: path.basename(filePath), path: filePath, file, ...meta, role: role ?? ((!hasFala && meta.hasAudio) || segundaBruta ? 'fala' : 'broll') };
   await fs.mkdir(path.join(store.dir(projectId), asset.id), { recursive: true });
-  Object.assign(asset, await colorOf(projectId, asset));
+  Object.assign(asset, await colorOf(projectId, asset, true));
   saveAsset(projectId, asset);
   manageColor(projectId, asset);
   // Formato e fps já na leitura do arquivo, não no fim da preparação: o ASR leva minutos (ou falha) — CH-0005.
@@ -93,10 +93,11 @@ function inheritFormat(projectId: string, asset: MediaAsset): void {
  * A cor de entrada do arquivo pelo perfil de captura (XML da câmera, sidecar, tags, marca/modelo, codec; ou herdada do
  * bruto com o mesmo clipe no projeto). Sem sinal, grava `desconhecida` (dito assim no projeto, nunca Rec.709 presumido).
  */
-async function colorOf(projectId: string, asset: MediaAsset): Promise<MediaAsset> {
+async function colorOf(projectId: string, asset: MediaAsset, novo = false): Promise<MediaAsset> {
   if (asset.kind !== 'video' || asset.alpha) return asset;
   const others = store.get(projectId).assets.filter((x) => x.id !== asset.id);
-  const color = (await projectColors({ assets: [...others, asset] }).catch(() => null))?.get(asset.id);
+  // `novo`: entrando agora, com o perfil de captura. Reimportar um asset de antes (refresh) segue o caminho de antes.
+  const color = (await projectColors({ assets: [...others, asset] }, novo ? new Set([asset.id]) : undefined).catch(() => null))?.get(asset.id);
   return color ? { ...asset, color } : asset;
 }
 

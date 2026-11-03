@@ -131,9 +131,10 @@ describe('perfil de captura (BL-0175 F1)', () => {
     // Android SDR: identidade (grade passa igual).
     const sdr = await detectCapture(F.android);
     assert.equal(manageGrade(NEUTRAL_GRADE, sdr), NEUTRAL_GRADE);
-    // No export: todo LOG/HLG ganha a entrada na grade, e a nota traz câmera, curva e conversão.
-    const v = (id: string, file: string): MediaAsset => ({ id, name: path.basename(file), path: file, kind: 'video', duration: 0.5, hasAudio: false });
-    const p = { assets: [v('s', F.sony), v('h', F.iphoneHlg), v('l', F.iphoneLog), v('b', F.bmdTag), v('a', F.android), v('n', F.nada)], timeline: { grades: {} } } as unknown as Parameters<typeof managedGrades>[0];
+    // No export: todo LOG/HLG ingerido com o perfil (cor gravada com a tabela) ganha a entrada na grade, e a nota traz
+    // câmera, curva e conversão.
+    const v = async (id: string, file: string): Promise<MediaAsset> => ({ id, name: path.basename(file), path: file, kind: 'video', duration: 0.5, hasAudio: false, color: await detectCapture(file) });
+    const p = { assets: await Promise.all([v('s', F.sony), v('h', F.iphoneHlg), v('l', F.iphoneLog), v('b', F.bmdTag), v('a', F.android), v('n', F.nada)]), timeline: { grades: {} } } as unknown as Parameters<typeof managedGrades>[0];
     const m = await managedGrades(p);
     assert.deepEqual([m.grades.s?.input, m.grades.h?.input, m.grades.l?.input, m.grades.b?.input, m.grades.a, m.grades.n], ['slog3', 'hlg', 'applelog', 'bmdfilm5', undefined, undefined]);
     const nota = m.notes.find((n) => n.startsWith('perfil de captura:')) ?? '';
@@ -199,6 +200,34 @@ describe('perfil de captura (BL-0175 F1)', () => {
     } finally {
       store.log = orig;
     }
+  });
+
+  test('projeto antigo (asset sem cor do perfil): HLG, Apple Log e Blackmagic não convertem; grade Rec.709 salva intacta, aviso na nota; refresh não grava nada', { timeout: 120_000 }, async () => {
+    const { managedGrades } = await import('./color-source.ts');
+    const grade = { ...NEUTRAL_GRADE, exposure: 0.3, contrast: 0.25, saturation: 1.2, temperature: 5 };
+    const v = (id: string, file: string): MediaAsset => ({ id, name: path.basename(file), path: file, kind: 'video', duration: 0.5, hasAudio: false });
+    const p = { assets: [v('h', F.iphoneHlg), v('l', F.iphoneLog), v('b', F.bmdTag), v('s', F.sony)], timeline: { grades: { h: grade, l: grade, b: grade } } } as unknown as Parameters<typeof managedGrades>[0];
+    const m = await managedGrades(p);
+    for (const id of ['h', 'l', 'b']) assert.deepEqual(m.grades[id], grade, id);
+    assert.equal(m.grades.s?.input, 'slog3', 'Sony pelo XML converte como antes');
+    assert.ok(!m.notes.some((n) => n.startsWith('ATENÇÃO')), m.notes.join('\n'));
+    for (const re of [/detectou em IMG_0001\.MOV: .*curva HLG/, /detectou em IMG_0002\.MOV: .*curva Apple Log/, /detectou em A001_11031200_C001\.mov: .*curva Blackmagic Film Gen5/])
+      assert.ok(m.notes.some((n) => re.test(n) && /Não aplicado: o projeto é de antes do perfil de captura; aplique na aba Cor/.test(n)), `${re}\n${m.notes.join('\n')}`);
+    assert.ok(!m.notes.some((n) => /detectou em .*ZV-E10|C4001/.test(n)), 'Sony pelo XML não entra no aviso');
+    // Reimportar o mesmo arquivo (refresh) num projeto de antes: nem cor gravada no asset, nem set_grade.
+    const { store } = await import('./store.ts');
+    await store.load();
+    const { ingest } = await import('./ingest.ts');
+    const novo = (await store.create('BL-0175 fonte', '')).id;
+    const a = await ingest(novo, F.iphoneHlg, 'broll');
+    const { color: _sem, ...antigo } = store.get(novo).assets.find((x) => x.id === a.id)!;
+    const pid = (await store.create('BL-0175 projeto antigo', '')).id;
+    store.upsertAsset(pid, antigo as MediaAsset);
+    store.apply(pid, { by: 'human', op: { type: 'set_grade', assetId: antigo.id, grade } });
+    await ingest(pid, F.iphoneHlg, 'broll');
+    const depois = store.get(pid);
+    assert.equal(depois.assets.find((x) => x.id === antigo.id)?.color, undefined);
+    assert.deepEqual(depois.timeline.grades?.[antigo.id], grade);
   });
 
   test('não regressão: Sony S-Log3 sai igual ao de antes (mesmos campos, mesma grade, mesma LUT)', async () => {
