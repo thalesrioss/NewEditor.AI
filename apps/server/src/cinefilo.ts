@@ -67,6 +67,7 @@ export async function searchCafe(query: string, limit = 12): Promise<CafeClip[]>
 
 /** Baixa o clipe (e a legenda) para o projeto e registra como B-roll na aba Mídia. */
 export async function useCafeClip(projectId: string, clip: CafeClip): Promise<{ assetId: string; file: string }> {
+  store.get(projectId); // projeto inexistente = 404 antes de baixar para a pasta dele (BL-0177)
   const dir = path.join(store.dir(projectId), 'cinefilo');
   await fs.mkdir(dir, { recursive: true });
   const safe = `${clip.filme.replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 40)}--${clip.slug}`.replace(/^-|-$/g, '');

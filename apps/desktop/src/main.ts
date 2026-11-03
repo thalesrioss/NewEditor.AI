@@ -16,6 +16,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CENTRAL_DADOS_PADRAO, escolherOrigem } from './central';
+import { destinoNavegacao } from './navegacao';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** Commit do build, gravado pelo esbuild.mjs (aparece em "Sobre o Editor Brain"). */
@@ -269,10 +270,18 @@ async function createWindow(url: string): Promise<void> {
   // Fora da central, o título avisa (a página não pode trocá-lo por "NewEditor.AI · Editor Brain").
   if (origem === 'local') win.on('page-title-updated', (e) => e.preventDefault());
   if (!HIDDEN) win.once('ready-to-show', () => win.show());
-  // Links externos abrem no navegador do sistema; a janela só navega dentro do app.
-  win.webContents.setWindowOpenHandler(({ url: u }) => (void shell.openExternal(u), { action: 'deny' }));
+  // Links externos (só http/https) abrem no navegador do sistema; a janela só navega na mesma origem (BL-0177).
+  win.webContents.setWindowOpenHandler(({ url: u }) => {
+    if (destinoNavegacao(u, url) !== 'negada') void shell.openExternal(u);
+    else log('link negado', u);
+    return { action: 'deny' };
+  });
   win.webContents.on('will-navigate', (e, u) => {
-    if (!u.startsWith(url)) (e.preventDefault(), void shell.openExternal(u));
+    const destino = destinoNavegacao(u, url);
+    if (destino === 'interna') return;
+    e.preventDefault();
+    if (destino === 'externa') void shell.openExternal(u);
+    else log('navegação negada', u);
   });
   await win.loadURL(url);
 }

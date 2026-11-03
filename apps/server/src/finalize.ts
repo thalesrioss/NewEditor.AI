@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_CAPTIONS, profileLabel, type Project, type Removal } from '@neweditor/core';
+import { DEFAULT_CAPTIONS, normalizeCaptions, profileLabel, type Project, type Removal } from '@neweditor/core';
 import { autoMotions } from './agent-motion.ts';
 import { autoReframe } from './reframe.ts';
 import { autoLettering } from './agent-text.ts';
@@ -109,7 +109,8 @@ export async function finalize(projectId: string): Promise<void> {
       porque = safe.porque;
     }
     // Padrão editorial lido de uma edição traz a legenda inteira (fonte, cor, tarja, palavras por bloco…).
-    store.apply(projectId, { by: 'agent', op: { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, ...(prof.legenda.ajustes ?? {}), enabled: true, position } }, note: `Liguei a legenda automática em ${Math.round(position * 100)}% do quadro (${porque})${prof.legenda.ajustes ? ` com o estilo do padrão "${prof.nome}"` : ''}` });
+    // Ajuste com cor/enum fora da regra (BL-0177) cai no padrão, em vez de recusar a op e deixar o vídeo sem legenda.
+    store.apply(projectId, { by: 'agent', op: { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, ...normalizeCaptions(prof.legenda.ajustes ?? {}), enabled: true, position } }, note: `Liguei a legenda automática em ${Math.round(position * 100)}% do quadro (${porque})${prof.legenda.ajustes ? ` com o estilo do padrão "${prof.nome}"` : ''}` });
   }
   stepEnd(projectId, 'legenda');
   // 2b. B-roll pelo Cinéfilo (clip.cafe): cobre as frases de imagem forte até a cobertura do perfil.

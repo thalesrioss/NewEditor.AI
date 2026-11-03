@@ -95,7 +95,7 @@ const sat = (h: string) => {
 };
 
 export function styleFromReference(palette: string[], familias: string[]): MotionStyle {
-  const pal = palette.filter((h) => /^#?[0-9a-f]{3,6}$/i.test(h)).map((h) => (h.startsWith('#') ? h : `#${h}`));
+  const pal = palette.filter((h) => /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(h)).map((h) => (h.startsWith('#') ? h : `#${h}`));
   const fam = familias.join(' ').toLowerCase();
   const font: MotionStyle['font'] = /document|ilustra/.test(fam) ? 'serif' : /papel|colagem/.test(fam) ? 'maquina' : 'grotesk';
   const material: MotionStyle['material'] = /papel|colagem/.test(fam) ? 'papel' : /grão|grao|ilustra|document/.test(fam) ? 'grao' : 'liso';

@@ -113,6 +113,7 @@ export async function entregaJob(id: string, opts: EntregaOpts): Promise<void> {
 export async function rotasRender(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>('/api/projects/:id/render', async (req) => {
     const { id } = req.params;
+    store.get(id); // projeto inexistente = 404, sem trabalho na fila (BL-0177)
     const job = `rnd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
     setStatus(job, id, { estado: 'fila' });
     void enqueueJob(id, 'render', {}, { id: job }).catch((e) => {
@@ -130,12 +131,14 @@ export async function rotasRender(app: FastifyInstance): Promise<void> {
   // camadas: true põe por cima o B-roll e o motion de arquivo daquele quadro (CH-0028).
   app.post<{ Params: { id: string }; Body: { t: number; grades?: Record<string, Partial<ColorGrade>>; camadas?: boolean } }>('/api/projects/:id/quadro', async (req) => {
     const { id } = req.params;
-    const r = await renderQuadro(store.get(id), store.dir(id), Number(req.body?.t), req.body?.grades, req.body?.camadas === true);
+    const p = store.get(id); // antes do store.dir: projeto inexistente = 404 (BL-0177)
+    const r = await renderQuadro(p, store.dir(id), Number(req.body?.t), req.body?.grades, req.body?.camadas === true);
     return { ...r, url: `/media/${id}/${r.file}` };
   });
   app.get('/api/entrega/presets', async () => ({ presets: Object.entries(PRESETS).map(([id, p]) => ({ id, ...p })), pasta: ENTREGAS_DIR }));
   app.post<{ Params: { id: string }; Body: EntregaOpts }>('/api/projects/:id/entregar', async (req) => {
     const { id } = req.params;
+    store.get(id); // projeto inexistente = 404, sem trabalho na fila (BL-0177)
     const opts: EntregaOpts = { preset: req.body.preset ?? 'original', srt: req.body.srt ?? true, capa: req.body.capa ?? true, capaEm: req.body.capaEm, entregar: req.body.entregar ?? false };
     void enqueueJob(id, 'render', { entrega: opts }).catch((e) => report(id, 'entrega', e));
     return { queued: true, posicao: queuePosition(id) };
