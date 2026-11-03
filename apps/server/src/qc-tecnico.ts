@@ -59,6 +59,8 @@ export const LIMITES = {
   escala: 1.25,
   /** Bruto nativo abaixo da entrega (720×1280 de iPhone numa entrega 1080×1920 = 1,5×), sem zoom: aviso até aqui (CH-0045). */
   escalaNativa: 1.5,
+  /** Distância máxima (fração) da saturação e da luma de cada clipe ao padrão de cor do cliente (BL-0161). */
+  padraoCor: 0.15,
   /** Quadros repetidos isolados em 1 s que fazem a cadência de câmera lenta. */
   cadencia: 4,
   /** Fração do quadro com alfa opaco a partir da qual um motion/gráfico é tela cheia (o falante não aparece; CH-0048). */
@@ -73,6 +75,11 @@ export interface Trecho {
 export interface QcTecnicoOpts {
   project?: Project;
   assinatura?: Assinatura;
+  /**
+   * Padrão de cor do cliente (BL-0161): quando vem, substitui a assinatura na saturação e mede também a luma média,
+   * clipe a clipe (sem projeto, o arquivo inteiro como um clipe só).
+   */
+  padraoCor?: ReferenciaCor;
   /** fps da entrega esperado (sem projeto: 29,97). */
   fps?: number;
 }
@@ -223,6 +230,109 @@ export async function assinaturaDe(files: string[]): Promise<Assinatura> {
   for (const file of files) arquivos.push({ file, satavg: Math.round((await medirSatavg(file)) * 100) / 100 });
   const satavg = Math.min(...arquivos.map((a) => a.satavg));
   return { satavg, fonte: `aprovados do cliente (${arquivos.length}: SATAVG ${arquivos.map((a) => n(a.satavg, 1)).join(', ')}; vale o menor)`, arquivos };
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Padrão de cor do cliente (BL-0161): saturação e luma média por clipe contra os stills do padrão
+// ---------------------------------------------------------------------------
+
+/** Referência de cor do padrão do cliente: medida nos stills, na mesma escala da entrega (faixa tv, Rec.709). */
+export interface ReferenciaCor {
+  /** SATAVG médio do centro do quadro (escala da faixa tv). */
+  satavg: number;
+  /** Luma média do centro do quadro, 0–1 ((Y − 16) / 219). */
+  luma: number;
+  /** De onde veio, legível ("padrão de cor de Equity, 2 stills"). */
+  fonte: string;
+}
+
+/** Amostra de cor da entrega num instante (s). */
+export interface AmostraCor {
+  t: number;
+  satavg: number;
+  luma: number;
+}
+
+/** Amostras por segundo na medida por clipe (barata: centro do quadro, 2 quadros/s). */
+const COR_FPS = 2;
+
+/** signalstats do centro do quadro: SATAVG e YAVG por quadro, com o pts_time. */
+async function sinaisDoCentro(file: string, vf: string, extra: string[] = []): Promise<{ t: number; satavg: number; yavg: number }[]> {
+  const out: { t: number; satavg: number; yavg: number }[] = [];
+  let buf = '';
+  const linha = (l: string) => {
+    const t = /pts_time:([-\d.]+)/.exec(l);
+    if (t) return void out.push({ t: Number(t[1]), satavg: Number.NaN, yavg: Number.NaN });
+    const cur = out[out.length - 1];
+    const s = /lavfi\.signalstats\.SATAVG=([\d.]+)/.exec(l);
+    if (s && cur) cur.satavg = Number(s[1]);
+    const y = /lavfi\.signalstats\.YAVG=([\d.]+)/.exec(l);
+    if (y && cur) cur.yavg = Number(y[1]);
+  };
+  await run('ffmpeg', ['-v', 'info', '-nostats', '-i', file, ...extra, '-an', '-vf', `${vf},crop=iw/2:ih/2,signalstats,metadata=mode=print`, '-f', 'null', '-'], {
+    onStderr: (s) => {
+      buf += s;
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      lines.forEach(linha);
+    },
+  });
+  if (buf) linha(buf);
+  return out.filter((x) => Number.isFinite(x.satavg) && Number.isFinite(x.yavg));
+}
+
+/** Saturação e luma da entrega, COR_FPS quadros/s, no centro do quadro, na escala da faixa tv (como `medirSatavg`). */
+export async function amostrasCor(file: string, perfil?: PerfilMedido): Promise<AmostraCor[]> {
+  const v = (perfil ?? (await medirPerfil(file))).video;
+  const cheia = v?.color_range === 'pc' || /^yuvj/.test(v?.pix_fmt ?? '');
+  return (await sinaisDoCentro(file, `fps=${COR_FPS}`)).map((x) => ({ t: x.t, satavg: cheia ? (x.satavg * 224) / 255 : x.satavg, luma: cheia ? x.yavg / 255 : (x.yavg - 16) / 219 }));
+}
+
+/**
+ * Referência do padrão: cada still (JPEG/PNG/WebP do quadro com a grade, como o ColorPanel salva) convertido para a
+ * escala da entrega (Rec.709, faixa tv; a matriz de entrada é a da imagem, BT.601 no JPEG) e medido no centro; média dos stills.
+ */
+export async function referenciaDosStills(files: string[], fonte: string): Promise<ReferenciaCor> {
+  if (!files.length) throw new Error('padrão de cor sem still de referência');
+  const m: { satavg: number; luma: number }[] = [];
+  for (const f of files) {
+    const [x] = await sinaisDoCentro(f, 'scale=out_range=tv:out_color_matrix=bt709,format=yuv444p', ['-frames:v', '1']);
+    if (!x) throw new Error(`still sem medida: ${path.basename(f)}`);
+    m.push({ satavg: x.satavg, luma: (x.yavg - 16) / 219 });
+  }
+  const media = (k: 'satavg' | 'luma') => m.reduce((s, x) => s + x[k], 0) / m.length;
+  return { satavg: media('satavg'), luma: media('luma'), fonte };
+}
+
+const sinal = (x: number) => `${x >= 0 ? '+' : '−'}${n(Math.abs(x) * 100, 0)}%`;
+
+/**
+ * Cada clipe da faixa principal contra o padrão de cor (puro): média das amostras dentro do clipe (fora dos trechos
+ * cobertos por B-roll/motion de outra coisa); saturação ou luma a mais de LIMITES.padraoCor da referência reprova o clipe.
+ */
+export function achadosPadraoCor(project: Pick<Project, 'assets' | 'timeline'>, amostras: AmostraCor[], ref: ReferenciaCor, fora: Trecho[] = []): { achados: QcAchado[]; avisos: string[] } {
+  const tl = normalizeTimeline(project.timeline);
+  const assets = new Map(project.assets.map((a) => [a.id, a]));
+  const starts = clipStarts(tl);
+  const out: QcAchado[] = [];
+  const avisos: string[] = [];
+  const lim = LIMITES.padraoCor;
+  const limite = `saturação e luma a até ±${n(lim * 100, 0)}% do ${ref.fonte} (SATAVG ${n(ref.satavg, 1)}, luma ${n(ref.luma * 100, 1)}%)`;
+  let medidos = 0;
+  tl.main.forEach((c, i) => {
+    const t: Trecho = { start: starts[i]!, end: starts[i]! + clipDuration(c) };
+    const xs = amostras.filter((a) => a.t >= t.start - 1e-6 && a.t < t.end - 1e-6 && !fora.some((f) => a.t >= f.start && a.t < f.end));
+    const onde = `clipe ${i + 1} (${path.basename(assets.get(c.cam ?? c.assetId)?.path ?? c.assetId)}), ${trecho(t.start, t.end)}`;
+    if (!xs.length) return void (t.end - t.start >= 1 / COR_FPS && avisos.push(`padrão de cor: ${onde} sem quadro do falante para medir (coberto ou curto demais)`));
+    medidos++;
+    const sat = xs.reduce((s, x) => s + x.satavg, 0) / xs.length;
+    const luma = xs.reduce((s, x) => s + x.luma, 0) / xs.length;
+    const ds = ref.satavg > 0 ? sat / ref.satavg - 1 : 0;
+    const dl = ref.luma > 0 ? luma / ref.luma - 1 : 0;
+    if (Math.abs(ds) > lim || Math.abs(dl) > lim) out.push({ regra: 'padrao-cor', ok: false, medido: `SATAVG ${n(sat, 1)} (${sinal(ds)}) · luma ${n(luma * 100, 1)}% (${sinal(dl)})`, limite, onde, at: t.start });
+  });
+  if (!out.length) out.push({ regra: 'padrao-cor', ok: true, medido: `${medidos} clipe(s) medidos, todos a até ±${n(lim * 100, 0)}% do padrão`, limite });
+  return { achados: out, avisos };
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +813,7 @@ export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise
   const avisos: string[] = [];
   const perfil = await medirPerfil(file);
   const achados: QcAchado[] = achadosPerfil(perfil, fps);
+  if (opts.padraoCor) return qcComPadraoCor(file, opts, opts.padraoCor, perfil, achados, avisos, fps);
   const [y, satavg, env, freezes, diffs] = await Promise.all([amostrarY(file), medirSatavg(file, perfil), envelopeVoz(file), medirFreezes(file), diferencasQuadro(file)]);
   achados.push(achadoNiveis(niveis(y)));
   const ass = opts.assinatura ?? ASSINATURA_PADRAO;
@@ -711,6 +822,27 @@ export async function qcTecnico(file: string, opts: QcTecnicoOpts = {}): Promise
   const sat = achadoSaturacao(satavg, ass);
   if (!opts.assinatura && !sat.ok) avisos.push(`saturação baixa contra o padrão (${sat.medido}); sem assinatura do cliente, não reprova`);
   achados.push(opts.assinatura ? sat : { ...sat, ok: true });
+  return restoDoGate(file, opts, perfil, achados, avisos, fps, env, freezes, diffs);
+}
+
+/**
+ * Gate com o padrão de cor do cliente (BL-0161): no lugar da assinatura fixa (saturação do arquivo inteiro), a
+ * saturação e a luma média de cada clipe contra os stills do padrão; o resto do gate é o mesmo.
+ */
+async function qcComPadraoCor(file: string, opts: QcTecnicoOpts, ref: ReferenciaCor, perfil: PerfilMedido, achados: QcAchado[], avisos: string[], fps: number): Promise<QcTecnico> {
+  const [y, amostras, env, freezes, diffs] = await Promise.all([amostrarY(file), amostrasCor(file, perfil), envelopeVoz(file), medirFreezes(file), diferencasQuadro(file)]);
+  achados.push(achadoNiveis(niveis(y)));
+  avisos.push(`saturação e luma contra o ${ref.fonte} (no lugar da assinatura fixa)`);
+  // Sem projeto: o arquivo inteiro como um clipe só.
+  const proj = opts.project ?? { assets: [], timeline: normalizeTimeline({ fps, width: perfil.video?.width ?? 1080, height: perfil.video?.height ?? 1920, main: [{ id: 'arquivo', assetId: path.basename(file), in: 0, out: perfil.duration, by: 'system' }] }) };
+  const c = achadosPadraoCor(proj, amostras, ref, opts.project ? cobertosPorOutro(opts.project) : []);
+  achados.push(...c.achados);
+  avisos.push(...c.avisos);
+  return restoDoGate(file, opts, perfil, achados, avisos, fps, env, freezes, diffs);
+}
+
+/** Fala, freeze, cadência e as regras do projeto: iguais com ou sem padrão de cor. */
+async function restoDoGate(file: string, opts: QcTecnicoOpts, perfil: PerfilMedido, achados: QcAchado[], avisos: string[], fps: number, env: Float32Array, freezes: Trecho[], diffs: Float32Array): Promise<QcTecnico> {
   const fala = trechosDeFala(env);
   const fpsArq = valor(perfil.video?.avg_frame_rate) || valor(perfil.video?.r_frame_rate) || fps;
   for (const f of freezes) if (Number.isNaN(f.end)) f.end = perfil.duration;

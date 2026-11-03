@@ -1,14 +1,35 @@
 /**
  * O `qc-tecnico` como gate do render (FB-0180 A4): mede o arquivo com o projeto e a assinatura de cor do cliente, grava
  * o laudo ao lado do render (`<render>.qc-tecnico.txt`) e diz se a entrega pode sair. A assinatura é a medida dos
- * aprovados do cliente: `<dados>/assinaturas/<cliente>.json`, ou a que vem com o produto em `data/assinaturas/`.
+ * aprovados do cliente: `<dados>/assinaturas/<cliente>.json`, ou a que vem com o produto em `data/assinaturas/`. Com
+ * padrão de cor no perfil do cliente (BL-0161), a saturação e a luma de cada clipe são medidas contra os stills dele,
+ * no lugar da assinatura.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Project } from '@neweditor/core';
 import { DATA_ROOT, ROOT } from './config.ts';
-import { qcTecnico, tabelaQc, type Assinatura, type QcTecnico } from './qc-tecnico.ts';
+import { stillsDir } from './padrao-cor.ts';
+import { profileOf } from './profiles.ts';
+import { qcTecnico, referenciaDosStills, tabelaQc, type Assinatura, type QcTecnico, type ReferenciaCor } from './qc-tecnico.ts';
 import { clienteDoProjeto } from './registro-thales.ts';
+
+/**
+ * Padrão de cor do cliente para o gate (BL-0161): a referência medida nos stills do padrão do perfil do projeto. Sem
+ * padrão, ou padrão sem still, `undefined` (o gate fica como era: assinatura do cliente ou a fixa) com o motivo em `aviso`.
+ */
+export async function padraoCorDoProjeto(p: Pick<Project, 'profileId' | 'timeline' | 'client' | 'id' | 'name'>): Promise<{ ref?: ReferenciaCor; aviso?: string }> {
+  const prof = await profileOf(p as Project).catch(() => undefined);
+  const padrao = prof?.cor.padrao;
+  if (!prof || !padrao) return {};
+  if (!padrao.stills.length) return { aviso: `o padrão de cor de ${prof.nome} não tem still de referência: saturação contra a assinatura, luma não conferida` };
+  const files = padrao.stills.map((s) => path.join(stillsDir(prof.id), s));
+  try {
+    return { ref: await referenciaDosStills(files, `padrão de cor de ${prof.nome} (${files.length} still${files.length > 1 ? 's' : ''})`) };
+  } catch (e) {
+    return { aviso: `não consegui medir os stills do padrão de cor de ${prof.nome} (${(e as Error).message.slice(0, 120)}): saturação contra a assinatura` };
+  }
+}
 
 export async function assinaturaDoCliente(p: Pick<Project, 'name' | 'client' | 'task' | 'assets'>): Promise<Assinatura | undefined> {
   const cliente = await clienteDoProjeto(p).catch(() => undefined);
@@ -36,7 +57,9 @@ export async function marcarReprovado(dir: string, rel: string): Promise<string>
 export async function gateTecnico(p: Project, file: string): Promise<QcTecnico> {
   let r: QcTecnico;
   try {
-    r = await qcTecnico(file, { project: p, assinatura: await assinaturaDoCliente(p) });
+    const cor = await padraoCorDoProjeto(p);
+    r = await qcTecnico(file, { project: p, assinatura: await assinaturaDoCliente(p), padraoCor: cor.ref });
+    if (cor.aviso) r.avisos.push(cor.aviso);
   } catch (e) {
     r = { aprovado: false, arquivo: file, achados: [{ regra: 'medida', ok: false, medido: (e as Error).message.slice(0, 200), limite: 'gate precisa medir o arquivo' }], avisos: [] };
   }
