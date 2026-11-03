@@ -13,7 +13,7 @@
  * .cube) continua aceito para as entradas sem conversão embutida.
  */
 
-export type InputTransform = 'rec709' | 'slog3' | 'vlog' | 'clog3' | 'applelog' | 'flog2' | 'nlog' | 'logc3' | 'logc4' | 'bmdfilm5';
+export type InputTransform = 'rec709' | 'slog3' | 'vlog' | 'clog3' | 'applelog' | 'flog2' | 'nlog' | 'logc3' | 'logc4' | 'bmdfilm5' | 'hlg';
 
 export interface ColorGrade {
   input: InputTransform;
@@ -58,15 +58,36 @@ export interface ColorGrade {
   codeRange?: 'full' | 'legal';
 }
 
-/** Espaço de cor de entrada de um arquivo, lido do próprio arquivo (XML da câmera) ou herdado do bruto de origem. */
+/**
+ * Espaço de cor de entrada de um arquivo (perfil de captura, BL-0175), lido do próprio arquivo ou herdado do bruto de
+ * origem. Projeto antigo (antes do BL-0175) só tem `fonte` 'xml'/'herdado' e nada de `confianca`: vale como 'certa'.
+ */
 export interface SourceColor {
+  /**
+   * O que o pipeline aplica. Com `fonte: 'desconhecida'` é 'rec709' só porque não há conversão a aplicar (identidade):
+   * NÃO é Rec.709 presumido; a nota e o projeto dizem "curva desconhecida" (a F2 decide pela medida/pergunta ao gestor).
+   */
   input: InputTransform;
   /** Como veio escrito no arquivo (ex.: s-log3-cine, s-gamut3-cine). */
   gamma?: string;
   gamut?: string;
   modelo?: string;
-  /** 'xml' = metadado da câmera no arquivo; 'herdado' = de outro arquivo com o mesmo clipe (`de`). */
-  fonte: 'xml' | 'herdado';
+  /**
+   * De onde veio a decisão: 'xml' = XML NonRealTimeMeta da Sony; 'sidecar' = `.sidecar` da Blackmagic ao lado;
+   * 'tag' = metadado do stream/container (color_transfer, chave do fabricante); 'container' = só Make/Model;
+   * 'codec' = só o codec; 'herdado' = de outro arquivo com o mesmo clipe (`de`); 'desconhecida' = nenhum sinal.
+   */
+  fonte: 'xml' | 'herdado' | 'sidecar' | 'tag' | 'container' | 'codec' | 'desconhecida';
+  /** Câmera para o texto do editor ("Sony ZV-E10", "Apple iPhone 15 Pro"). */
+  camera?: string;
+  /** Linha da tabela de captura (`CAPTURE_TABLE`, packages/core/src/cameras.ts), ou 'desconhecida'. */
+  curva?: string;
+  /** 'certa' = metadado explícito; 'provavel' = regra da tabela sem metadado de curva; 'desconhecida' = nenhum sinal. */
+  confianca?: 'certa' | 'provavel' | 'desconhecida';
+  /** Aviso para o editor (curva fora da tabela, PQ, BRAW, regra a confirmar com amostra real). */
+  aviso?: string;
+  /** Versão da tabela que decidiu. */
+  tabela?: string;
   de?: string;
   codeRange: 'full' | 'legal';
   /** LUT oficial de conversão encontrada no disco (id `local:<caminho>`). */
@@ -122,11 +143,15 @@ export const INPUT_TRANSFORMS: { id: InputTransform; label: string; camera: stri
   { id: 'logc3', label: 'LogC3 · ARRI Wide Gamut 3', camera: 'ARRI Alexa (EI 800)' },
   { id: 'logc4', label: 'LogC4 · ARRI Wide Gamut 4', camera: 'ARRI Alexa 35' },
   { id: 'bmdfilm5', label: 'Blackmagic Film Gen5', camera: 'Blackmagic (Pocket 4K/6K, Pyxis)' },
+  { id: 'hlg', label: 'HLG · Rec.2020', camera: 'iPhone/Android HDR, Sony HLG' },
 ];
 
 // ---------------------------------------------------------------------------------------------
 // Curvas LOG → linear de cena. Entrada: valor de código normalizado (0..1 em escala de 10 bits).
 // ---------------------------------------------------------------------------------------------
+
+/** HLG: cinza 18% (sinal 0,38, BT.2408) → 0,18 de linear de cena. */
+const HLG_SCENE = 0.18 / ((0.38 * 0.38) / 3);
 
 const DECODE: Record<InputTransform, (x: number) => number> = {
   rec709: (x) => Math.pow(Math.max(0, x), 2.4),
@@ -156,6 +181,14 @@ const DECODE: Record<InputTransform, (x: number) => number> = {
     const t = (2 ** (14 * (-c / b) + 6) - 64) / a;
     return x >= 0 ? (2 ** ((14 * (x - c)) / b + 6) - 64) / a : x * s + t;
   },
+  // HLG (BT.2100, ARIB STD-B67): OETF inversa → linear de cena 0..1, escalado para o cinza 18% (sinal 0,38) cair em 0,18
+  // como nas curvas LOG; dali segue o caminho da casa (Rec.2020 → 709 + tone map), igual no WebGL e no FFmpeg. Sem OOTF
+  // (conversão referida à cena, como as LOG). BL-0175.
+  hlg: (x) => {
+    const a = 0.17883277, b = 0.28466892, c = 0.55991073;
+    const e = x <= 0.5 ? (x * x) / 3 : (Math.exp((x - c) / a) + b) / 12;
+    return e * HLG_SCENE;
+  },
   bmdfilm5: (x) => (x < 8.283605932402494 * 0.005 + 0.09246575342465753 ? (x - 0.09246575342465753) / 8.283605932402494 : Math.exp((x - 0.5300133392291939) / 0.08692876065491224) - 0.005494072432257808),
 };
 
@@ -182,7 +215,7 @@ const PRIMARIES: Record<string, [XY, XY, XY]> = {
   bmdwg5: [[0.7177, 0.3171], [0.228, 0.8616], [0.1006, -0.082]],
 };
 const GAMUT_OF: Record<InputTransform, keyof typeof PRIMARIES> = {
-  rec709: 'rec709', slog3: 'sgamut3cine', vlog: 'vgamut', clog3: 'cinemagamut', applelog: 'rec2020', flog2: 'rec2020', nlog: 'rec2020', logc3: 'awg3', logc4: 'awg4', bmdfilm5: 'bmdwg5',
+  rec709: 'rec709', slog3: 'sgamut3cine', vlog: 'vgamut', clog3: 'cinemagamut', applelog: 'rec2020', flog2: 'rec2020', nlog: 'rec2020', logc3: 'awg3', logc4: 'awg4', bmdfilm5: 'bmdwg5', hlg: 'rec2020',
 };
 const D65: XY = [0.3127, 0.329];
 

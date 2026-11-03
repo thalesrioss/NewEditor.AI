@@ -4,11 +4,14 @@
  * reel vizinho. Arquivo S-Log3 converte pela conversão embutida no app (LC-709 Type A, `slog3Lc709TypeA` no core,
  * BL-0159): nenhuma LUT é lida da pasta do DaVinci Resolve, nem o Resolve precisa estar instalado.
  * Câmera derivada (recorte ProRes de um bruto, que apaga o XML) herda do bruto de origem.
+ * BL-0175 F1: a leitura passa pelo perfil de captura (`capture-profile.ts`), em que o XML da Sony é a 1ª camada e as
+ * outras câmeras (HLG, Apple Log, Blackmagic, celular SDR) saem do metadado; sem sinal, `desconhecida`, nunca Rec.709
+ * presumido em silêncio.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { BUILTIN_INPUT, manageGrade, gradeWasForced, type ColorGrade, type InputTransform, type MediaAsset, type Project, type SourceColor } from '@neweditor/core';
-import { run } from './media.ts';
+import { BUILTIN_INPUT, captureLine, manageGrade, gradeWasForced, type ColorGrade, type InputTransform, type MediaAsset, type Project, type SourceColor } from '@neweditor/core';
+import { detectCapture, knownCapture } from './capture-profile.ts';
 
 /** Lê o XML da Sony (NonRealTimeMeta): curva, gamut e modelo. Curva desconhecida = null (não adivinha). */
 export function sonyXmlColor(xml: string): Pick<SourceColor, 'input' | 'gamma' | 'gamut' | 'modelo'> | null {
@@ -64,29 +67,13 @@ export async function cameraXml(file: string): Promise<string | null> {
 export const convertedBy = (c: Pick<SourceColor, 'input' | 'inputLut'>): string =>
   BUILTIN_INPUT[c.input] ? `pela conversão embutida (${BUILTIN_INPUT[c.input]})` : c.inputLut ? `pela LUT de entrada (${c.inputLut.nome})` : 'pela conversão da casa';
 
-/** Faixa do arquivo: bruto de câmera yuvj (pc) guarda o código direto. */
-async function codeRangeOf(file: string): Promise<SourceColor['codeRange']> {
-  const raw = (await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt,color_range', '-of', 'csv=p=0', file]).catch(() => Buffer.from(''))).toString();
-  return /yuvj|\bpc\b/.test(raw) ? 'full' : 'legal';
-}
-
-const cache = new Map<string, Promise<SourceColor | null>>();
-/** Espaço de cor de entrada de um arquivo, pelo XML da câmera (em cache por caminho, tamanho e data). */
+/**
+ * Espaço de cor de entrada de um arquivo com a curva DECIDIDA pelo perfil de captura (XML da Sony, sidecar, tags…);
+ * null quando a curva é desconhecida. Para ter também a câmera e o "desconhecida", use `detectCapture`.
+ */
 export async function readSourceColor(file: string): Promise<SourceColor | null> {
-  const st = await fs.stat(file).catch(() => null);
-  if (!st) return null;
-  const key = `${file}@${st.size}@${st.mtimeMs}`;
-  let hit = cache.get(key);
-  if (!hit) {
-    hit = (async () => {
-      const xml = await cameraXml(file);
-      const c = xml ? sonyXmlColor(xml) : null;
-      if (!c) return null;
-      return { ...c, fonte: 'xml' as const, codeRange: await codeRangeOf(file) };
-    })();
-    cache.set(key, hit);
-  }
-  return hit;
+  const c = await detectCapture(file);
+  return knownCapture(c) ? c : null;
 }
 
 /** Id do clipe da câmera no nome (Sony: C3039.MP4 → "C3039"; recorte C3039_cam9x16_A5.mov → "C3039"). */
@@ -101,12 +88,16 @@ export async function projectColors(p: Pick<Project, 'assets'>): Promise<Map<str
   const out = new Map<string, SourceColor>();
   const videos = p.assets.filter((a) => a.kind === 'video' && !a.alpha);
   for (const a of videos) {
-    const c = a.color ?? (await readSourceColor(a.path));
+    // Cor gravada no asset vale; `desconhecida` gravada é lida de novo (o bruto pode ter chegado depois).
+    const c = knownCapture(a.color) ? a.color : await detectCapture(a.path).catch(() => null);
     if (c) out.set(a.id, c);
   }
   const rawDirs = [...new Set(videos.filter((a) => out.get(a.id)?.fonte === 'xml').map((a) => path.dirname(a.path)))];
   for (const a of videos) {
-    if (out.has(a.id)) continue;
+    // Herda do bruto Sony quando o próprio arquivo não decidiu, ou só disse Rec.709 por tag/marca/codec: o recorte
+    // ProRes de um S-Log3 pode levar bt709 no stream (o XAVC já marca assim), e o XML do bruto é a verdade.
+    const own = out.get(a.id);
+    if (own && knownCapture(own) && !(own.input === 'rec709' && (own.fonte === 'tag' || own.fonte === 'container' || own.fonte === 'codec'))) continue;
     const stem = clipStem(a.name || a.path);
     if (!stem) continue;
     // Só com UM candidato: dois corpos Sony recomeçam a numeração e o C0012 de uma câmera não é o da outra.
@@ -151,6 +142,10 @@ export async function managedGrades(p: Pick<Project, 'assets' | 'timeline'>, gra
     conv.add(`${c.gamma ?? c.input} ${convertedBy(c)}`);
   }
   if (conv.size) notes.push(`cor: entrada lida do arquivo, ${[...conv].join('; ')}`);
+  // Perfil de captura (BL-0175): uma linha por câmera/curva, e as desconhecidas ditas assim (nunca Rec.709 em silêncio).
+  const perfis = new Set<string>();
+  for (const c of colors.values()) perfis.add(captureLine(c));
+  if (perfis.size) notes.push(`perfil de captura: ${[...perfis].join('; ')}`);
   if (forced.length) notes.push(`ATENÇÃO: grade feita como Rec.709 em arquivo LOG (${forced.slice(0, 4).join(', ')}${forced.length > 4 ? '…' : ''}): convertida pela entrada do arquivo; contraste, saturação e curvas daquela grade foram zerados (eram compensação do LOG lavado), ficou o balanço de branco: revise a cor sobre a imagem convertida`);
   return { grades: out, colors, notes };
 }
@@ -158,6 +153,6 @@ export async function managedGrades(p: Pick<Project, 'assets' | 'timeline'>, gra
 /** O asset com a cor do arquivo gravada (ingest): o preview e o export leem a mesma. */
 export async function withSourceColor(a: MediaAsset): Promise<MediaAsset> {
   if (a.kind !== 'video' || a.alpha) return a;
-  const c = await readSourceColor(a.path).catch(() => null);
+  const c = await detectCapture(a.path).catch(() => null);
   return c ? { ...a, color: c } : a;
 }

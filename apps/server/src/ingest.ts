@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { manageGrade, type Timeline, uid, type MediaAsset } from '@neweditor/core';
+import { captureLine, manageGrade, type Timeline, uid, type MediaAsset } from '@neweditor/core';
+import { knownCapture } from './capture-profile.ts';
 import { convertedBy, projectColors } from './color-source.ts';
 import { transcribe, writeCenters } from './asr.ts';
 import { analyze, speechChunks } from './decupagem/analyze.ts';
@@ -18,6 +19,8 @@ import { store } from './store.ts';
  */
 export async function ingest(projectId: string, filePath: string, role?: MediaAsset['role']): Promise<MediaAsset> {
   await fs.access(filePath);
+  // BRAW e ProRes RAW: o FFmpeg não decodifica (BL-0175); melhor a mensagem clara que o erro do ffprobe.
+  if (/\.braw$/i.test(filePath)) throw Object.assign(new Error(`${path.basename(filePath)} é Blackmagic RAW (BRAW), que o app não lê: exporte em ProRes da câmera (o .sidecar ao lado leva a curva)`), { statusCode: 415 });
   const meta = await probe(filePath);
   const file = await fingerprint(filePath);
   const p0 = store.get(projectId);
@@ -56,9 +59,10 @@ export function fileChanged(a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' 
  */
 async function refresh(projectId: string, a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' | 'path'>, file: NonNullable<MediaAsset['file']>): Promise<MediaAsset> {
   if (!fileChanged(a, meta, file)) {
-    if (!a.color) {
+    if (!knownCapture(a.color)) {
+      const antes = a.color;
       a = await colorOf(projectId, a);
-      if (a.color) (store.upsertAsset(projectId, a), manageColor(projectId, a));
+      if (a.color && JSON.stringify(a.color) !== JSON.stringify(antes)) (store.upsertAsset(projectId, a), manageColor(projectId, a));
     }
     if (!a.file) store.upsertAsset(projectId, { ...a, file });
     store.log(projectId, 'agent', `${a.name} já está no projeto e não mudou.`);
@@ -85,7 +89,10 @@ function inheritFormat(projectId: string, asset: MediaAsset): void {
   else if (tl.formatoManual && asset.fps) store.setFormat(projectId, { fps: asset.fps });
 }
 
-/** A cor de entrada do arquivo (XML da câmera, ou herdada do bruto com o mesmo clipe no projeto). */
+/**
+ * A cor de entrada do arquivo pelo perfil de captura (XML da câmera, sidecar, tags, marca/modelo, codec; ou herdada do
+ * bruto com o mesmo clipe no projeto). Sem sinal, grava `desconhecida` (dito assim no projeto, nunca Rec.709 presumido).
+ */
 async function colorOf(projectId: string, asset: MediaAsset): Promise<MediaAsset> {
   if (asset.kind !== 'video' || asset.alpha) return asset;
   const others = store.get(projectId).assets.filter((x) => x.id !== asset.id);
@@ -96,11 +103,14 @@ async function colorOf(projectId: string, asset: MediaAsset): Promise<MediaAsset
 /** Arquivo LOG entra já convertido (Input Color Space do DaVinci): a grade dele ganha a entrada do arquivo. */
 function manageColor(projectId: string, asset: MediaAsset): void {
   const c = asset.color;
-  if (!c || c.input === 'rec709') return;
+  if (!c) return;
+  // O projeto mostra o perfil de captura de cada vídeo: "Câmera X, curva Y, conversão Z" (BL-0175).
+  store.log(projectId, 'agent', `Perfil de captura de ${asset.name}: ${captureLine(c)}`);
+  if (c.input === 'rec709') return;
   const cur = store.get(projectId).timeline.grades?.[asset.id];
   const next = manageGrade(cur, c)!;
   if (cur?.input === c.input && cur.inputLut?.id === next.inputLut?.id && cur.codeRange === c.codeRange) return;
-  const de = c.fonte === 'herdado' ? `herdado de ${c.de}` : `XML da câmera${c.modelo ? ` ${c.modelo}` : ''}`;
+  const de = c.fonte === 'herdado' ? `herdado de ${c.de}` : c.fonte === 'xml' ? `XML da câmera${c.modelo ? ` ${c.modelo}` : ''}` : `${c.fonte === 'sidecar' ? '.sidecar' : c.fonte === 'tag' ? 'metadado' : c.fonte === 'container' ? 'marca/modelo' : 'codec'} do arquivo${c.camera ? `, ${c.camera}` : ''}${c.confianca === 'provavel' ? ', provável' : ''}`;
   store.apply(projectId, { by: 'system', op: { type: 'set_grade', assetId: asset.id, grade: next }, note: `Cor de ${asset.name}: ${c.gamma ?? c.input} (${de}), convertida ${convertedBy(c)}` });
 }
 
