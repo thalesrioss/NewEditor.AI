@@ -119,6 +119,8 @@ export const api = {
   /** Padrão de cor do cliente (BL-0161): grade + até 3 stills (data URL) no perfil do projeto. */
   padraoCor: (id: string) => req<{ perfil: string; nome: string; padrao: PadraoCor | null }>('GET', `/api/projects/${id}/padrao-cor`),
   salvarPadraoCor: (id: string, grade: ColorGrade, stills?: string[]) => req<{ perfil: string; nome: string; padrao: PadraoCor }>('POST', `/api/projects/${id}/padrao-cor`, { grade, stills }),
+  stillPadraoUrl: (perfil: string, nome: string) => `/api/perfis/${encodeURIComponent(perfil)}/padrao-cor/stills/${encodeURIComponent(nome)}`,
+  apagarStillPadrao: (perfil: string, nome: string) => req<{ padrao: PadraoCor }>('DELETE', `/api/perfis/${encodeURIComponent(perfil)}/padrao-cor/stills/${encodeURIComponent(nome)}`),
   letteringAuto: (id: string, quantidade?: 'pouco' | 'medio' | 'muito') => req<{ queued: boolean }>('POST', `/api/projects/${id}/lettering-auto`, { quantidade }),
   letteringRef: (id: string, refId: string) => req<{ restyled: number }>('POST', `/api/projects/${id}/lettering-ref`, { refId }),
   importLettering: (path?: string) => req<ImportStatus>('POST', '/api/lettering/refs/import', { path }),

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { BookmarkPlus, ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
-import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BookmarkPlus, Columns2, ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
+import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform, type PadraoCor } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
 import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor, type CopiaCor } from '../lib/cor-clipe.ts';
 import { scopeFrame } from '../lib/scopeSource.ts';
@@ -185,17 +185,33 @@ function PadraoCliente({ projectId, g }: { projectId: string; g: ColorGrade }) {
   const [comStill, setComStill] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [padrao, setPadrao] = useState<{ perfil: string; padrao: PadraoCor | null } | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    api.padraoCor(projectId).then((r) => vivo && setPadrao(r), () => vivo && setPadrao(null));
+    return () => void (vivo = false);
+  }, [projectId]);
   const salvar = async () => {
     setBusy(true);
     setMsg(null);
     try {
       const still = comStill ? quadroAtual() : null;
       const r = await api.salvarPadraoCor(projectId, g, still ? [still] : undefined);
+      setPadrao({ perfil: r.perfil, padrao: r.padrao });
       setMsg({ ok: true, texto: `Padrão de cor de ${r.nome} salvo${r.padrao.stills.length ? ` (${r.padrao.stills.length} de 3 stills)` : ''}. Projeto novo do cliente nasce com ele nos clipes da fala.` });
     } catch (e) {
       setMsg({ ok: false, texto: (e as Error).message });
     }
     setBusy(false);
+  };
+  const apagar = async (nome: string) => {
+    if (!padrao) return;
+    try {
+      const r = await api.apagarStillPadrao(padrao.perfil, nome);
+      setPadrao({ ...padrao, padrao: r.padrao });
+    } catch (e) {
+      setMsg({ ok: false, texto: (e as Error).message });
+    }
   };
   return (
     <section className="space-y-2 border-t border-ink-750 pt-3">
@@ -207,7 +223,71 @@ function PadraoCliente({ projectId, g }: { projectId: string; g: ColorGrade }) {
         Guardar o quadro atual como still de referência (até 3)
       </label>
       {msg && <p className={`text-ui-xs leading-snug ${msg.ok ? 'text-emerald-300/90' : 'text-rose-300'}`}>{msg.texto}</p>}
+      {padrao?.padrao?.stills.length ? <StillSplit perfil={padrao.perfil} stills={padrao.padrao.stills} onApagar={apagar} /> : null}
     </section>
+  );
+}
+
+/**
+ * Still de referência do padrão × quadro atual (BL-0161, fatia 3): lado a lado, o still à esquerda e o quadro do
+ * player (já com a grade, o mesmo dos scopes) à direita, atualizado enquanto a comparação está aberta.
+ */
+function StillSplit({ perfil, stills, onApagar }: { perfil: string; stills: string[]; onApagar: (nome: string) => void }) {
+  const [sel, setSel] = useState(stills[0]!);
+  const [aberto, setAberto] = useState(false);
+  const cv = useRef<HTMLCanvasElement>(null);
+  const atual = stills.includes(sel) ? sel : stills[0]!;
+  useEffect(() => {
+    if (!aberto) return;
+    let raf = 0;
+    let visto = -1;
+    const desenha = () => {
+      const f = scopeFrame();
+      const alvo = cv.current;
+      if (f && alvo && f.version !== visto) {
+        visto = f.version;
+        const r = f.rect ?? { x: 0, y: 0, w: f.canvas.width, h: f.canvas.height };
+        const k = Math.min(1, 480 / Math.max(r.w, r.h));
+        const [w, h] = [Math.max(1, Math.round(r.w * k)), Math.max(1, Math.round(r.h * k))];
+        if (alvo.width !== w || alvo.height !== h) [alvo.width, alvo.height] = [w, h];
+        alvo.getContext('2d')?.drawImage(f.canvas, r.x, r.y, r.w, r.h, 0, 0, w, h);
+      }
+      raf = requestAnimationFrame(desenha);
+    };
+    raf = requestAnimationFrame(desenha);
+    return () => cancelAnimationFrame(raf);
+  }, [aberto]);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-ui-2xs text-ink-400">Stills do padrão</span>
+        {stills.map((s, i) => (
+          <span key={s} className={`group relative h-9 w-9 overflow-hidden rounded border ${s === atual ? 'border-white' : 'border-ink-700'}`}>
+            <button className="h-full w-full" title={`Still ${i + 1}: comparar com o quadro`} onClick={() => (setSel(s), setAberto(true))}>
+              <img src={api.stillPadraoUrl(perfil, s)} alt={`Still ${i + 1}`} className="h-full w-full object-cover" />
+            </button>
+            <button className="absolute top-0 right-0 hidden rounded-bl bg-black/70 p-0.5 text-white group-hover:block" title="Apagar este still do padrão" onClick={() => onApagar(s)}>
+              <X size={9} />
+            </button>
+          </span>
+        ))}
+        <Button size="sm" variant="secondary" className="ml-auto" icon={<Columns2 size={12} />} onClick={() => setAberto(!aberto)} title="Still de referência ao lado do quadro atual">
+          {aberto ? 'Fechar' : 'Comparar'}
+        </Button>
+      </div>
+      {aberto && (
+        <div className="grid grid-cols-2 gap-1">
+          <figure className="space-y-0.5">
+            <img src={api.stillPadraoUrl(perfil, atual)} alt="Still de referência" className="w-full rounded border border-ink-700 bg-black object-contain" />
+            <figcaption className="text-center text-ui-2xs text-ink-400">Still do padrão</figcaption>
+          </figure>
+          <figure className="space-y-0.5">
+            <canvas ref={cv} className="w-full rounded border border-ink-700 bg-black" />
+            <figcaption className="text-center text-ui-2xs text-ink-400">Quadro atual</figcaption>
+          </figure>
+        </div>
+      )}
+    </div>
   );
 }
 
