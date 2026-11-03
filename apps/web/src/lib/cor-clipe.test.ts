@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildLut, NEUTRAL_GRADE, normalizeTimeline, type ColorGrade } from '@neweditor/core';
-import { clipeDaCor, clipesDaCamera, colarGrade, gradeDoArquivoAoVivo } from './cor-clipe.ts';
+import { clipeDaCor, clipesDaCamera, colarGrade, gradeDoArquivoAoVivo, gradeParaPadrao } from './cor-clipe.ts';
 
 const tl = normalizeTimeline({
   fps: 30,
@@ -62,4 +62,26 @@ test('player antigo: rascunho de Este clipe (com clipId) não troca a grade do a
   assert.equal(gradeDoArquivoAoVivo(rascunhoArquivo, 'a1', grades), rascunhoArquivo.grade);
   assert.equal(gradeDoArquivoAoVivo(rascunhoArquivo, 'a2', grades), undefined);
   assert.equal(gradeDoArquivoAoVivo(null, 'a1', grades), doArquivo);
+});
+
+test('padrão do cliente (BL-0161): salva a camada com o look; look no arquivo e no clipe recusa', () => {
+  const slog: ColorGrade = { ...NEUTRAL_GRADE, input: 'slog3' };
+  const lookArq: ColorGrade = { ...slog, saturation: 1.2, contrast: 0.1 };
+  const lookClipe: ColorGrade = { ...NEUTRAL_GRADE, exposure: -0.2 };
+  // Só no arquivo (com a conversão S-Log3): o padrão é o look sem a entrada, qualquer que seja o alvo mostrado.
+  const a = gradeParaPadrao(lookArq, undefined);
+  assert.ok('grade' in a);
+  assert.equal(a.grade.input, 'rec709');
+  assert.equal(a.grade.saturation, 1.2);
+  // Só no clipe, com o arquivo só convertendo a câmera.
+  const c = gradeParaPadrao(slog, lookClipe);
+  assert.ok('grade' in c && c.grade.exposure === -0.2 && c.grade.input === 'rec709');
+  // Clipe com grade neutra explícita conta como sem look.
+  assert.ok('grade' in gradeParaPadrao(lookArq, { ...NEUTRAL_GRADE }));
+  // As duas com look: recusa dizendo o que fazer.
+  const r = gradeParaPadrao(lookArq, lookClipe);
+  assert.ok('erro' in r && /duas camadas/.test(r.erro));
+  // Nada em lugar nenhum: padrão neutro (a conversão fica com cada arquivo).
+  const n = gradeParaPadrao(slog, undefined);
+  assert.ok('grade' in n && n.grade.input === 'rec709' && n.grade.saturation === NEUTRAL_GRADE.saturation);
 });

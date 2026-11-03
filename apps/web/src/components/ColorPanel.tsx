@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BookmarkPlus, Columns2, ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
 import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform, type PadraoCor } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
-import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor, type CopiaCor } from '../lib/cor-clipe.ts';
+import { clipeDaCor, clipesDaCamera, colarGrade, gradeParaPadrao, type AlvoCor, type CopiaCor } from '../lib/cor-clipe.ts';
 import { scopeFrame } from '../lib/scopeSource.ts';
 import { useEditor } from '../lib/store.ts';
 import { Scopes } from './Scopes.tsx';
@@ -159,7 +159,12 @@ export function ColorPanel() {
           <RotateCcw size={13} /> Zerar
         </button>
       </div>
-      <PadraoCliente projectId={project.id} g={g} />
+      {/* O still é o quadro do player, com as duas camadas do clipe dele: a do alvo como está agora (g) e a outra como está salva. */}
+      <PadraoCliente
+        projectId={project.id}
+        arquivo={doClipe || (clip && clip.assetId !== assetId) ? project.timeline.grades?.[clip!.assetId] : g}
+        clipe={doClipe ? g : clip?.grade}
+      />
       <p className="text-ui-xs leading-snug text-ink-400">Ordem da cadeia: conversão da câmera (LOG → Rec.709), luz e cor, e só então o look. É assim que o look do cliente cai igual em qualquer bruto. O export usa exatamente o mesmo LUT.</p>
     </div>
   );
@@ -178,10 +183,11 @@ function quadroAtual(): string | null {
 }
 
 /**
- * "Salvar como padrão do cliente" (BL-0161): a grade mostrada vai para o perfil do projeto (por cima da conversão da
- * câmera, sem a entrada) e, se pedido, o quadro atual como still de referência (até 3 no perfil).
+ * "Salvar como padrão do cliente" (BL-0161): o look do quadro vai para o perfil do projeto (por cima da conversão da
+ * câmera, sem a entrada) e, se pedido, o quadro atual como still de referência (até 3 no perfil). O still tem as duas
+ * camadas (arquivo e clipe): salva a que tem o look e recusa quando as duas têm (`gradeParaPadrao`).
  */
-function PadraoCliente({ projectId, g }: { projectId: string; g: ColorGrade }) {
+function PadraoCliente({ projectId, arquivo, clipe }: { projectId: string; arquivo?: ColorGrade; clipe?: ColorGrade }) {
   const [comStill, setComStill] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
@@ -195,8 +201,10 @@ function PadraoCliente({ projectId, g }: { projectId: string; g: ColorGrade }) {
     setBusy(true);
     setMsg(null);
     try {
+      const camada = gradeParaPadrao(arquivo, clipe);
+      if ('erro' in camada) throw new Error(camada.erro);
       const still = comStill ? quadroAtual() : null;
-      const r = await api.salvarPadraoCor(projectId, g, still ? [still] : undefined);
+      const r = await api.salvarPadraoCor(projectId, camada.grade, still ? [still] : undefined);
       setPadrao({ perfil: r.perfil, padrao: r.padrao });
       setMsg({ ok: true, texto: `Padrão de cor de ${r.nome} salvo${r.padrao.stills.length ? ` (${r.padrao.stills.length} de 3 stills)` : ''}. Projeto novo do cliente nasce com ele nos clipes da fala.` });
     } catch (e) {
@@ -215,7 +223,7 @@ function PadraoCliente({ projectId, g }: { projectId: string; g: ColorGrade }) {
   };
   return (
     <section className="space-y-2 border-t border-ink-750 pt-3">
-      <Button size="sm" variant="secondary" className="w-full" icon={<BookmarkPlus size={12} />} disabled={busy} onClick={salvar} title="A grade mostrada vira o padrão de cor do perfil deste projeto">
+      <Button size="sm" variant="secondary" className="w-full" icon={<BookmarkPlus size={12} />} disabled={busy} onClick={salvar} title="O look do quadro (do arquivo ou do clipe, sem a conversão da câmera) vira o padrão de cor do perfil deste projeto">
         {busy ? 'Salvando…' : 'Salvar como padrão do cliente'}
       </Button>
       <label className="flex items-center gap-1.5 text-ui-2xs text-ink-400">
@@ -266,7 +274,7 @@ function StillSplit({ perfil, stills, onApagar }: { perfil: string; stills: stri
             <button className="h-full w-full" title={`Still ${i + 1}: comparar com o quadro`} onClick={() => (setSel(s), setAberto(true))}>
               <img src={api.stillPadraoUrl(perfil, s)} alt={`Still ${i + 1}`} className="h-full w-full object-cover" />
             </button>
-            <button className="absolute top-0 right-0 hidden rounded-bl bg-black/70 p-0.5 text-white group-hover:block" title="Apagar este still do padrão" onClick={() => onApagar(s)}>
+            <button className="absolute top-0 right-0 hidden rounded-bl bg-black/70 p-0.5 text-white group-focus-within:block group-hover:block" title="Apagar este still do padrão" aria-label={`Apagar o still ${i + 1} do padrão`} onClick={() => window.confirm(`Apagar o still ${i + 1} do padrão de cor? O arquivo sai do perfil e não volta.`) && onApagar(s)}>
               <X size={9} />
             </button>
           </span>
