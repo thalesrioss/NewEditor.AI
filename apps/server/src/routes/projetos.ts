@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { normalizeGradeLut, OpError, type ClientMessage, type ProjectStatus } from '@neweditor/core';
 import { saveGabarito } from '../benchmark.ts';
 import { cineproCube } from '../cinepro.ts';
+import { captureReport } from '../color-source.ts';
 import { estimateRemaining } from '../estimate.ts';
 import { ingest, rebuild, setRole } from '../ingest.ts';
 import { cancelJobsFor, enqueue } from '../jobs.ts';
@@ -44,6 +45,8 @@ export async function rotasProjetos(app: FastifyInstance): Promise<void> {
     return store.update(p.id, { profileId: (await houseProfile()).id });
   });
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => store.get(req.params.id));
+  /** Perfil de captura de cada vídeo (BL-0175): "Câmera X, curva Y, conversão Z", origem e confiança. */
+  app.get<{ Params: { id: string } }>('/api/projects/:id/perfil-captura', async (req) => captureReport(store.get(req.params.id)));
   app.patch<{ Params: { id: string }; Body: { name?: string; brief?: string; status?: ProjectStatus; client?: string; dueAt?: string; profileId?: string | null } }>('/api/projects/:id', async (req) => {
     const { name, brief, status, client, dueAt, profileId } = req.body;
     const cur = store.get(req.params.id);
