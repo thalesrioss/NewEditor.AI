@@ -93,6 +93,9 @@ export function classifyCapture(inp: CaptureInput): Decisao {
     const camera = `Sony ${s?.modelo ?? /<Device[^>]*modelName="([^"]*)"/i.exec(inp.xml)?.[1] ?? ''}`.trim();
     if (s) return row(s.input === 'slog3' ? 'sony-slog3-sgamut3cine' : 'sony-rec709', { ...s, fonte: 'xml', camera, confianca: 'certa' });
     const gamma = /<Item\s+name="CaptureGammaEquation"\s+value="([^"]*)"/i.exec(inp.xml)?.[1];
+    const gamut = /<Item\s+name="CaptureColorPrimaries"\s+value="([^"]*)"/i.exec(inp.xml)?.[1];
+    // Sony em HLG (rec2100-hlg, hlg1/2/3): a curva é a padrão BT.2100.
+    if (gamma && /hlg/i.test(gamma)) return row('hlg', { gamma, ...(gamut ? { gamut } : {}), fonte: 'xml', camera, confianca: 'certa' });
     return desconhecida(camera, `XML da Sony com curva ${gamma ? `"${gamma}"` : 'em branco'}, fora da tabela`, gamma ? { gamma } : {});
   }
   // 1b. `.sidecar` da Blackmagic.
@@ -116,10 +119,10 @@ export function classifyCapture(inp: CaptureInput): Decisao {
   const trc = (p.color_transfer ?? '').toLowerCase();
   const prim = (p.color_primaries ?? '').toLowerCase();
   const base = { ...(cam.nome ? { camera: cam.nome } : {}), ...(trc && trc !== 'unknown' ? { gamma: trc } : {}), ...(prim && prim !== 'unknown' ? { gamut: prim } : {}) };
-  if (Object.values(t).some((v) => /apple\s*log/i.test(v))) return row('applelog', { ...base, fonte: 'tag', confianca: 'certa' });
+  if (Object.entries(t).some(([k, v]) => /colou?r|gamma|log|profile|transfer/i.test(k) && /apple\s*log/i.test(v))) return row('applelog', { ...base, fonte: 'tag', confianca: 'certa' });
   if (trc === 'arib-std-b67') return row('hlg', { ...base, fonte: 'tag', confianca: 'certa' });
   if (trc === 'smpte2084') return desconhecida(cam.nome, 'PQ (HDR10/Dolby Vision perfil 5) fora da F1: sem conversão', base);
-  if (/^(bt709|smpte170m|bt470bg|bt470m|bt601|bt1361|bt2020-10|bt2020-12)$/.test(trc)) {
+  if (/^(bt709|smpte170m|bt470bg|bt470m|bt601)$/.test(trc)) {
     // O XAVC da Sony marca bt709 no stream também em S-Log: sem o XML, a tag não diz a curva.
     if (/sony/i.test(cam.make ?? '') || /^xavc/i.test(tag(t, 'major_brand') ?? '')) return desconhecida(cam.nome ?? 'Sony', 'Sony sem XML NonRealTimeMeta: a tag bt709 do stream não separa S-Log de Rec.709', base);
     return row('rec709', { ...base, fonte: 'tag', confianca: 'certa' });
@@ -134,7 +137,7 @@ export function classifyCapture(inp: CaptureInput): Decisao {
   if (/blackmagic/i.test(cam.make ?? '') && codec === 'prores')
     return row('bmd-film-gen5', { ...base, fonte: 'codec', confianca: 'provavel', aviso: 'ProRes da Blackmagic sem a curva no metadado: convertido como Film Gen5; confira o .sidecar ou o menu da câmera' });
 
-  return desconhecida(cam.nome, 'sem metadado de curva no arquivo', base);
+  return desconhecida(cam.nome, trc && trc !== 'unknown' ? `curva "${trc}" do stream fora da tabela` : 'sem metadado de curva no arquivo', base);
 }
 
 async function probeCapture(file: string): Promise<CaptureProbe | null> {

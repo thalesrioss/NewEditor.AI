@@ -28,7 +28,7 @@ export interface CaptureRow {
 export const CAPTURE_TABLE: readonly CaptureRow[] = [
   { curva: 'sony-slog3-sgamut3cine', nome: 'S-Log3/S-Gamut3.Cine', cameras: 'Sony (ZV-E10, FX3, FX30, A7S III, A7 IV…)', sinal: 'XML NonRealTimeMeta: CaptureGammaEquation s-log3*', input: 'slog3' },
   { curva: 'sony-rec709', nome: 'Rec.709 (Sony, S-Cinetone/709)', cameras: 'Sony', sinal: 'XML NonRealTimeMeta: CaptureGammaEquation rec709/s-cinetone', input: 'rec709' },
-  { curva: 'hlg', nome: 'HLG (BT.2100)', cameras: 'iPhone (vídeo HDR padrão), Android HDR, Sony HLG', sinal: 'stream: color_transfer=arib-std-b67', input: 'hlg' },
+  { curva: 'hlg', nome: 'HLG (BT.2100)', cameras: 'iPhone (vídeo HDR padrão), Android HDR, Sony HLG', sinal: 'stream: color_transfer=arib-std-b67; XML Sony com CaptureGammaEquation *hlg*', input: 'hlg' },
   { curva: 'applelog', nome: 'Apple Log/Rec.2020', cameras: 'iPhone 15/16/17 Pro', sinal: 'tag com "Apple Log"; ou make Apple + primaries bt2020 sem transfer (provável, confirmar em amostra real)', input: 'applelog' },
   { curva: 'bmd-film-gen5', nome: 'Blackmagic Film Gen5/Wide Gamut Gen5', cameras: 'Blackmagic (Pocket 4K/6K, Pyxis, Cinema Camera 6K)', sinal: '.sidecar ou com.blackmagic-design.camera.gamma "Blackmagic Design Film"', input: 'bmdfilm5' },
   { curva: 'rec709', nome: 'Rec.709 (SDR)', cameras: 'celular SDR (iPhone, Android), câmera em perfil padrão', sinal: 'stream: color_transfer bt709/smpte170m explícito (exceto Sony: o XAVC marca bt709 também em S-Log)', input: 'rec709' },

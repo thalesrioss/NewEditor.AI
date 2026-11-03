@@ -163,6 +163,9 @@ describe('perfil de captura (BL-0175 F1)', () => {
     const s2 = classifyCapture({ ext: '.mp4', probe: probe({}), xml: sonyXml('s-log2') });
     assert.deepEqual([s2.fonte, s2.camera], ['desconhecida', 'Sony ZV-E10']);
     assert.match(s2.aviso ?? '', /s-log2/);
+    // Sony em HLG pelo XML: tabela (HLG); título com "Apple Log" não decide a curva.
+    assert.equal(classifyCapture({ ext: '.mp4', probe: probe({}), xml: sonyXml('rec2100-hlg') }).curva, 'hlg');
+    assert.equal(classifyCapture({ ext: '.mov', probe: probe({ tags: { title: 'teste do Apple Log' } }) }).fonte, 'desconhecida');
     // PQ e BRAW: detectados e marcados com aviso, sem curva inventada.
     assert.match(classifyCapture({ ext: '.mov', probe: probe({ color_transfer: 'smpte2084' }) }).aviso ?? '', /PQ/);
     const braw = classifyCapture({ ext: '.braw', probe: null });
