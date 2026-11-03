@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, flashShutterCues, locate, normalizeTimeline, overlayActive, resolveOverlay, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
-import { DEFAULT_TRACKS, type Timeline } from './types.ts';
+import { applyOp, snapCut, PISCA, clipDuration, clipStarts, editorialWarnings, flashShutterCues, locate, normalizeTimeline, overlayActive, resolveOverlay, silencedAudioTracks, sourceToTimeline, timelineDuration, trackFlag, zoomAt, OpError } from './timeline.ts';
+import { DEFAULT_TRACKS, TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN, type Timeline } from './types.ts';
 import { buildCues, DEFAULT_CAPTIONS } from './text.ts';
 import { gradePixel, NEUTRAL_GRADE } from './color.ts';
 
@@ -282,6 +282,18 @@ test('limpeza da voz: liga com a intensidade, limita a 0–1 e 0 desliga (sai do
   assert.equal('voiceDenoise' in off, false);
 });
 
+test('solo esquecido na A3 ou trilha muda vira aviso de export sem som (BL-0160)', () => {
+  let t = applyOp(base(), { type: 'add_overlay', item: { trackId: 'A3', role: 'music', anchor: { assetId: 'a', at: 0 }, duration: 10, source: { type: 'media', assetId: 'm', in: 0 } } }, 'human');
+  assert.deepEqual(silencedAudioTracks(t), []);
+  assert.equal(editorialWarnings(t).some((w) => w.message.includes('sem som')), false);
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { solo: true } }, 'human');
+  // A1 (fala) cala por causa do solo; A2 vazia não entra
+  assert.deepEqual(silencedAudioTracks(t), [{ trackId: 'A1', why: 'solo', soloIds: ['A3'] }]);
+  assert.ok(editorialWarnings(t).some((w) => w.level === 'aviso' && w.message === 'A1 sem som no export: A3 em solo'));
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { solo: false, muted: true } }, 'human');
+  assert.deepEqual(silencedAudioTracks(t).map((s) => [s.trackId, s.why]), [['A3', 'mudo']]);
+});
+
 test('estado da trilha: ocultar/mudo valem para o overlay certo; false limpa e some do JSON', () => {
   let t = applyOp(base(), { type: 'add_overlay', item: { trackId: 'V2', role: 'broll', anchor: { assetId: 'a', at: 5 }, duration: 2, source: { type: 'media', assetId: 'b', in: 0 } } }, 'human');
   t = applyOp(t, { type: 'add_overlay', item: { trackId: 'A3', role: 'music', anchor: { assetId: 'a', at: 0 }, duration: 10, source: { type: 'media', assetId: 'm', in: 0 } } }, 'human');
@@ -295,6 +307,43 @@ test('estado da trilha: ocultar/mudo valem para o overlay certo; false limpa e s
   assert.equal(overlayActive(t, broll!), true);
   assert.equal('V2' in (t.trackState ?? {}), false);
   t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { muted: false, locked: false } }, 'human');
+  assert.equal('trackState' in t, false);
+});
+
+test('solo (BL-0160): trilha de som em solo emudece as outras de som no mudo efetivo; vídeo não muda', () => {
+  let t = applyOp(base(), { type: 'add_overlay', item: { trackId: 'A3', role: 'music', anchor: { assetId: 'a', at: 0 }, duration: 10, source: { type: 'media', assetId: 'm', in: 0 } } }, 'human');
+  t = applyOp(t, { type: 'add_overlay', item: { trackId: 'A2', role: 'sfx', anchor: { assetId: 'a', at: 1 }, duration: 1, source: { type: 'media', assetId: 's', in: 0 } } }, 'human');
+  t = applyOp(t, { type: 'add_overlay', item: { trackId: 'V2', role: 'broll', anchor: { assetId: 'a', at: 5 }, duration: 2, source: { type: 'media', assetId: 'b', in: 0 } } }, 'human');
+  const [music, sfx, broll] = t.overlays;
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { solo: true } }, 'human');
+  assert.equal(overlayActive(t, music!), true);
+  assert.equal(overlayActive(t, sfx!), false);
+  assert.equal(trackFlag(t, 'A1', 'muted'), true, 'a fala (A1) sai no solo da trilha');
+  assert.equal(trackFlag(t, 'A3', 'muted'), false);
+  assert.equal(trackFlag(t, 'V2', 'muted'), false);
+  assert.equal(overlayActive(t, broll!), true);
+  // O mudo guardado não muda: tirar o solo devolve tudo como estava.
+  assert.equal(t.trackState?.A1?.muted, undefined);
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A1', patch: { solo: true } }, 'human');
+  assert.equal(trackFlag(t, 'A1', 'muted'), false, 'duas trilhas em solo tocam as duas');
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A1', patch: { solo: false } }, 'human');
+  t = applyOp(t, { type: 'set_track_state', trackId: 'A3', patch: { solo: false } }, 'human');
+  assert.equal('trackState' in t, false);
+  assert.equal(overlayActive(t, sfx!), true);
+});
+
+test('altura da trilha (BL-0160): guardada em px inteiros, presa aos limites; 0 volta ao padrão', () => {
+  let t = applyOp(base(), { type: 'set_track_state', trackId: 'V1', patch: { height: 91.6 } }, 'human');
+  assert.equal(t.trackState?.V1?.height, 92);
+  t = applyOp(t, { type: 'set_track_state', trackId: 'V1', patch: { height: 5000 } }, 'human');
+  assert.equal(t.trackState?.V1?.height, TRACK_HEIGHT_MAX);
+  t = applyOp(t, { type: 'set_track_state', trackId: 'V1', patch: { height: 3 } }, 'human');
+  assert.equal(t.trackState?.V1?.height, TRACK_HEIGHT_MIN);
+  t = applyOp(t, { type: 'set_track_state', trackId: 'V1', patch: { locked: true } }, 'human');
+  assert.deepEqual(t.trackState?.V1, { height: TRACK_HEIGHT_MIN, locked: true }, 'outro campo não apaga a altura');
+  t = applyOp(t, { type: 'set_track_state', trackId: 'V1', patch: { height: Number.NaN } }, 'human');
+  assert.deepEqual(t.trackState?.V1, { locked: true });
+  t = applyOp(t, { type: 'set_track_state', trackId: 'V1', patch: { height: 0, locked: false } }, 'human');
   assert.equal('trackState' in t, false);
 });
 

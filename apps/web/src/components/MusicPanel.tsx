@@ -50,11 +50,11 @@ export function MusicPanel() {
       {current && currentAsset ? (
         <section className="space-y-3 border-b border-ink-750 p-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-nc/15 text-cyan-nc">
+            <div className="flex h-9 w-9 items-center justify-center rounded-ui-md bg-cyan-nc/15 text-cyan-nc">
               <Music size={16} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-semibold text-ink-100">{currentAsset.name.replace(/\.[^.]+$/, '')}</div>
+              <div className="truncate text-ui-sm font-semibold text-ink-100">{currentAsset.name.replace(/\.[^.]+$/, '')}</div>
               <div className="text-ui-xs text-ink-400">Trilha do vídeo · A3 · cobre o vídeo inteiro</div>
             </div>
             <button aria-label="Tirar a trilha" onClick={() => sendOp({ op: { type: 'remove_overlay', id: current.id }, note: 'Tirou a trilha' })} className="text-ink-400 hover:text-rose-400" title="Tirar a trilha">
@@ -67,7 +67,7 @@ export function MusicPanel() {
             <Slider label="Fade in" value={mix.fadeIn} min={0} max={6} step={0.25} fmt={(v) => `${v}s`} onCommit={(v) => setMix({ fadeIn: v })} />
             <Slider label="Fade out" value={mix.fadeOut} min={0} max={8} step={0.25} fmt={(v) => `${v}s`} onCommit={(v) => setMix({ fadeOut: v })} />
           </div>
-          <label className="flex items-center justify-between text-xs text-ink-300">
+          <label className="flex items-center justify-between text-ui-sm text-ink-300">
             <span>
               Abaixar quando você fala <span className="text-ink-400">(ducking)</span>
             </span>
@@ -80,7 +80,7 @@ export function MusicPanel() {
 
       <div className="flex items-center gap-2 border-b border-ink-750 px-3 py-2">
         <Search size={13} className="text-ink-400" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Buscar na biblioteca…" className="flex-1 bg-transparent text-xs text-ink-100 placeholder:text-ink-400 focus:outline-none" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Buscar na biblioteca…" className="flex-1 bg-transparent text-ui-sm text-ink-100 placeholder:text-ink-400 focus:outline-none" />
         <span className="text-ui-xs text-ink-400">{tracks?.length ?? 0}</span>
         <button
           onClick={async () => {
@@ -92,7 +92,7 @@ export function MusicPanel() {
               setErr((e as Error).message);
             }
           }}
-          className="rounded-full border border-ink-700 px-2 py-0.5 text-ui-2xs whitespace-nowrap text-ink-300 hover:border-nc-500 hover:text-white"
+          className="rounded-full border border-ink-700 px-2 py-0.5 text-ui-xs whitespace-nowrap text-ink-300 hover:border-nc-500 hover:text-white"
           title="Escolhe a trilha pelo ritmo do corte (BPM) e começa num tempo forte"
         >
           pela batida
@@ -126,7 +126,7 @@ export function MusicPanel() {
                     setPlaying(null);
                     api.useMusic(project.id, t.path).catch((e: Error) => setErr(e.message));
                   }}
-                  className="rounded-md bg-ink-700 px-2 py-1 text-ui-xs font-semibold text-ink-100 opacity-0 transition group-hover:opacity-100 hover:bg-nc-500"
+                  className="rounded-ui-md bg-ink-700 px-2 py-1 text-ui-xs font-semibold text-ink-100 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-nc-500"
                 >
                   Usar
                 </button>
@@ -154,17 +154,17 @@ function VoiceClean() {
   return (
     <section className="space-y-2 border-b border-ink-750 p-4">
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-nc-500/15 text-nc-300">
+        <div className="flex h-9 w-9 items-center justify-center rounded-ui-md bg-nc-500/15 text-nc-300">
           <Mic size={16} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-ink-100">Limpar ruído da voz</div>
+          <div className="text-ui-sm font-semibold text-ink-100">Limpar ruído da voz</div>
           <div className="text-ui-xs text-ink-400">Chiado, ar-condicionado, rua — a voz fica igual</div>
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-1 rounded-lg bg-ink-850 p-1">
+      <div className="grid grid-cols-4 gap-1 rounded-ui-md bg-ink-850 p-1">
         {opts.map((o) => (
-          <button key={o.label} disabled={!voices.length} onClick={() => set(o.mix, o.label)} className={`rounded-md py-1 text-ui-xs font-semibold transition ${Math.abs(o.mix - mix) < 0.001 ? 'bg-nc-500 text-white' : 'text-ink-400 hover:text-white'} disabled:opacity-40`}>
+          <button key={o.label} disabled={!voices.length} onClick={() => set(o.mix, o.label)} className={`rounded-ui-md py-1 text-ui-xs font-semibold transition ${Math.abs(o.mix - mix) < 0.001 ? 'bg-nc-500 text-white' : 'text-ink-400 hover:text-white'} disabled:opacity-40`}>
             {o.label}
           </button>
         ))}

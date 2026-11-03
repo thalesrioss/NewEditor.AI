@@ -141,7 +141,7 @@ export function EnginePlayer() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1 items-center justify-center p-3">
-        <div ref={frame} className="relative max-h-full max-w-full overflow-hidden bg-black shadow-[var(--shadow-ui-2)] ring-1 ring-ink-700" style={{ aspectRatio: aspect, height: '100%' }}>
+        <div ref={frame} className="relative max-h-full max-w-full overflow-hidden bg-black shadow-ui-2 ring-1 ring-ink-700" style={{ aspectRatio: aspect, height: '100%' }}>
           <canvas ref={canvas} className="absolute inset-0 h-full w-full" />
           {timeline?.regionFx?.length ? <RegionFxLayer timeline={timeline} t={playhead} frameH={frameH} /> : null}
           {asset?.kind === 'audio' && <AudioCard asset={asset} t={loc!.sourceTime} />}

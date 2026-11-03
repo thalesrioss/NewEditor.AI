@@ -2,6 +2,7 @@ export * from './types.ts';
 export * from './timeline.ts';
 export * from './text.ts';
 export * from './color.ts';
+export * from './cameras.ts';
 export * from './motion.ts';
 export * from './sfx.ts';
 export * from './lettering.ts';

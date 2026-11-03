@@ -71,7 +71,7 @@ export function ReviewFocus({ doubts, acima, onListen, playing, onResolve, onClo
               {d.at !== null && <span className="font-mono text-ink-400">{formatTime(d.at)}</span>}
             </div>
             <p className="text-ui-md leading-snug text-white">{d.question}</p>
-            <blockquote className="rounded-[var(--radius-ui-md)] border-l-2 border-ink-600 bg-ink-800 p-3 text-ui-sm leading-relaxed text-ink-200">"{d.text}"</blockquote>
+            <blockquote className="rounded-ui-md border-l-2 border-ink-600 bg-ink-800 p-3 text-ui-sm leading-relaxed text-ink-200">"{d.text}"</blockquote>
             {d.swap && (
               <div className="text-ui-xs text-ink-400">
                 Ficou no lugar: <span className="text-ink-200">"{d.swap.text}"</span>
@@ -80,19 +80,19 @@ export function ReviewFocus({ doubts, acima, onListen, playing, onResolve, onClo
             {d.suggestions && d.suggestions.length > 0 && <div className="text-ui-xs text-ink-400">Sugestões: {d.suggestions.slice(0, 4).join(', ')}</div>}
             <div className="flex flex-wrap gap-1.5 pt-1">
               <Button size="sm" icon={<Play size={12} />} onClick={() => onListen(d)}>
-                {playing === d.id ? 'Parar' : 'Ouvir'} <kbd className="ml-1 text-ui-2xs text-ink-400">L</kbd>
+                {playing === d.id ? 'Parar' : 'Ouvir'} <kbd className="ml-1 text-ui-xs text-ink-400">L</kbd>
               </Button>
               <Button size="sm" variant="primary" icon={<Check size={12} />} onClick={() => onResolve(d)}>
-                Está certo <kbd className="ml-1 text-ui-2xs opacity-70">A</kbd>
+                Está certo <kbd className="ml-1 text-ui-xs opacity-70">A</kbd>
               </Button>
               {d.swap && (
                 <Button size="sm" icon={<RotateCcw size={12} />} onClick={swap}>
-                  Trocar por esta <kbd className="ml-1 text-ui-2xs text-ink-400">T</kbd>
+                  Trocar por esta <kbd className="ml-1 text-ui-xs text-ink-400">T</kbd>
                 </Button>
               )}
               {d.removalId && (
                 <Button size="sm" icon={<Undo2 size={12} />} onClick={restore}>
-                  Restaurar <kbd className="ml-1 text-ui-2xs text-ink-400">R</kbd>
+                  Restaurar <kbd className="ml-1 text-ui-xs text-ink-400">R</kbd>
                 </Button>
               )}
             </div>
@@ -101,12 +101,12 @@ export function ReviewFocus({ doubts, acima, onListen, playing, onResolve, onClo
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             {acima ? <p className="max-w-sm text-ui-md text-amber-300">{textoPassaDoAlvo(acima)}.</p> : <p className="text-ui-md text-emerald-300">Nada pendente.</p>}
             <Button variant="primary" onClick={onApprove}>
-              Aprovar decupagem e finalizar <kbd className="ml-1 text-ui-2xs opacity-70">Enter</kbd>
+              Aprovar decupagem e finalizar <kbd className="ml-1 text-ui-xs opacity-70">Enter</kbd>
             </Button>
           </div>
         )}
       </div>
-      <p className="border-t border-ink-750 px-3 py-1.5 text-ui-2xs text-ink-400">J/K próxima e anterior · L ouvir · A está certo · T trocar tomada · R restaurar · Esc sair</p>
+      <p className="border-t border-ink-750 px-3 py-1.5 text-ui-xs text-ink-400">J/K próxima e anterior · L ouvir · A está certo · T trocar tomada · R restaurar · Esc sair</p>
     </div>
   );
 }

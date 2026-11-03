@@ -3,6 +3,7 @@
  * e acerta exposição e balanço de branco olhando os pixels do ORIGINAL.
  */
 import { gradePixel, guessInput, manageGrade, NEUTRAL_GRADE, type ColorGrade, type MediaAsset } from '@neweditor/core';
+import { knownCapture } from './capture-profile.ts';
 import { cineproCube } from './cinepro.ts';
 import { run } from './media.ts';
 
@@ -40,7 +41,9 @@ export async function autoGrade(asset: MediaAsset): Promise<{ grade: ColorGrade;
   const times = [0.2, 0.5, 0.8].map((f) => Math.max(0, asset.duration * f));
   const st = await frameStats(asset.path, times[1]!);
   // A entrada do arquivo (XML da câmera) manda; o palpite pelo quadro só vale para arquivo sem metadado de cor.
-  const base: ColorGrade = manageGrade({ ...NEUTRAL_GRADE, input: guessInput(st, st.brand) }, asset.color)!;
+  // Curva `desconhecida` (BL-0175) não é cor lida: o palpite segue valendo, como antes.
+  const color = knownCapture(asset.color) ? asset.color : undefined;
+  const base: ColorGrade = manageGrade({ ...NEUTRAL_GRADE, input: guessInput(st, st.brand) }, color)!;
   const input = base.input;
   const inCube = base.inputLut ? await cineproCube(base.inputLut.id).catch(() => null) : null;
   const frames = await samplePixels(asset.path, times);
@@ -69,6 +72,6 @@ export async function autoGrade(asset: MediaAsset): Promise<{ grade: ColorGrade;
     tint = Math.max(-0.3, Math.min(0.3, ((r + b) / 2 - g) / g));
   }
   const grade: ColorGrade = { ...base, exposure: Math.round(exposure * 20) / 20, temperature: Math.round(temperature * 100) / 100, tint: Math.round(tint * 100) / 100 };
-  const label = input === 'rec709' ? 'imagem já em Rec.709' : asset.color ? `${asset.color.gamma ?? input} lido do arquivo${input === 'slog3' ? ', conversão LC-709 Type A embutida' : base.inputLut ? ', LUT de entrada' : ''}` : `${input === 'slog3' ? 'Sony S-Log3' : input} (preto em ${Math.round(st.ylow)}/1023${st.brand ? `, arquivo ${st.brand}` : ''})`;
+  const label = input === 'rec709' ? 'imagem já em Rec.709' : color ? `${color.gamma ?? input} lido do arquivo${input === 'slog3' ? ', conversão LC-709 Type A embutida' : base.inputLut ? ', LUT de entrada' : ''}` : `${input === 'slog3' ? 'Sony S-Log3' : input} (preto em ${Math.round(st.ylow)}/1023${st.brand ? `, arquivo ${st.brand}` : ''})`;
   return { grade, why: `${label}; exposição ${grade.exposure >= 0 ? '+' : ''}${grade.exposure} stop, temperatura ${grade.temperature}, matiz ${grade.tint}` };
 }

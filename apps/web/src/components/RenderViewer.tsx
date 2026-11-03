@@ -45,14 +45,14 @@ export function RenderViewer() {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm" onMouseDown={() => setUrl(null)}>
-      <div className="anim-pop flex max-h-full flex-col overflow-hidden rounded-2xl border border-ink-700 bg-ink-850 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="anim-pop flex max-h-full flex-col overflow-hidden rounded-ui-lg border border-ink-700 bg-ink-850 shadow-ui-3" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-ink-750 px-4 py-2.5">
-          <div className="text-sm font-semibold">Vídeo exportado</div>
+          <div className="text-ui-md font-semibold">Vídeo exportado</div>
           <div className="truncate font-mono text-ui-xs text-ink-400">{name}</div>
-          <a href={url} download={name} className="ml-auto flex items-center gap-1.5 rounded-lg nc-gradient px-3 py-1.5 text-xs font-semibold text-white">
+          <a href={url} download={name} className="ml-auto flex items-center gap-1.5 rounded-ui-md nc-gradient px-3 py-1.5 text-ui-sm font-semibold text-white">
             <Download size={13} /> Baixar
           </a>
-          <button aria-label="Fechar (Esc)" onClick={() => setUrl(null)} className="rounded-md p-1 text-ink-400 hover:text-white" title="Fechar (Esc)">
+          <button aria-label="Fechar (Esc)" onClick={() => setUrl(null)} className="rounded-ui-md p-1 text-ink-400 hover:text-white" title="Fechar (Esc)">
             <X size={16} />
           </button>
         </div>

@@ -79,7 +79,7 @@ export function AgentPipeline() {
   return (
     <div className="space-y-2 border-b border-ink-750 p-3">
       {yourTurn && activity.state === 'idle' && (
-        <div className="flex items-center gap-2 rounded-[var(--radius-ui-md)] border border-amber-400/40 bg-amber-400/10 px-2.5 py-2">
+        <div className="flex items-center gap-2 rounded-ui-md border border-amber-400/40 bg-amber-400/10 px-2.5 py-2">
           <Hand size={14} className="shrink-0 text-amber-300" />
           <span className="min-w-0 flex-1 text-ui-sm text-amber-100">{cur === 'revisao' ? 'Sua vez: revise a decupagem e aprove.' : 'Sua vez: confira a edição e exporte.'}</span>
           {cur === 'revisao' && (
@@ -93,7 +93,7 @@ export function AgentPipeline() {
       <button className="flex w-full items-center gap-2 text-left" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="etapas">
         <span className="flex flex-1 gap-0.5" aria-hidden>
           {STEPS.map((s, i) => (
-            <span key={s.id} className={`h-1.5 flex-1 rounded-full ${i < curIdx ? 'bg-[var(--color-ok)]' : i === curIdx ? (s.who === 'voce' ? 'bg-[var(--color-human)]' : 'animate-pulse bg-[var(--color-agent)]') : 'bg-ink-700'}`} />
+            <span key={s.id} className={`h-1.5 flex-1 rounded-full ${i < curIdx ? 'bg-ok' : i === curIdx ? (s.who === 'voce' ? 'bg-human' : 'animate-pulse bg-agent') : 'bg-ink-700'}`} />
           ))}
         </span>
         <span className="text-ui-xs whitespace-nowrap text-ink-300">{curIdx >= 0 && curIdx < STEPS.length ? STEPS[curIdx]!.label : curIdx >= STEPS.length ? 'Entregue' : 'Na fila'}</span>
@@ -107,18 +107,18 @@ export function AgentPipeline() {
           const spent = active && started.current[s.id] ? (Date.now() - started.current[s.id]!) / 1000 : 0;
           return (
             <li key={s.id} className={`flex items-center gap-2 text-ui-xs ${done ? 'text-ink-400' : active ? 'text-white' : 'text-ink-400'}`} aria-current={active ? 'step' : undefined}>
-              {done ? <Check size={12} className="text-[var(--color-ok)]" /> : active ? s.who === 'voce' ? <User size={12} className="text-[var(--color-human)]" /> : <Loader2 size={12} className="animate-spin text-[var(--color-agent)]" /> : <Circle size={10} className="mx-px text-ink-600" />}
+              {done ? <Check size={12} className="text-ok" /> : active ? s.who === 'voce' ? <User size={12} className="text-human" /> : <Loader2 size={12} className="animate-spin text-agent" /> : <Circle size={10} className="mx-px text-ink-600" />}
               <span className={`flex-1 ${done ? 'line-through decoration-ink-600' : ''}`}>
                 {s.label}
-                <span className={`ml-1.5 text-ui-2xs ${s.who === 'voce' ? 'text-[var(--color-human)]' : 'text-[var(--color-agent)]'}`}>{s.who === 'voce' ? 'você' : 'agente'}</span>
+                <span className={`ml-1.5 text-ui-xs ${s.who === 'voce' ? 'text-human' : 'text-agent'}`}>{s.who === 'voce' ? 'você' : 'agente'}</span>
               </span>
-              <span className="font-mono text-ui-2xs text-ink-400">{active && spent > 1 ? `${formatTime(spent)} / ≈${fmt(estOf(s))}` : done ? '' : `≈${fmt(estOf(s))}`}</span>
+              <span className="font-mono text-ui-xs text-ink-400">{active && spent > 1 ? `${formatTime(spent)} / ≈${fmt(estOf(s))}` : done ? '' : `≈${fmt(estOf(s))}`}</span>
             </li>
           );
         })}
       </ol>
       )}
-      {curIdx >= 0 && curIdx < STEPS.length && remaining > 0 && <p className="text-ui-2xs text-ink-400">Trabalho do agente que falta: ≈{fmt(remaining)}</p>}
+      {curIdx >= 0 && curIdx < STEPS.length && remaining > 0 && <p className="text-ui-xs text-ink-400">Trabalho do agente que falta: ≈{fmt(remaining)}</p>}
       <LastPass />
     </div>
   );
@@ -149,12 +149,12 @@ function LastPass() {
   if (!summary) return null;
   const parts = [summary.cuts && `${summary.cuts} corte(s)`, Math.abs(summary.dt) > 0.05 && `${summary.dt < 0 ? '−' : '+'}${Math.abs(summary.dt).toFixed(1)} s`, summary.motions && `${summary.motions} motion(s)`, summary.letterings && `${summary.letterings} lettering(s)`].filter(Boolean);
   return (
-    <div className="flex items-center gap-2 rounded-[var(--radius-ui-md)] bg-ink-800 px-2.5 py-1.5 text-ui-xs text-ink-200">
+    <div className="flex items-center gap-2 rounded-ui-md bg-ink-800 px-2.5 py-1.5 text-ui-xs text-ink-200">
       <span className="flex-1">
         <span className="text-ink-400">Última passada: </span>
         {parts.join(' · ')}
       </span>
-      <button className="text-ui-2xs text-ink-400 hover:text-white" onClick={() => (seek(0), setSummary(null))}>
+      <button className="text-ui-xs text-ink-400 hover:text-white" onClick={() => (seek(0), setSummary(null))}>
         ok
       </button>
     </div>

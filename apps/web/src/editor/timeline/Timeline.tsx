@@ -5,7 +5,7 @@ import { api } from '../../lib/api.ts';
 import { useEditor } from '../../lib/store.ts';
 import { Avatar, AVATAR_ANCHOR_X } from '../../components/Avatar.tsx';
 import { IconButton } from '../../components/ui.tsx';
-import { ROLE_STYLE, ROW, openRightTab, timecode } from '../shared.ts';
+import { ROLE_STYLE, ROW, openRightTab, timecode, type RowId } from '../shared.ts';
 import { AgentMarks } from './AgentMarks.tsx';
 import { CaptionHeader, CaptionLane, ClipBlock, OverlayTrack, TrackHeader, WaveBlock } from './blocks.tsx';
 import { openMenu } from './ContextMenu.tsx';
@@ -13,13 +13,16 @@ import { rulerStep } from './ruler.ts';
 import { SourceLane } from './SourceLane.tsx';
 
 const PAD = 16;
-const HEADER_W = 104;
+/** Cabeçalho largo o bastante para nome + olho/mudo/solo/cadeado sem cortar o nome (BL-0160). */
+const HEADER_W = 148;
 const MIN_PPS = 0.3;
-const MAX_PPS = 600;
+/** Mesmo teto do store (`setPxPerSec`): o zoom centrado calcula a rolagem com o valor que de fato fica. */
+const MAX_PPS = 400;
 
 /**
- * Timeline (CapCut): barra de ferramentas, cabeçalhos de trilha, régua com quadros, cursor arrastável,
- * laço de seleção, ímã com linha-guia, zoom com ⌘+roda, menu de contexto e o avatar andando pelos cortes.
+ * Timeline (CapCut/Resolve): barra de ferramentas, cabeçalhos de trilha (olho, mudo, solo, cadeado e altura por
+ * arrasto, BL-0160), régua em timecode HH:MM:SS:FF no fps do projeto, cursor arrastável, laço de seleção, ímã com
+ * linha-guia, zoom com Alt/⌘+roda centrado no mouse, "ajustar à janela" (Shift+Z), menu de contexto e o avatar.
  * Trilhas: LG (legenda) · V3 (lettering/motion) · V2 (B-roll) · V1 (fala) · A1 (áudio da fala) · A2 (SFX) · A3 (trilha).
  */
 export function Timeline() {
@@ -50,8 +53,16 @@ export function Timeline() {
   const manualZoom = useRef(false);
   const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
+  // Altura ao vivo enquanto a alça do cabeçalho é arrastada (grava no projeto ao soltar).
+  const [liveH, setLiveH] = useState<{ id: string; h: number } | null>(null);
 
   const timeline = project?.timeline;
+  const trackState = timeline?.trackState;
+  // A altura gravada chegou (ou outra mudança de trilha): a prévia ao vivo sai.
+  useEffect(() => setLiveH(null), [trackState]);
+  /** Altura de cada linha: a arrastada agora, a guardada no projeto (`set_track_state`) ou a padrão. */
+  const rowH = (id: RowId): number => (liveH?.id === id ? liveH.h : (trackState?.[id]?.height ?? ROW[id]));
+  const onHeight = (id: string, h: number | null) => setLiveH(h === null ? null : { id, h });
   const fps = timeline?.fps || 30;
   const total = timeline ? timelineDuration(timeline) : 0;
   const starts = useMemo(() => (timeline ? clipStarts(timeline) : []), [timeline]);
@@ -70,8 +81,14 @@ export function Timeline() {
 
   // Encaixa sozinho (inclusive quando a janela muda) até o editor mexer no zoom à mão.
   const fitPps = () => Math.min(MAX_PPS, Math.max(MIN_PPS, (viewW - PAD * 2 - 48) / Math.max(0.5, total)));
+  /** Ajustar à janela (Shift+Z): a timeline inteira cabe na largura visível, a partir do começo. */
   const fit = () => {
-    if (total > 0) setPps(fitPps());
+    const next = fitPps();
+    if (total > 0 && Math.abs(next - useEditor.getState().pxPerSec) > 1e-9) {
+      pendingScroll.current = 0;
+      setPps(next);
+    }
+    if (scroller.current) scroller.current.scrollLeft = 0;
     manualZoom.current = false;
   };
   useEffect(() => {
@@ -79,30 +96,54 @@ export function Timeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total > 0, viewW]);
 
-  /** Zoom em volta de um ponto da tela (⌘+roda, botões): o instante sob o mouse fica parado. */
+  /**
+   * Zoom em volta de um ponto da tela (Alt/⌘+roda, botões): o instante sob o mouse fica parado. Lê o zoom atual
+   * do store e a rolagem pendente, para que vários eventos de roda antes do próximo quadro não se percam.
+   */
+  const pendingScroll = useRef<number | null>(null);
   const zoomAround = (factor: number, clientX?: number) => {
     const el = scroller.current;
-    const next = Math.min(MAX_PPS, Math.max(MIN_PPS, pps * factor));
+    const cur = useEditor.getState().pxPerSec;
+    const next = Math.min(MAX_PPS, Math.max(MIN_PPS, cur * factor));
+    if (Math.abs(next - cur) < 1e-9) return; // no limite: nada muda (e nada fica pendente)
     if (el) {
       const rect = el.getBoundingClientRect();
       const cx = clientX !== undefined ? clientX - rect.left : rect.width / 2;
-      const t = (cx + el.scrollLeft - PAD) / pps;
-      requestAnimationFrame(() => {
-        el.scrollLeft = Math.max(0, t * next + PAD - cx);
-      });
+      const t = (cx + (pendingScroll.current ?? el.scrollLeft) - PAD) / cur;
+      pendingScroll.current = Math.max(0, t * next + PAD - cx);
     }
     manualZoom.current = true;
     setPps(next);
   };
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && pendingScroll.current !== null) el.scrollLeft = pendingScroll.current;
+    pendingScroll.current = null;
+  }, [pps]);
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (e.code === 'KeyZ' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        fitRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const zoomRef = useRef(zoomAround);
   zoomRef.current = zoomAround;
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      // Alt+roda (como no Resolve) e ⌘/Ctrl+roda (pinça do trackpad): zoom centrado no mouse.
+      if (e.altKey || e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        zoomRef.current(Math.exp(-e.deltaY * 0.01), e.clientX);
+        zoomRef.current(Math.exp(-(Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * 0.01), e.clientX);
       } else if (e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault();
         el.scrollLeft += e.deltaY;
@@ -297,19 +338,19 @@ export function Timeline() {
           <span className="text-ink-100">{timecode(playhead, fps)}</span> <span className="text-ink-600">/</span> {timecode(total, fps)}
         </span>
         {marks.in !== undefined && marks.out !== undefined && marks.out > marks.in && (
-          <span className="ml-2 flex items-center gap-1 rounded-full bg-nc-500/15 px-2 py-0.5 text-ui-2xs whitespace-nowrap text-nc-300" title="Delete corta o intervalo; X limpa as marcas">
+          <span className="ml-2 flex items-center gap-1 rounded-full bg-nc-500/15 px-2 py-0.5 text-ui-xs whitespace-nowrap text-nc-300" title="Delete corta o intervalo; X limpa as marcas">
             I–O {formatTime(marks.in, true)}–{formatTime(marks.out, true)} · Delete corta
           </span>
         )}
-        {nSel > 1 && <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-ui-2xs text-ink-100">{nSel} selecionados</span>}
+        {nSel > 1 && <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-ui-xs text-ink-100">{nSel} selecionados</span>}
         {selOverlay && nSel === 1 && (
-          <span className="ml-2 flex items-center gap-1 text-ui-2xs text-ink-400">
+          <span className="ml-2 flex items-center gap-1 text-ui-xs text-ink-400">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: ROLE_STYLE[selOverlay.role].solid }} /> {ROLE_STYLE[selOverlay.role].label}
           </span>
         )}
-        {selClip && nSel === 1 && <span className="ml-2 text-ui-2xs text-ink-400">clipe {timeline!.main.indexOf(selClip) + 1} · {clipDuration(selClip).toFixed(2)} s</span>}
+        {selClip && nSel === 1 && <span className="ml-2 text-ui-xs text-ink-400">clipe {timeline!.main.indexOf(selClip) + 1} · {clipDuration(selClip).toFixed(2)} s</span>}
         {warnings.length > 0 && (
-          <span className="ml-2 flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-ui-2xs text-amber-300" title={warnings.map((w) => `• ${w.message}`).join('\n')}>
+          <span className="ml-2 flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-0.5 text-ui-xs text-amber-300" title={warnings.map((w) => `• ${w.message}`).join('\n')}>
             <AlertTriangle size={12} /> {warnings.length} {warnings.length === 1 ? 'alerta' : 'alertas'}
           </span>
         )}
@@ -321,7 +362,7 @@ export function Timeline() {
           <IconButton label="Aumentar zoom" shortcut="+" onClick={() => zoomAround(1.4)}>
             <ZoomIn size={15} />
           </IconButton>
-          <IconButton label="Encaixar tudo na tela" onClick={fit}>
+          <IconButton label="Ajustar à janela" shortcut="⇧Z" onClick={fit}>
             <Maximize2 size={14} />
           </IconButton>
         </div>
@@ -331,14 +372,14 @@ export function Timeline() {
       <div className="scroll-thin flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="sticky left-0 z-40 shrink-0 self-start border-r border-ink-750 bg-ink-850" style={{ width: HEADER_W }}>
           <div className="border-b border-ink-750" style={{ height: ROW.ruler + ROW.marks }} />
-          <CaptionHeader />
+          <CaptionHeader h={rowH('LG')} onHeight={onHeight} />
           {(['V3', 'V2'] as const).map((id) => (
-            <TrackHeader key={id} id={id} name={tracksById.get(id)?.name ?? ''} h={ROW[id]} kind="video" />
+            <TrackHeader key={id} id={id} name={tracksById.get(id)?.name ?? ''} h={rowH(id)} kind="video" onHeight={onHeight} />
           ))}
-          <TrackHeader id="V1" name="Fala" h={ROW.V1} strong kind="main" />
-          <TrackHeader id="A1" name="Áudio da fala" h={ROW.A1} kind="audio" />
+          <TrackHeader id="V1" name="Fala" h={rowH('V1')} strong kind="main" onHeight={onHeight} />
+          <TrackHeader id="A1" name="Áudio da fala" h={rowH('A1')} kind="audio" onHeight={onHeight} />
           {(['A2', 'A3'] as const).map((id) => (
-            <TrackHeader key={id} id={id} name={tracksById.get(id)?.name ?? ''} h={ROW[id]} kind="audio" />
+            <TrackHeader key={id} id={id} name={tracksById.get(id)?.name ?? ''} h={rowH(id)} kind="audio" onHeight={onHeight} />
           ))}
         </div>
 
@@ -346,15 +387,15 @@ export function Timeline() {
           <div className="relative" style={{ width }} onMouseDown={laneDown} onContextMenu={laneMenu}>
             <Ruler pps={pps} width={width} fps={fps} onMouseDown={scrubStart} onHover={setHoverT} />
             <AgentMarks pps={pps} pad={PAD} />
-            <CaptionLane pps={pps} pad={PAD} selectedKey={selection?.kind === 'caption' ? selection.id : undefined} />
+            <CaptionLane pps={pps} pad={PAD} h={rowH('LG')} selectedKey={selection?.kind === 'caption' ? selection.id : undefined} />
             {(['V3', 'V2'] as const).map((id) => (
-              <OverlayTrack key={id} track={tracksById.get(id)} h={ROW[id]} items={overlaysOn(id)} pps={pps} pad={PAD} timeAt={timeAt} selectedId={selOverlay?.id} bad={badOverlays} assets={assets} />
+              <OverlayTrack key={id} track={tracksById.get(id)} h={rowH(id)} items={overlaysOn(id)} pps={pps} pad={PAD} timeAt={timeAt} selectedId={selOverlay?.id} bad={badOverlays} assets={assets} />
             ))}
 
             {/* V1 — fala */}
-            <div data-lane="V1" className="relative border-y border-ink-700/60 bg-ink-900/40" style={{ height: ROW.V1, marginLeft: PAD }}>
+            <div data-lane="V1" className="relative border-y border-ink-700/60 bg-ink-900/40" style={{ height: rowH('V1'), marginLeft: PAD }}>
               {timeline?.main.map((c, i) => (
-                <ClipBlock key={c.id} clip={c} index={i} x={starts[i]! * pps} w={clipDuration(c) * pps} pps={pps} selected={c.id === selClip?.id} asset={assets.get(c.assetId)} />
+                <ClipBlock key={c.id} clip={c} index={i} x={starts[i]! * pps} w={clipDuration(c) * pps} h={rowH('V1')} pps={pps} selected={c.id === selClip?.id} asset={assets.get(c.assetId)} />
               ))}
               {!timeline?.main.length && <div className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-ui-xs text-ink-500">A fala entra aqui depois da decupagem.</div>}
               {!!timeline?.main.length && (
@@ -370,21 +411,21 @@ export function Timeline() {
             </div>
 
             {/* A1 — áudio da fala */}
-            <div data-lane="A1" className={`relative bg-ink-900/20 ${timeline && trackFlag(timeline, 'A1', 'muted') ? 'hatch opacity-40' : ''}`} style={{ height: ROW.A1, marginLeft: PAD }}>
+            <div data-lane="A1" className={`relative bg-ink-900/20 ${timeline && trackFlag(timeline, 'A1', 'muted') ? 'hatch opacity-40' : ''}`} style={{ height: rowH('A1'), marginLeft: PAD }}>
               {timeline?.main.map((c, i) => (
-                <WaveBlock key={c.id} clip={c} x={starts[i]! * pps} w={clipDuration(c) * pps} />
+                <WaveBlock key={c.id} clip={c} x={starts[i]! * pps} w={clipDuration(c) * pps} h={rowH('A1')} />
               ))}
             </div>
             {(['A2', 'A3'] as const).map((id) => (
-              <OverlayTrack key={id} track={tracksById.get(id)} h={ROW[id]} items={overlaysOn(id)} pps={pps} pad={PAD} timeAt={timeAt} selectedId={selOverlay?.id} bad={badOverlays} assets={assets} />
+              <OverlayTrack key={id} track={tracksById.get(id)} h={rowH(id)} items={overlaysOn(id)} pps={pps} pad={PAD} timeAt={timeAt} selectedId={selOverlay?.id} bad={badOverlays} assets={assets} />
             ))}
 
             {flash && <div key={flash.key} className="pointer-events-none absolute bottom-0 z-10 w-[3px] -translate-x-1/2 rounded bg-cut-retake shadow-[0_0_12px_var(--color-cut-retake)]" style={{ left: flash.x, top: 0, animation: 'dots 650ms ease-out' }} />}
             {marks.in !== undefined && <div className="pointer-events-none absolute bottom-0 z-[5] border-x border-nc-400/70 bg-nc-500/10" style={{ left: PAD + marks.in * pps, width: Math.max(1, ((marks.out ?? marks.in) - marks.in) * pps), top: 0 }} />}
             {guide !== null && <div className="pointer-events-none absolute bottom-0 z-[35] w-px border-l border-dashed border-amber-300" style={{ left: PAD + guide * pps, top: 0 }} />}
             {hoverT !== null && !playing && (
-              <div className="pointer-events-none absolute z-[36] -translate-x-1/2 rounded bg-ink-700 px-1 font-mono text-ui-2xs text-ink-100" style={{ left: PAD + hoverT * pps, top: 2 }}>
-                {timecode(hoverT, fps, false)}
+              <div className="pointer-events-none absolute z-[36] -translate-x-1/2 rounded-ui-sm bg-ink-700 px-1 font-mono text-ui-2xs text-ink-100" style={{ left: PAD + hoverT * pps, top: 2 }}>
+                {timecode(hoverT, fps)}
               </div>
             )}
 
@@ -410,14 +451,14 @@ function Sep() {
 }
 
 function Ruler({ pps, width, fps, onMouseDown, onHover }: { pps: number; width: number; fps: number; onMouseDown: (e: React.MouseEvent) => void; onHover: (t: number | null) => void }) {
-  const { major, minor, frames } = rulerStep(pps, fps);
+  const { major, minor } = rulerStep(pps, fps);
   const ticks: React.ReactNode[] = [];
   const n = Math.ceil((width - PAD) / (major * pps));
   for (let i = 0; i <= n; i++) {
     const t = i * major;
     ticks.push(
       <div key={t} className="absolute top-0 h-full border-l border-ink-600" style={{ left: PAD + t * pps }}>
-        <span className="ml-1 font-mono text-ui-2xs text-ink-400">{frames ? timecode(t, fps, false) : formatTime(t)}</span>
+        <span className="ml-1 font-mono text-ui-2xs tabular-nums text-ink-400">{timecode(t, fps)}</span>
       </div>,
     );
     if (minor > 0) for (let k = minor; k < major - 1e-6; k += minor) ticks.push(<div key={`${t}-${k}`} className="absolute bottom-0 h-1.5 border-l border-ink-700" style={{ left: PAD + (t + k) * pps }} />);
@@ -440,7 +481,7 @@ function Ruler({ pps, width, fps, onMouseDown, onHover }: { pps: number; width: 
 
 function SpeechBubble({ text, progress }: { text: string; progress?: number }) {
   return (
-    <div className="anim-pop absolute bottom-[60px] left-6 w-max max-w-[300px] rounded-xl rounded-bl-sm border border-ink-600 bg-ink-800/95 px-2.5 py-1 text-ui-xs leading-snug text-ink-100 shadow-xl backdrop-blur">
+    <div className="anim-pop absolute bottom-[60px] left-6 w-max max-w-[300px] rounded-ui-lg rounded-bl-sm border border-ink-600 bg-ink-800/95 px-2.5 py-1 text-ui-xs leading-snug text-ink-100 shadow-ui-1 backdrop-blur">
       <div className="line-clamp-2">{text}</div>
       {progress !== undefined && (
         <div className="mt-1 h-0.5 overflow-hidden rounded bg-ink-700">

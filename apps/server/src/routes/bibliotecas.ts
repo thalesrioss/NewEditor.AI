@@ -7,9 +7,12 @@ import type { ClientProfile, FormatoPeca } from '@neweditor/core';
 import { DATA_DIR } from '../config.ts';
 import { enqueue } from '../jobs.ts';
 import { analyzeLibraryInBackground, listMusic, musicFileAllowed, useAsTrilha } from '../music.ts';
+import { apagarStill, lerPadraoCor, perfilDoProjetoParaCor, salvarPadraoCor, stillFile } from '../padrao-cor.ts';
 import { createProfile, importPadroes, listProfiles, patchProfile, profileFromProject, saveProfileFromProject, setHouse } from '../profiles.ts';
 import { store } from '../store.ts';
 import { erro, report } from './_comum.ts';
+
+const STILL_TYPE: Record<string, string> = { '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 
 export async function rotasBibliotecas(app: FastifyInstance): Promise<void> {
   // --- Perfis de edição por cliente (Cérebro do Editor → dado) -------------------------------------
@@ -18,6 +21,26 @@ export async function rotasBibliotecas(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { nome: string; baseId?: string } }>('/api/perfis', async (req) => createProfile(req.body.nome?.trim() || 'Cliente', req.body.baseId));
   app.patch<{ Params: { id: string }; Body: Partial<ClientProfile> }>('/api/perfis/:id', async (req) => patchProfile(req.params.id, req.body));
   app.post<{ Params: { id: string } }>('/api/perfis/:id/padrao-casa', async (req) => setHouse(req.params.id));
+  // Padrão de cor do cliente (BL-0161): grade + até 3 stills. Pelo perfil, ou pelo perfil do projeto (aba Cor).
+  type PadraoCorBody = { grade?: unknown; stills?: unknown };
+  app.get<{ Params: { id: string } }>('/api/perfis/:id/padrao-cor', async (req) => ({ padrao: await lerPadraoCor(req.params.id) }));
+  app.post<{ Params: { id: string }; Body: PadraoCorBody }>('/api/perfis/:id/padrao-cor', async (req) => ({ padrao: await salvarPadraoCor(req.params.id, req.body ?? {}) }));
+  app.get<{ Params: { id: string; nome: string } }>('/api/perfis/:id/padrao-cor/stills/:nome', async (req, reply) => {
+    const file = await stillFile(req.params.id, req.params.nome);
+    return reply.type(STILL_TYPE[path.extname(file)] ?? 'application/octet-stream').send(fs.createReadStream(file));
+  });
+  app.delete<{ Params: { id: string; nome: string } }>('/api/perfis/:id/padrao-cor/stills/:nome', async (req) => ({ padrao: await apagarStill(req.params.id, req.params.nome) }));
+  app.get<{ Params: { id: string } }>('/api/projects/:id/padrao-cor', async (req) => {
+    const prof = await perfilDoProjetoParaCor(store.get(req.params.id));
+    return { perfil: prof.id, nome: prof.nome, padrao: prof.cor.padrao ?? null };
+  });
+  app.post<{ Params: { id: string }; Body: PadraoCorBody }>('/api/projects/:id/padrao-cor', async (req) => {
+    const p = store.get(req.params.id);
+    const prof = await perfilDoProjetoParaCor(p);
+    const padrao = await salvarPadraoCor(prof.id, req.body ?? {}, p);
+    store.log(p.id, 'human', `Salvou a cor como padrão de ${prof.nome}${padrao.stills.length ? ` (${padrao.stills.length} still(s) de referência)` : ''}: projeto novo do cliente nasce com ela nos clipes da fala.`);
+    return { perfil: prof.id, nome: prof.nome, padrao };
+  });
   // Padrão editorial a partir da edição de um projeto: prévia (GET) e gravar como perfil do cliente para um formato (POST).
   app.get<{ Params: { id: string }; Querystring: { cliente?: string; formato?: FormatoPeca; nome?: string } }>('/api/projects/:id/perfil-da-edicao', async (req) => profileFromProject(store.get(req.params.id), req.query));
   app.post<{ Params: { id: string }; Body: { cliente?: string; formato?: FormatoPeca; nome?: string; aplicar?: boolean } }>('/api/projects/:id/perfil-da-edicao', async (req) => {

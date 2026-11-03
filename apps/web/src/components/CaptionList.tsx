@@ -55,10 +55,10 @@ export function CaptionList() {
         <span className="text-ui-xs text-ink-400">
           {visible.length} legendas{cues.length > visible.length ? ` · ${cues.length - visible.length} apagada(s)` : ''}
         </span>
-        <button aria-label="Encontrar e substituir" onClick={() => setShowFind(!showFind)} className={`ml-auto rounded-md p-1.5 ${showFind ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-white'}`} title="Encontrar e substituir">
+        <button aria-label="Encontrar e substituir" onClick={() => setShowFind(!showFind)} className={`ml-auto rounded-ui-md p-1.5 ${showFind ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-white'}`} title="Encontrar e substituir">
           <Search size={13} />
         </button>
-        <button aria-label="Importar legendas (.srt)" onClick={() => fileInput.current?.click()} className="rounded-md p-1.5 text-ink-400 hover:text-white" title="Importar legendas (.srt)">
+        <button aria-label="Importar legendas (.srt)" onClick={() => fileInput.current?.click()} className="rounded-ui-md p-1.5 text-ink-400 hover:text-white" title="Importar legendas (.srt)">
           <Upload size={13} />
         </button>
         <input
@@ -72,7 +72,7 @@ export function CaptionList() {
             e.target.value = '';
           }}
         />
-        <button aria-label="Baixar legendas (.srt)" onClick={downloadSrt} disabled={!visible.length} className="rounded-md p-1.5 text-ink-400 hover:text-white disabled:opacity-30" title="Baixar legendas (.srt)">
+        <button aria-label="Baixar legendas (.srt)" onClick={downloadSrt} disabled={!visible.length} className="rounded-ui-md p-1.5 text-ink-400 hover:text-white disabled:opacity-30" title="Baixar legendas (.srt)">
           <Download size={13} />
         </button>
       </div>
@@ -80,12 +80,12 @@ export function CaptionList() {
       {showFind && (
         <div className="space-y-1.5 border-b border-ink-750 p-3">
           <div className="flex items-center gap-1.5">
-            <input value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Encontrar" className="input min-w-0 flex-1 py-1 text-xs" autoFocus />
+            <input value={find} onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Encontrar" className="input min-w-0 flex-1 py-1 text-ui-sm" autoFocus />
             <span className="w-10 text-right font-mono text-ui-xs text-ink-400">{matches.length}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <input value={repl} onChange={(e) => setRepl(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Substituir por" className="input min-w-0 flex-1 py-1 text-xs" />
-            <button disabled={!matches.length} onClick={replaceAll} className="flex items-center gap-1 rounded-md bg-nc-500 px-2 py-1 text-ui-xs font-semibold text-white disabled:opacity-40" title="Substituir em todas (um passo de desfazer)">
+            <input value={repl} onChange={(e) => setRepl(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="Substituir por" className="input min-w-0 flex-1 py-1 text-ui-sm" />
+            <button disabled={!matches.length} onClick={replaceAll} className="flex items-center gap-1 rounded-ui-md bg-nc-500 px-2 py-1 text-ui-xs font-semibold text-white disabled:opacity-40" title="Substituir em todas (um passo de desfazer)">
               <Replace size={11} /> Tudo
             </button>
           </div>
@@ -98,7 +98,7 @@ export function CaptionList() {
           const sel = selection?.kind === 'caption' && selection.id === c.key;
           return (
             <div key={c.key} className={`group flex items-center gap-1.5 border-b border-ink-800 px-2 py-1 ${sel ? 'bg-nc-500/15' : current(c) ? 'bg-ink-800' : ''} ${c.hidden ? 'opacity-45' : ''}`} onFocus={() => select({ kind: 'caption', id: c.key! })}>
-              <button onClick={() => (seek(c.start + 0.01), select({ kind: 'caption', id: c.key! }))} className="w-10 shrink-0 text-left font-mono text-ui-2xs text-ink-400 hover:text-white" title="Ir até">
+              <button onClick={() => (seek(c.start + 0.01), select({ kind: 'caption', id: c.key! }))} className="w-10 shrink-0 text-left font-mono text-ui-xs text-ink-400 hover:text-white" title="Ir até">
                 {formatTime(c.start)}
               </button>
               {c.hidden ? (
@@ -112,12 +112,12 @@ export function CaptionList() {
                   seek(c.start + 0.01);
                   setTimeout(() => useEditor.getState().setPlaying(true), 60);
                 }}
-                className="text-ink-400 opacity-0 group-hover:opacity-100 hover:text-white"
+                className="text-ink-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-white"
                 title="Tocar daqui"
               >
                 <Play size={11} />
               </button>
-              <button onClick={() => captionActions.toggleHidden(c)} className={`text-ink-400 hover:text-white ${c.hidden ? '' : 'opacity-0 group-hover:opacity-100'}`} title={c.hidden ? 'Restaurar' : 'Apagar'}>
+              <button onClick={() => captionActions.toggleHidden(c)} className={`text-ink-400 hover:text-white ${c.hidden ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`} title={c.hidden ? 'Restaurar' : 'Apagar'}>
                 {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
               </button>
             </div>

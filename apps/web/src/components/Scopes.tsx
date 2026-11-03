@@ -68,7 +68,7 @@ export function Scopes() {
 
   return (
     <section className="space-y-2">
-      <div className="flex rounded-[var(--radius-ui-md)] border border-ink-700 p-0.5" role="radiogroup" aria-label="Scope">
+      <div className="flex rounded-ui-md border border-ink-700 p-0.5" role="radiogroup" aria-label="Scope">
         {(
           [
             ['waveform', 'Waveform'],
@@ -76,16 +76,16 @@ export function Scopes() {
             ['vector', 'Vetorscópio'],
           ] as const
         ).map(([id, label]) => (
-          <button key={id} role="radio" aria-checked={kind === id} onClick={() => setKind(id)} className={`flex-1 rounded-[var(--radius-ui-sm)] py-1 text-ui-2xs font-semibold ${kind === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
+          <button key={id} role="radio" aria-checked={kind === id} onClick={() => setKind(id)} className={`flex-1 rounded-ui-sm py-1 text-ui-xs font-semibold ${kind === id ? 'bg-ink-700 text-white' : 'text-ink-400 hover:text-ink-200'}`}>
             {label}
           </button>
         ))}
       </div>
-      <div className={`relative mx-auto overflow-hidden rounded-[var(--radius-ui-sm)] border border-ink-700 bg-black ${kind === 'vector' ? 'aspect-square w-3/4' : 'aspect-[2/1] w-full'}`}>
+      <div className={`relative mx-auto overflow-hidden rounded-ui-sm border border-ink-700 bg-black ${kind === 'vector' ? 'aspect-square w-3/4' : 'aspect-[2/1] w-full'}`}>
         <canvas ref={out} aria-label={`Scope: ${kind}`} className="absolute inset-0 h-full w-full" />
-        {empty && <p className="absolute inset-0 flex items-center justify-center p-3 text-center text-ui-2xs text-ink-400">Sem quadro no player ainda. Dê play ou mova o cursor.</p>}
+        {empty && <p className="absolute inset-0 flex items-center justify-center p-3 text-center text-ui-xs text-ink-400">Sem quadro no player ainda. Dê play ou mova o cursor.</p>}
       </div>
-      <p className="text-ui-2xs leading-snug text-ink-400">{kind === 'vector' ? 'Linha laranja: tom de pele. Pele boa fica em cima dela; os quadradinhos são as cores a 75%.' : 'Linhas a 0, 25, 50, 75 e 100%. Pele de rosto costuma ficar entre 50 e 70%.'}</p>
+      <p className="text-ui-xs leading-snug text-ink-400">{kind === 'vector' ? 'Linha laranja: tom de pele. Pele boa fica em cima dela; os quadradinhos são as cores a 75%.' : 'Linhas a 0, 25, 50, 75 e 100%. Pele de rosto costuma ficar entre 50 e 70%.'}</p>
     </section>
   );
 }
@@ -108,7 +108,7 @@ function paint(cv: HTMLCanvasElement, img: { width: number; height: number; data
   if (kind !== 'vector') {
     ctx.strokeStyle = 'rgb(255 255 255 / 0.16)';
     ctx.fillStyle = 'rgb(255 255 255 / 0.45)';
-    ctx.font = '9px ui-sans-serif, system-ui';
+    ctx.font = '10px ui-sans-serif, system-ui';
     for (const p of [0, 25, 50, 75, 100]) {
       const y = Math.round((1 - p / 100) * (H - 1)) + 0.5;
       ctx.beginPath();

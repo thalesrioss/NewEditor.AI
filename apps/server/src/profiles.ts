@@ -79,7 +79,7 @@ export async function saveProfileFromProject(p: Project, opts: { cliente?: strin
   await loadAll();
   const next = await profileFromProject(p, opts);
   const cur = cache.get(next.id);
-  return save(cur ? { ...next, padraoCasa: cur.padraoCasa, glossario: cur.glossario, notas: [...next.notas.slice(0, 1), ...cur.notas.filter((n) => !n.startsWith('Padrão editorial lido da edição'))] } : next);
+  return save(cur ? { ...next, padraoCasa: cur.padraoCasa, glossario: cur.glossario, cor: { ...next.cor, padrao: cur.cor.padrao }, notas: [...next.notas.slice(0, 1), ...cur.notas.filter((n) => !n.startsWith('Padrão editorial lido da edição'))] } : next);
 }
 
 async function save(p: ClientProfile): Promise<ClientProfile> {
@@ -98,7 +98,19 @@ export async function patchProfile(id: string, patch: Partial<ClientProfile>): P
   for (const k of ['formato', 'peca', 'corte', 'zoom', 'lettering', 'motion', 'flash', 'sfx', 'legenda', 'trilha', 'cor', 'broll'] as const) {
     if (patch[k]) (merged as unknown as Record<string, unknown>)[k] = { ...(cur[k] as object), ...(patch[k] as object) };
   }
+  // O padrão de cor (BL-0161) só muda pelas rotas /padrao-cor: a tela de Perfis aberta antes manda o padrão velho junto.
+  merged.cor = { ...merged.cor, padrao: cur.cor.padrao };
+  if (!merged.cor.padrao) delete merged.cor.padrao;
   return save(merged);
+}
+
+/** Grava o padrão de cor do perfil (só pelas rotas /padrao-cor; `null` tira). */
+export async function gravarPadraoCor(id: string, padrao: ClientProfile['cor']['padrao'] | null): Promise<ClientProfile> {
+  const cur = await getProfile(id);
+  if (cur.id !== id) throw Object.assign(new Error('perfil não existe'), { statusCode: 404 });
+  const cor = { ...cur.cor, padrao: padrao ?? undefined };
+  if (!cor.padrao) delete cor.padrao;
+  return save({ ...cur, cor });
 }
 
 /**
@@ -107,17 +119,25 @@ export async function patchProfile(id: string, patch: Partial<ClientProfile>): P
  */
 export async function addTermoAoPerfil(p: Project, termo: string): Promise<ClientProfile> {
   if (!termo.trim()) throw Object.assign(new Error('termo vazio'), { statusCode: 400 });
-  if (p.profileId === PERSONALIZADO_ID) throw Object.assign(new Error('O perfil "Personalizado" não guarda glossário: escolha o perfil do cliente no projeto.'), { statusCode: 409 });
+  const prof = await perfilGravadoDoProjeto(p, 'glossário');
+  return patchProfile(prof.id, { glossario: addGlossario(prof.glossario, termo) });
+}
+
+/** O perfil gravado em que o projeto guarda algo (`oQue`, para a mensagem): o da casa se não escolheu; 409/404 como no glossário. */
+export async function perfilGravadoDoProjeto(p: Project, oQue: string): Promise<ClientProfile> {
+  if (p.profileId === PERSONALIZADO_ID) throw Object.assign(new Error(`O perfil "Personalizado" não guarda ${oQue}: escolha o perfil do cliente no projeto.`), { statusCode: 409 });
   const prof = await getProfile(p.profileId);
   // Perfil escolhido que não existe mais: não guarda no padrão da casa sem ninguém saber.
   if (p.profileId && prof.id !== p.profileId) throw Object.assign(new Error('O perfil deste projeto não existe mais: escolha o perfil do cliente no projeto.'), { statusCode: 404 });
-  return patchProfile(prof.id, { glossario: addGlossario(prof.glossario, termo) });
+  return prof;
 }
 
 export async function createProfile(nome: string, baseId?: string): Promise<ClientProfile> {
   const base = await getProfile(baseId);
   const id = slug(nome);
-  return save(fillProfile({ ...base, id, nome, fonte: undefined, atualizadoEm: new Date().toISOString() }));
+  // O padrão de cor (BL-0161) é do cliente da base: os stills estão na pasta dela.
+  const { padrao: _padrao, ...cor } = base.cor;
+  return save(fillProfile({ ...base, cor, id, nome, fonte: undefined, atualizadoEm: new Date().toISOString() }));
 }
 
 export function slug(s: string): string {

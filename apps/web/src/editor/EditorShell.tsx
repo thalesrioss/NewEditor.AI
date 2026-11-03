@@ -171,7 +171,7 @@ export function EditorShell({ projectId, brain }: { projectId: string; brain: Br
 
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center border-2 border-dashed border-nc-500 bg-nc-600/10 backdrop-blur-sm">
-          <div className="rounded-xl bg-ink-800 px-6 py-4 text-sm font-medium">Solte para importar</div>
+          <div className="rounded-ui-lg bg-ink-800 px-6 py-4 text-ui-md font-medium">Solte para importar</div>
         </div>
       )}
     </div>

@@ -77,7 +77,7 @@ export function Home() {
       <header className="ne-titlebar flex items-center gap-3 border-b border-ink-750 px-6 py-4">
         <img src="/logo-mark.png" alt="NewContent" className="h-8" />
         <div>
-          <div className="text-base font-semibold">
+          <div className="text-ui-lg font-semibold">
             NewEditor<span className="nc-text-gradient">.AI</span>
           </div>
           <div className="text-ui-sm text-ink-400">Projetos de edição · NewContent</div>
@@ -109,8 +109,8 @@ export function Home() {
 
       {loaded && projects.length === 0 && (
         <div className="flex flex-1 items-center justify-center p-8">
-          <div className="max-w-md space-y-4 rounded-[var(--radius-ui-lg)] border border-ink-750 bg-ink-850 p-6 text-center">
-            <a href="#/cerebro" className="mx-auto block w-8 rounded-md ring-1 ring-transparent transition hover:ring-nc-500" title="Cérebro do Editor">
+          <div className="max-w-md space-y-4 rounded-ui-lg border border-ink-750 bg-ink-850 p-6 text-center">
+            <a href="#/cerebro" className="mx-auto block w-8 rounded-ui-md ring-1 ring-transparent transition hover:ring-nc-500" title="Cérebro do Editor">
               <img src="/avatar/editor.png" alt="Cérebro do Editor" className="h-16 w-8 object-cover object-left-top" style={{ imageRendering: 'pixelated', objectPosition: '0 -192px' }} />
             </a>
             <h2 className="text-ui-lg font-semibold text-white">Seu primeiro projeto</h2>
@@ -122,7 +122,7 @@ export function Home() {
             <Button variant="primary" icon={<Plus size={16} />} onClick={() => setCreating(true)}>
               Novo projeto
             </Button>
-            <p className="text-ui-2xs text-ink-400">Os perfis de edição (estilo de cada cliente) ficam em <a href="#/perfis" className="text-nc-300 hover:text-white">Perfis</a>.</p>
+            <p className="text-ui-xs text-ink-400">Os perfis de edição (estilo de cada cliente) ficam em <a href="#/perfis" className="text-nc-300 hover:text-white">Perfis</a>.</p>
           </div>
         </div>
       )}
@@ -142,7 +142,7 @@ export function Home() {
                 const id = e.dataTransfer.getData('text/project');
                 if (id) void move(id, col);
               }}
-              className={`flex min-h-0 shrink-0 flex-col rounded-[var(--radius-ui-lg)] bg-ink-850 ring-1 transition-[width] duration-[var(--dur-base)] ${collapsed ? 'w-11 items-center' : 'w-[260px]'} ${over === col ? 'ring-nc-500' : col === 'revisao' ? 'ring-amber-400/30' : 'ring-ink-750'}`}
+              className={`flex min-h-0 shrink-0 flex-col rounded-ui-lg bg-ink-850 ring-1 transition-[width] duration-[var(--dur-base)] ${collapsed ? 'w-11 items-center' : 'w-[260px]'} ${over === col ? 'ring-nc-500' : col === 'revisao' ? 'ring-amber-400/30' : 'ring-ink-750'}`}
               title={collapsed ? `${STATUS_LABEL[col]} — vazia` : undefined}
             >
               {collapsed ? (
@@ -218,7 +218,7 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
       onDragStart={(e) => (e.dataTransfer.setData('text/project', p.id), (e.dataTransfer.effectAllowed = 'move'))}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className="group relative block overflow-hidden rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-800 transition hover:border-nc-500"
+      className="group relative block overflow-hidden rounded-ui-md border border-ink-700 bg-ink-800 transition hover:border-nc-500"
     >
       {fala && (th || fala.proxy) && (
         <div className="relative h-24 overflow-hidden bg-ink-900">
@@ -229,10 +229,10 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
             />
           )}
           {hover && fala.proxy && <video ref={video} src={mediaUrl(p.id, fala.proxy)} muted playsInline loop className="absolute inset-0 h-full w-full object-cover" onTimeUpdate={(e) => first && e.currentTarget.currentTime > first.in + 3 && (e.currentTarget.currentTime = first.in)} />}
-          <span className={`absolute top-1.5 left-1.5 flex items-center gap-1 rounded-full px-1.5 py-px text-ui-2xs font-semibold ${owner === 'agente' ? 'bg-black/70 text-[var(--color-agent)]' : 'bg-amber-400 text-ink-950'}`}>
+          <span className={`absolute top-1.5 left-1.5 flex items-center gap-1 rounded-full px-1.5 py-px text-ui-xs font-semibold ${owner === 'agente' ? 'bg-black/70 text-agent' : 'bg-amber-400 text-ink-950'}`}>
             {owner === 'agente' ? <Bot size={10} /> : <User size={10} />} {owner === 'agente' ? 'agente' : 'você'}
           </span>
-          {p.timeline.main.length > 0 && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1 font-mono text-ui-2xs text-white">{formatTime(timelineDuration(p.timeline))}</span>}
+          {p.timeline.main.length > 0 && <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1 font-mono text-ui-xs text-white">{formatTime(timelineDuration(p.timeline))}</span>}
         </div>
       )}
       <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
@@ -246,7 +246,7 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
             setArmed(false);
             onDelete();
           }}
-          className={`flex items-center gap-1 rounded-full p-1 text-ui-2xs font-semibold transition ${armed ? 'bg-rose-500 px-2 text-white opacity-100' : 'bg-black/60 text-ink-200 opacity-0 group-hover:opacity-100 hover:bg-rose-500 hover:text-white'}`}
+          className={`flex items-center gap-1 rounded-full p-1 text-ui-xs font-semibold transition ${armed ? 'bg-rose-500 px-2 text-white opacity-100' : 'bg-black/60 text-ink-200 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-rose-500 hover:text-white'}`}
         >
           <Trash2 size={12} /> {armed && 'Apagar?'}
         </button>
@@ -254,18 +254,18 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
           aria-label="Detalhes do projeto"
           title="Detalhes: briefing, prazo, tempos, versões"
           onClick={(e) => (e.preventDefault(), e.stopPropagation(), onInfo())}
-          className="rounded-full bg-black/60 p-1 text-ink-200 opacity-0 transition group-hover:opacity-100 hover:bg-nc-500 hover:text-white"
+          className="rounded-full bg-black/60 p-1 text-ink-200 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-nc-500 hover:text-white"
         >
           <Info size={12} />
         </button>
       </div>
       <div className="p-2.5">
-        {p.client && <div className="text-ui-2xs font-semibold tracking-wide text-nc-300 uppercase">{p.client}</div>}
+        {p.client && <div className="text-ui-xs font-semibold tracking-wide text-nc-300 uppercase">{p.client}</div>}
         <div className="text-ui-md leading-snug font-medium text-ink-100">{p.name}</div>
         {p.brief && <div className="mt-1 line-clamp-2 text-ui-xs text-ink-400">{p.brief}</div>}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-ui-2xs text-ink-400">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-ui-xs text-ink-400">
           {selo && <span className={`rounded px-1.5 py-px font-semibold ${selo.tom === 'atrasado' ? 'bg-rose-500/20 text-rose-300' : selo.tom === 'perto' ? 'bg-amber-400/15 text-amber-300' : 'bg-ink-750 text-ink-300'}`}>{selo.texto}</span>}
-          {eta !== null && <span className="rounded bg-[var(--color-agent)]/10 px-1.5 py-px text-[var(--color-agent)]">agente ≈{eta < 60 ? `${Math.round(eta)} s` : `${Math.round(eta / 60)} min`}</span>}
+          {eta !== null && <span className="rounded bg-agent/10 px-1.5 py-px text-agent">agente ≈{eta < 60 ? `${Math.round(eta)} s` : `${Math.round(eta / 60)} min`}</span>}
           {p.status === 'revisao' && (
             <span className={`flex items-center gap-1 rounded px-1.5 py-px font-semibold ${p.pendentes ? 'bg-amber-400/15 text-amber-300' : 'bg-emerald-400/15 text-emerald-300'}`}>
               <ListChecks size={11} /> {p.pendentes ? `${p.pendentes} para conferir` : 'pronto para aprovar'}
@@ -408,7 +408,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 backdrop-blur-sm" onMouseDown={filled ? undefined : onClose}>
-      <form onSubmit={submit} onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-lg space-y-4 rounded-[var(--radius-ui-lg)] border border-ink-700 bg-ink-850 p-6 shadow-[var(--shadow-ui-3)]">
+      <form onSubmit={submit} onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-lg space-y-4 rounded-ui-lg border border-ink-700 bg-ink-850 p-6 shadow-ui-3">
         <div className="flex items-center gap-3">
           <h2 className="text-ui-lg font-semibold">Novo projeto</h2>
           <div className="ml-auto flex rounded-full bg-ink-800 p-0.5 text-ui-xs" role="tablist">
@@ -425,7 +425,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
               <textarea autoFocus value={tarefa} onChange={(e) => setTarefa(e.target.value)} rows={6} placeholder={'Cliente: Thales Rios. YouTube talk head de até 7 min, sobre a procura da felicidade. Não pode faltar: a frase do título. Prazo 15/10.\nMaterial: https://drive.google.com/...'} className="input resize-none" />
             </Field>
             {briefing && (
-              <div className="rounded-[var(--radius-ui-md)] bg-ink-800 p-3 text-ui-xs text-ink-300">
+              <div className="rounded-ui-md bg-ink-800 p-3 text-ui-xs text-ink-300">
                 <div className="mb-1 font-semibold text-ink-100">O Gestor entendeu:</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                   <span>Cliente: <b className="text-ink-100">{briefing.cliente ?? '—'}</b></span>
@@ -464,7 +464,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
               <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={4} placeholder="Formato, duração, tom, o que não pode faltar…" className="input resize-none" />
             </Field>
             <Field label="Material bruto (caminho no disco — opcional, dá pra arrastar depois)">
-              <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/…/bruto.mp4" className="input font-mono text-xs" />
+              <input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Users/…/bruto.mp4" className="input font-mono text-ui-sm" />
             </Field>
           </>
         )}
@@ -485,7 +485,7 @@ function NewProject({ onClose }: { onClose: () => void }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-ink-300">{label}</span>
+      <span className="text-ui-sm font-medium text-ink-300">{label}</span>
       {children}
     </label>
   );

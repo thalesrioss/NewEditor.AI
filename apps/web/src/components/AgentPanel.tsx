@@ -83,19 +83,19 @@ export function AgentPanel({ brain }: { brain: Brain }) {
         className="group flex shrink-0 items-center gap-3 border-b border-ink-750 px-4 py-3 transition hover:bg-ink-800/60"
         title="Cérebro do Editor — o conhecimento e as notas conectadas, em 3D"
       >
-        <div className="h-12 w-12 overflow-hidden rounded-xl bg-gradient-to-b from-nc-600/30 to-ink-800 ring-1 ring-ink-700 transition group-hover:ring-nc-500 group-hover:shadow-[0_0_14px_rgba(31,92,255,0.35)]">
+        <div className="h-12 w-12 overflow-hidden rounded-ui-lg bg-gradient-to-b from-nc-600/30 to-ink-800 ring-1 ring-ink-700 transition group-hover:ring-nc-500 group-hover:shadow-[0_0_14px_rgba(31,92,255,0.35)]">
           <AvatarBust state={activity.state === 'celebrating' ? 'celebrating' : 'idle'} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-semibold">
+          <div className="flex items-center gap-2 text-ui-md font-semibold">
             <span>
               NewEditor<span className="nc-text-gradient">.AI</span>
             </span>
-            <span className="rounded-full border border-ink-600 px-1.5 py-px text-ui-2xs font-medium tracking-wide whitespace-nowrap text-ink-300 uppercase" title={brain.kind === 'local' ? 'Regras de edição em código — sem API, sem custo' : 'Usando a API da Anthropic'}>
+            <span className="rounded-full border border-ink-600 px-1.5 py-px text-ui-xs font-medium tracking-wide whitespace-nowrap text-ink-300 uppercase" title={brain.kind === 'local' ? 'Regras de edição em código — sem API, sem custo' : 'Usando a API da Anthropic'}>
               {brain.kind === 'local' ? 'local' : 'claude'}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-ink-400">
+          <div className="flex items-center gap-1.5 text-ui-sm text-ink-400">
             <span className={`h-1.5 w-1.5 rounded-full ${busy ? 'animate-pulse bg-cyan-nc' : 'bg-emerald-400'}`} />
             <span className="truncate">{activity.state === 'idle' ? STATE_LABEL.idle : activity.message || STATE_LABEL[activity.state]}</span>
           </div>
@@ -111,7 +111,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
           <button
             onClick={decupar}
             disabled={!hasTranscript || busy || !brain.ready}
-            className="flex w-full items-center justify-center gap-2 rounded-lg nc-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-nc-600/25 transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
+            className="flex w-full items-center justify-center gap-2 rounded-ui-md nc-gradient px-3 py-2.5 text-ui-md font-semibold text-white shadow-ui-1 shadow-nc-600/25 transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
             title={!hasTranscript ? 'Aguardando transcrição do material' : ''}
           >
             <Wand2 size={16} /> Decupar automaticamente
@@ -123,7 +123,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
       </div>
 
       <div ref={feed} role="log" aria-label="Conversa com o agente" className="scroll-thin min-h-[40%] flex-1 space-y-2 overflow-y-auto p-3">
-        {logs.length === 0 && <p className="pt-6 text-center text-xs text-ink-400">O que o agente fizer aparece aqui, ao vivo.</p>}
+        {logs.length === 0 && <p className="pt-6 text-center text-ui-sm text-ink-400">O que o agente fizer aparece aqui, ao vivo.</p>}
         {logs.map((l) => (
           <LogItem key={l.id} entry={l} undoable={l.id === undoable} />
         ))}
@@ -144,7 +144,7 @@ export function AgentPanel({ brain }: { brain: Brain }) {
             </button>
           ))}
         </div>
-        <div className="flex items-end gap-2 rounded-xl border border-ink-700 bg-ink-800 p-2 focus-within:border-nc-500">
+        <div className="flex items-end gap-2 rounded-ui-lg border border-ink-700 bg-ink-800 p-2 focus-within:border-nc-500">
           <textarea
             ref={input}
             value={text}
@@ -158,9 +158,9 @@ export function AgentPanel({ brain }: { brain: Brain }) {
             }}
             rows={2}
             placeholder="Peça uma alteração… (“tira a parte em que ele gagueja aqui”)"
-            className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent text-sm text-ink-100 placeholder:text-ink-400 focus:outline-none"
+            className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent text-ui-md text-ink-100 placeholder:text-ink-400 focus:outline-none"
           />
-          <button aria-label="Enviar pedido ao agente" title="Enviar (Enter)" onClick={send} disabled={!text.trim() || !brain.ready} className="flex h-8 w-8 items-center justify-center rounded-lg nc-gradient text-white disabled:opacity-30">
+          <button aria-label="Enviar pedido ao agente" title="Enviar (Enter)" onClick={send} disabled={!text.trim() || !brain.ready} className="flex h-8 w-8 items-center justify-center rounded-ui-md nc-gradient text-white disabled:opacity-30">
             <ArrowUp size={16} />
           </button>
         </div>
@@ -175,7 +175,7 @@ function LogItem({ entry, undoable }: { entry: LogEntry; undoable: boolean }) {
   if (entry.by === 'human')
     return (
       <div className="anim-pop flex justify-end">
-        <div className="flex max-w-[85%] items-start gap-2 rounded-xl rounded-tr-sm bg-nc-600/25 px-3 py-2 text-ui-sm text-ink-100">
+        <div className="flex max-w-[85%] items-start gap-2 rounded-ui-lg rounded-tr-sm bg-nc-600/25 px-3 py-2 text-ui-sm text-ink-100">
           <span>{entry.text}</span>
           <User size={13} className="mt-0.5 shrink-0 text-nc-300" />
         </div>
@@ -185,7 +185,7 @@ function LogItem({ entry, undoable }: { entry: LogEntry; undoable: boolean }) {
     <div className="anim-pop flex items-start gap-2 text-ui-sm leading-relaxed">
       {entry.by === 'agent' ? <Sparkles size={13} className="mt-1 shrink-0 text-cyan-nc" /> : <Bot size={13} className="mt-1 shrink-0 text-ink-400" />}
       {isUrl ? (
-        <button onClick={() => window.dispatchEvent(new CustomEvent('neweditor:render', { detail: entry.text }))} className="rounded-md bg-nc-500/20 px-2 py-0.5 text-nc-300 hover:bg-nc-500/30">
+        <button onClick={() => window.dispatchEvent(new CustomEvent('neweditor:render', { detail: entry.text }))} className="rounded-ui-md bg-nc-500/20 px-2 py-0.5 text-nc-300 hover:bg-nc-500/30">
           ▶ Ver vídeo exportado
         </button>
       ) : (
@@ -203,7 +203,7 @@ function LogItem({ entry, undoable }: { entry: LogEntry; undoable: boolean }) {
 function UndoRequest() {
   const project = useEditor((s) => s.project);
   return (
-    <button onClick={() => project && void api.undo(project.id)} className="mt-1 flex items-center gap-1 rounded-md bg-ink-750 px-2 py-0.5 text-ui-xs text-ink-200 hover:bg-ink-700">
+    <button onClick={() => project && void api.undo(project.id)} className="mt-1 flex items-center gap-1 rounded-ui-md bg-ink-750 px-2 py-0.5 text-ui-xs text-ink-200 hover:bg-ink-700">
       <Undo2 size={11} /> Desfazer este pedido
     </button>
   );
@@ -223,7 +223,7 @@ function ApplySuggestion({ suggestion }: { suggestion: NonNullable<LogEntry['sug
     }
   };
   return (
-    <button onClick={apply} disabled={state === 'sent'} className="mt-1 block rounded-md bg-nc-500/20 px-2 py-0.5 text-ui-xs text-nc-300 hover:bg-nc-500/30 disabled:opacity-40">
+    <button onClick={apply} disabled={state === 'sent'} className="mt-1 block rounded-ui-md bg-nc-500/20 px-2 py-0.5 text-ui-xs text-nc-300 hover:bg-nc-500/30 disabled:opacity-40">
       {state === 'sent' ? 'Aplicado' : state === 'error' ? 'Falhou, tentar de novo' : 'Aplicar'}
     </button>
   );

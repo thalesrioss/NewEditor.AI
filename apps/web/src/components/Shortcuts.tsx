@@ -29,7 +29,10 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     title: 'Timeline',
     keys: [
       ['N', 'Ímã liga / desliga'],
-      ['+ / −  ou  ⌘ + roda', 'Zoom (em volta do mouse)'],
+      ['⌥ + roda  ou  ⌘ + roda', 'Zoom em volta do mouse'],
+      ['+ / −', 'Zoom'],
+      ['⇧Z', 'Ajustar à janela (a timeline inteira na tela)'],
+      ['Arrastar a borda do cabeçalho', 'Altura da trilha (duplo clique volta ao padrão)'],
       ['⇧ + roda', 'Rolar no tempo'],
       ['Arrastar no vazio', 'Laço: seleciona vários'],
       ['Shift + clique', 'Soma à seleção'],
@@ -63,7 +66,7 @@ export function Shortcuts() {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 p-6" onMouseDown={() => setOpen(false)}>
-      <div role="dialog" aria-modal="true" aria-label="Atalhos do teclado" className="anim-pop w-full max-w-2xl rounded-[var(--radius-ui-lg)] border border-ink-600 bg-ink-850 p-5 shadow-[var(--shadow-ui-3)]" onMouseDown={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Atalhos do teclado" className="anim-pop w-full max-w-2xl rounded-ui-lg border border-ink-600 bg-ink-850 p-5 shadow-ui-3" onMouseDown={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-ui-lg font-semibold text-white">Atalhos do teclado</h2>
           <IconButton label="Fechar" onClick={() => setOpen(false)}>
@@ -79,7 +82,7 @@ export function Shortcuts() {
                   <div key={k} className="flex items-center justify-between gap-3 text-ui-sm">
                     <dt className="text-ink-200">{d}</dt>
                     <dd>
-                      <kbd className="rounded-[var(--radius-ui-sm)] border border-ink-600 bg-ink-800 px-1.5 py-0.5 font-mono text-ui-xs whitespace-nowrap text-ink-100">{k}</kbd>
+                      <kbd className="rounded-ui-sm border border-ink-600 bg-ink-800 px-1.5 py-0.5 font-mono text-ui-xs whitespace-nowrap text-ink-100">{k}</kbd>
                     </dd>
                   </div>
                 ))}

@@ -2,7 +2,7 @@
  * Alvo da aba Cor (BL-0159 C3): a grade do arquivo (todos os clipes dele) ou a do clipe, por cima da do arquivo.
  * Contas puras do ColorPanel: qual clipe, quais clipes são "desta câmera" e como uma grade colada entra no alvo.
  */
-import { locate, type Clip, type ColorGrade, type Timeline } from '@neweditor/core';
+import { clipGradeOf, isNeutral, locate, NEUTRAL_GRADE, type Clip, type ColorGrade, type Timeline } from '@neweditor/core';
 
 export type AlvoCor = 'arquivo' | 'clipe';
 
@@ -51,4 +51,23 @@ export function gradeDoArquivoAoVivo(
   grades: Record<string, ColorGrade> | undefined,
 ): ColorGrade | undefined {
   return draft && !draft.clipId && draft.assetId === assetId ? draft.grade : grades?.[assetId];
+}
+
+/** Grade sem a conversão de entrada é a identidade (o arquivo só converte a câmera, o clipe não mexe). */
+const semLook = (g: ColorGrade | null | undefined): boolean => !g || isNeutral({ ...NEUTRAL_GRADE, ...clipGradeOf(g) });
+
+/**
+ * A grade que vai para o padrão do cliente (BL-0161): o still guarda o quadro com as duas camadas (o look do arquivo,
+ * sem a conversão da câmera, e a grade do clipe por cima), então o padrão precisa ser a camada que tem o look. Com look
+ * nas duas, recusa: compor duas grades (rodas, curvas, HSL, look) numa só não é exato, e o projeto herdeiro sairia fora
+ * do próprio still. `arquivo` e `clipe` são as grades como o player mostra agora (a do alvo, ao vivo).
+ */
+export function gradeParaPadrao(arquivo: ColorGrade | null | undefined, clipe: ColorGrade | null | undefined): { grade: ColorGrade } | { erro: string } {
+  const lookArquivo = !semLook(arquivo);
+  const lookClipe = !semLook(clipe);
+  if (lookArquivo && lookClipe) {
+    return { erro: 'O look está nas duas camadas (arquivo e este clipe) e o still mostra as duas juntas. Deixe o look numa só (zere a outra, mantendo a conversão da câmera) e salve de novo.' };
+  }
+  if (lookClipe) return { grade: clipGradeOf(clipe!) };
+  return { grade: clipGradeOf(arquivo ?? NEUTRAL_GRADE) };
 }

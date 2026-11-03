@@ -17,7 +17,7 @@ export function SourceLane({ asset, clips, removals, headerW }: { asset: MediaAs
 
   return (
     <div className="flex h-7 shrink-0 items-center gap-3 border-t border-ink-750 bg-ink-900 pr-3">
-      <div className="shrink-0 truncate pl-2 text-ui-2xs text-ink-400" style={{ width: headerW - 8 }} title={`${asset.name}: ${formatTime(D)} no bruto → ${formatTime(kept)} no corte`}>
+      <div className="shrink-0 truncate pl-2 text-ui-xs text-ink-400" style={{ width: headerW - 8 }} title={`${asset.name}: ${formatTime(D)} no bruto → ${formatTime(kept)} no corte`}>
         <span className="font-semibold text-ink-300">Bruto</span> {formatTime(D)}→{formatTime(kept)}
       </div>
       <div className="relative h-3.5 flex-1 overflow-hidden rounded bg-ink-800">

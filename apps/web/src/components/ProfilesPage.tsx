@@ -69,7 +69,7 @@ export function ProfilesPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="ne-titlebar flex items-center gap-3 border-b border-ink-750 px-6 py-3">
-        <a href="#/" className="rounded-[var(--radius-ui-md)] p-1.5 text-ink-300 hover:bg-ink-800 hover:text-white" aria-label="Voltar ao Kanban">
+        <a href="#/" className="rounded-ui-md p-1.5 text-ink-300 hover:bg-ink-800 hover:text-white" aria-label="Voltar ao Kanban">
           <ArrowLeft size={18} />
         </a>
         <div>
@@ -89,14 +89,14 @@ export function ProfilesPage() {
       <div className="flex min-h-0 flex-1">
         <aside className="w-64 shrink-0 overflow-y-auto border-r border-ink-750 bg-ink-850 p-2">
           {list.map((p) => (
-            <button key={p.id} onClick={() => setSel(p.id)} className={`block w-full rounded-[var(--radius-ui-md)] px-3 py-2 text-left ${p.id === cur?.id ? 'bg-nc-500/15 text-white' : 'text-ink-300 hover:bg-ink-800'}`}>
+            <button key={p.id} onClick={() => setSel(p.id)} className={`block w-full rounded-ui-md px-3 py-2 text-left ${p.id === cur?.id ? 'bg-nc-500/15 text-white' : 'text-ink-300 hover:bg-ink-800'}`}>
               <div className="flex items-center gap-1.5 text-ui-sm font-medium">
                 {p.nome}
-                {p.padraoCasa && <span className="rounded bg-emerald-400/15 px-1 text-ui-2xs font-semibold text-emerald-300">padrão da casa</span>}
-                {p.validado === false && <span className="rounded bg-amber-400/15 px-1 text-ui-2xs font-semibold text-amber-300">teste</span>}
-                {p.formatoPeca && <span className="rounded bg-nc-500/15 px-1 text-ui-2xs font-semibold text-nc-300">{formatoLabel(p.formatoPeca)}</span>}
+                {p.padraoCasa && <span className="rounded bg-emerald-400/15 px-1 text-ui-xs font-semibold text-emerald-300">padrão da casa</span>}
+                {p.validado === false && <span className="rounded bg-amber-400/15 px-1 text-ui-xs font-semibold text-amber-300">teste</span>}
+                {p.formatoPeca && <span className="rounded bg-nc-500/15 px-1 text-ui-xs font-semibold text-nc-300">{formatoLabel(p.formatoPeca)}</span>}
               </div>
-              <div className="text-ui-2xs text-ink-400">
+              <div className="text-ui-xs text-ink-400">
                 {p.formato.width}×{p.formato.height} · {p.formato.fps} fps{p.fonte ? ' · do vault' : p.origem ? ' · lido de uma edição' : ''}
               </div>
             </button>
@@ -113,14 +113,14 @@ export function ProfilesPage() {
                 <Button variant="primary" size="sm" icon={<Save size={13} />} disabled={!dirty} loading={busy} onClick={salvar}>
                   Salvar
                 </Button>
-                {draft.fonte && <span className="truncate text-ui-2xs text-ink-400" title={draft.fonte}>Fonte: {draft.fonte.split('/').pop()}</span>}
+                {draft.fonte && <span className="truncate text-ui-xs text-ink-400" title={draft.fonte}>Fonte: {draft.fonte.split('/').pop()}</span>}
                 {draft.origem && (
-                  <a href={`#/p/${draft.origem.projectId}`} className="truncate text-ui-2xs text-nc-300 hover:underline" title="Abrir a edição de onde este padrão foi lido">
+                  <a href={`#/p/${draft.origem.projectId}`} className="truncate text-ui-xs text-nc-300 hover:underline" title="Abrir a edição de onde este padrão foi lido">
                     Padrão editorial{draft.formatoPeca ? ` · ${formatoLabel(draft.formatoPeca)}` : ''} lido de "{draft.origem.projectName}" em {new Date(draft.origem.at).toLocaleDateString('pt-BR')}
                   </a>
                 )}
               </div>
-              <div className={`flex flex-wrap items-center gap-3 rounded-[var(--radius-ui-md)] border p-3 text-ui-xs ${draft.padraoCasa ? 'border-emerald-500/30 bg-emerald-500/5' : draft.validado === false ? 'border-amber-400/30 bg-amber-400/5' : 'border-ink-750 bg-ink-850'}`}>
+              <div className={`flex flex-wrap items-center gap-3 rounded-ui-md border p-3 text-ui-xs ${draft.padraoCasa ? 'border-emerald-500/30 bg-emerald-500/5' : draft.validado === false ? 'border-amber-400/30 bg-amber-400/5' : 'border-ink-750 bg-ink-850'}`}>
                 <label className="flex items-center gap-2 text-ink-200">
                   <input type="checkbox" checked={!!draft.validado} onChange={(e) => setDraft({ ...draft, validado: e.target.checked, nota: e.target.checked ? undefined : draft.nota })} className="h-4 w-4 accent-nc-500" />
                   Padrão validado (referência de sucesso)
@@ -198,7 +198,7 @@ export function ProfilesPage() {
                   <Text label="SFX do flash" value={draft.flash.sfx ?? ''} onChange={(v) => set('flash', { sfx: v || undefined })} />
                 </div>
                 {draft.motion.identidade && (
-                  <details className="rounded-[var(--radius-ui-md)] bg-ink-800 p-3 text-ui-xs text-ink-300">
+                  <details className="rounded-ui-md bg-ink-800 p-3 text-ui-xs text-ink-300">
                     <summary className="cursor-pointer font-semibold text-ink-200">Identidade do motion (lida do padrão)</summary>
                     <pre className="mt-2 whitespace-pre-wrap font-sans">{draft.motion.identidade}</pre>
                   </details>
@@ -291,10 +291,10 @@ function Glossario({ termos, onChange }: { termos: string[]; onChange: (t: strin
 
 function Section({ title, ev, children }: { title: string; ev?: Evidence; children: React.ReactNode }) {
   return (
-    <section className="space-y-3 rounded-[var(--radius-ui-lg)] border border-ink-750 bg-ink-850 p-4">
+    <section className="space-y-3 rounded-ui-lg border border-ink-750 bg-ink-850 p-4">
       <h3 className="flex items-center gap-2 text-ui-xs font-semibold tracking-wide text-ink-300 uppercase">
         {title}
-        {ev && <span className={`rounded px-1.5 py-px text-ui-2xs font-semibold normal-case ${EV_STYLE[ev]}`}>{ev}</span>}
+        {ev && <span className={`rounded px-1.5 py-px text-ui-xs font-semibold normal-case ${EV_STYLE[ev]}`}>{ev}</span>}
       </h3>
       {children}
     </section>
@@ -362,9 +362,9 @@ function BrainCard() {
         LLM no Mac (MLX)
         <input type="checkbox" checked={llm.enabled} disabled={!llm.baixado} onChange={(e) => void patch({ enabled: e.target.checked })} className="h-4 w-4 accent-nc-500" />
       </label>
-      <div className="text-ui-2xs text-ink-400">{llm.baixado ? `${llm.model.split('/').pop()} · baixado` : 'modelo ainda não baixado'}</div>
+      <div className="text-ui-xs text-ink-400">{llm.baixado ? `${llm.model.split('/').pop()} · baixado` : 'modelo ainda não baixado'}</div>
       {llm.enabled && (
-        <div className="space-y-1 rounded-[var(--radius-ui-md)] bg-ink-800 p-2">
+        <div className="space-y-1 rounded-ui-md bg-ink-800 p-2">
           {(
             [
               ['briefing', 'Briefing do Gestor'],
@@ -379,13 +379,13 @@ function BrainCard() {
               <input type="checkbox" checked={llm.usos[k]} onChange={(e) => void patch({ usos: { ...llm.usos, [k]: e.target.checked } })} className="h-3.5 w-3.5 accent-nc-500" />
             </label>
           ))}
-          <p className="text-ui-2xs text-ink-400">Cada uso só fica ligado se ganhar das regras no benchmark.</p>
+          <p className="text-ui-xs text-ink-400">Cada uso só fica ligado se ganhar das regras no benchmark.</p>
         </div>
       )}
       <div className="flex items-center justify-between pt-1 font-semibold text-ink-200">
         Benchmark <button onClick={load} aria-label="Atualizar" className="text-ink-400 hover:text-white"><RefreshCw size={11} /></button>
       </div>
-      {bench.length === 0 ? <p className="text-ui-2xs text-ink-400">Nenhum gabarito ainda. Cada decupagem que você aprova vira um.</p> : bench.map((g, i) => <div key={i} className="truncate text-ui-2xs text-ink-400" title={g.name}>{g.label === 'aprovado' ? '✓' : '★'} {g.name}</div>)}
+      {bench.length === 0 ? <p className="text-ui-xs text-ink-400">Nenhum gabarito ainda. Cada decupagem que você aprova vira um.</p> : bench.map((g, i) => <div key={i} className="truncate text-ui-xs text-ink-400" title={g.name}>{g.label === 'aprovado' ? '✓' : '★'} {g.name}</div>)}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { notify } from '../notify.ts';
 import { reviewDoubts } from '../review.ts';
 import { planDecupagem, type PlannedRemoval } from './plan.ts';
 import { stepEnd, stepStart } from '../estimate.ts';
+import { herdarPadraoCor } from '../padrao-cor.ts';
 import { profileOf } from '../profiles.ts';
 import { contextoThales } from '../registro-thales.ts';
 
@@ -82,6 +83,8 @@ export async function runDecupagem(projectId: string, assetId?: string): Promise
       op: { type: 'set_main', clips, removals: before.removals.filter((r) => !ids.has(r.assetId)) },
       note: `Comecei a decupagem de ${targets.map((a) => a.name).join(' + ')}`,
     });
+    // Os brutos voltaram sem grade de clipe: o padrão de cor do cliente entra antes dos cortes (que o levam junto). BL-0161
+    await herdarPadraoCor(projectId);
     for (const x of plans) store.log(projectId, 'agent', many ? `${x.asset.name}: ${x.plan.decision.summary}` : x.plan.decision.summary);
 
     // Do começo para o fim, para o avatar andar pra frente. O tempo de timeline de cada corte é

@@ -1,11 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { manageGrade, type Timeline, uid, type MediaAsset } from '@neweditor/core';
+import { captureLine, manageGrade, type Timeline, uid, type MediaAsset } from '@neweditor/core';
+import { knownCapture } from './capture-profile.ts';
 import { convertedBy, projectColors } from './color-source.ts';
 import { transcribe, writeCenters } from './asr.ts';
 import { analyze, speechChunks } from './decupagem/analyze.ts';
 import { makeEnvelope, makeProxy, makeThumbs, makeWav16k, probe, readEnvelope } from './media.ts';
 import { enqueue } from './jobs.ts';
+import { herdarPadraoCor } from './padrao-cor.ts';
 import { profileOf } from './profiles.ts';
 import { store } from './store.ts';
 
@@ -18,6 +20,8 @@ import { store } from './store.ts';
  */
 export async function ingest(projectId: string, filePath: string, role?: MediaAsset['role']): Promise<MediaAsset> {
   await fs.access(filePath);
+  // BRAW e ProRes RAW: o FFmpeg não decodifica (BL-0175); melhor a mensagem clara que o erro do ffprobe.
+  if (/\.braw$/i.test(filePath)) throw Object.assign(new Error(`${path.basename(filePath)} é Blackmagic RAW (BRAW), que o app não lê: exporte em ProRes da câmera (o .sidecar ao lado leva a curva)`), { statusCode: 415 });
   const meta = await probe(filePath);
   const file = await fingerprint(filePath);
   const p0 = store.get(projectId);
@@ -29,7 +33,7 @@ export async function ingest(projectId: string, filePath: string, role?: MediaAs
   const segundaBruta = hasFala && meta.kind === 'video' && meta.hasAudio && meta.duration >= 60 && isRaw(p0.timeline);
   const asset: MediaAsset = { id: uid('ast'), name: path.basename(filePath), path: filePath, file, ...meta, role: role ?? ((!hasFala && meta.hasAudio) || segundaBruta ? 'fala' : 'broll') };
   await fs.mkdir(path.join(store.dir(projectId), asset.id), { recursive: true });
-  Object.assign(asset, await colorOf(projectId, asset));
+  Object.assign(asset, await colorOf(projectId, asset, true));
   saveAsset(projectId, asset);
   manageColor(projectId, asset);
   // Formato e fps já na leitura do arquivo, não no fim da preparação: o ASR leva minutos (ou falha) — CH-0005.
@@ -56,9 +60,10 @@ export function fileChanged(a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' 
  */
 async function refresh(projectId: string, a: MediaAsset, meta: Omit<MediaAsset, 'id' | 'name' | 'path'>, file: NonNullable<MediaAsset['file']>): Promise<MediaAsset> {
   if (!fileChanged(a, meta, file)) {
-    if (!a.color) {
+    if (!knownCapture(a.color)) {
+      const antes = a.color;
       a = await colorOf(projectId, a);
-      if (a.color) (store.upsertAsset(projectId, a), manageColor(projectId, a));
+      if (a.color && JSON.stringify(a.color) !== JSON.stringify(antes)) (store.upsertAsset(projectId, a), manageColor(projectId, a));
     }
     if (!a.file) store.upsertAsset(projectId, { ...a, file });
     store.log(projectId, 'agent', `${a.name} já está no projeto e não mudou.`);
@@ -85,22 +90,29 @@ function inheritFormat(projectId: string, asset: MediaAsset): void {
   else if (tl.formatoManual && asset.fps) store.setFormat(projectId, { fps: asset.fps });
 }
 
-/** A cor de entrada do arquivo (XML da câmera, ou herdada do bruto com o mesmo clipe no projeto). */
-async function colorOf(projectId: string, asset: MediaAsset): Promise<MediaAsset> {
+/**
+ * A cor de entrada do arquivo pelo perfil de captura (XML da câmera, sidecar, tags, marca/modelo, codec; ou herdada do
+ * bruto com o mesmo clipe no projeto). Sem sinal, grava `desconhecida` (dito assim no projeto, nunca Rec.709 presumido).
+ */
+async function colorOf(projectId: string, asset: MediaAsset, novo = false): Promise<MediaAsset> {
   if (asset.kind !== 'video' || asset.alpha) return asset;
   const others = store.get(projectId).assets.filter((x) => x.id !== asset.id);
-  const color = (await projectColors({ assets: [...others, asset] }).catch(() => null))?.get(asset.id);
+  // `novo`: entrando agora, com o perfil de captura. Reimportar um asset de antes (refresh) segue o caminho de antes.
+  const color = (await projectColors({ assets: [...others, asset] }, novo ? new Set([asset.id]) : undefined).catch(() => null))?.get(asset.id);
   return color ? { ...asset, color } : asset;
 }
 
 /** Arquivo LOG entra já convertido (Input Color Space do DaVinci): a grade dele ganha a entrada do arquivo. */
 function manageColor(projectId: string, asset: MediaAsset): void {
   const c = asset.color;
-  if (!c || c.input === 'rec709') return;
+  if (!c) return;
+  // O projeto mostra o perfil de captura de cada vídeo: "Câmera X, curva Y, conversão Z" (BL-0175).
+  store.log(projectId, 'agent', `Perfil de captura de ${asset.name}: ${captureLine(c)}`);
+  if (c.input === 'rec709') return;
   const cur = store.get(projectId).timeline.grades?.[asset.id];
   const next = manageGrade(cur, c)!;
   if (cur?.input === c.input && cur.inputLut?.id === next.inputLut?.id && cur.codeRange === c.codeRange) return;
-  const de = c.fonte === 'herdado' ? `herdado de ${c.de}` : `XML da câmera${c.modelo ? ` ${c.modelo}` : ''}`;
+  const de = c.fonte === 'herdado' ? `herdado de ${c.de}` : c.fonte === 'xml' ? `XML da câmera${c.modelo ? ` ${c.modelo}` : ''}` : `${c.fonte === 'sidecar' ? '.sidecar' : c.fonte === 'tag' ? 'metadado' : c.fonte === 'container' ? 'marca/modelo' : 'codec'} do arquivo${c.camera ? `, ${c.camera}` : ''}${c.confianca === 'provavel' ? ', provável' : ''}`;
   store.apply(projectId, { by: 'system', op: { type: 'set_grade', assetId: asset.id, grade: next }, note: `Cor de ${asset.name}: ${c.gamma ?? c.input} (${de}), convertida ${convertedBy(c)}` });
 }
 
@@ -212,7 +224,16 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
   await Promise.all([video, audio]);
   store.log(projectId, 'agent', `${asset.name} pronto em ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 
-  // Primeira montagem = a fala inteira, para o humano já poder assistir; a 2ª bruta entra em seguida.
+  await entrarNaMontagemCrua(projectId, asset);
+  store.setActivity(projectId, { state: 'idle', message: 'Material pronto' });
+  return asset;
+}
+
+/**
+ * Primeira montagem = a fala inteira, para o humano já poder assistir; a 2ª bruta entra em seguida. A fala que entra
+ * recebe o padrão de cor do cliente do perfil do projeto, marcado como herdado (BL-0161).
+ */
+export async function entrarNaMontagemCrua(projectId: string, asset: MediaAsset): Promise<void> {
   const p = store.get(projectId);
   const cur = p.assets.find((x) => x.id === asset.id) ?? asset;
   if (cur.role === 'fala' && !p.timeline.main.some((c) => c.assetId === asset.id) && (p.timeline.main.length === 0 || isRaw(p.timeline))) {
@@ -221,9 +242,8 @@ export async function prepare(projectId: string, asset: MediaAsset): Promise<Med
       by: 'system',
       op: { type: 'set_main', clips: [...p.timeline.main, { id: uid('clip'), assetId: asset.id, in: 0, out: asset.duration, by: 'system', reason: 'material bruto' }], removals: [] },
     });
+    await herdarPadraoCor(projectId);
   }
-  store.setActivity(projectId, { state: 'idle', message: 'Material pronto' });
-  return asset;
 }
 
 /** Ao subir o servidor: completa papéis antigos e RETOMA toda importação que ficou pela metade. */

@@ -53,10 +53,10 @@ export function MotionStudioCard() {
   };
 
   return (
-    <section className="m-2 rounded-[var(--radius-ui-lg)] border border-orange-400/30 bg-orange-400/5 p-3">
+    <section className="m-2 rounded-ui-lg border border-orange-400/30 bg-orange-400/5 p-3">
       <div className="flex items-center gap-2 text-ui-sm font-semibold text-white">
         <Clapperboard size={14} className="text-orange-300" /> Motion Studio Brain
-        {st && !st.disponivel && <span className="rounded bg-rose-500/15 px-1.5 text-ui-2xs text-rose-300">studio não encontrado</span>}
+        {st && !st.disponivel && <span className="rounded bg-rose-500/15 px-1.5 text-ui-xs text-rose-300">studio não encontrado</span>}
         <button onClick={load} className="ml-auto rounded p-1 text-ink-400 hover:text-white" aria-label="Atualizar" title="Atualizar">
           <RefreshCw size={12} />
         </button>
@@ -70,7 +70,7 @@ export function MotionStudioCard() {
               <span className="truncate text-ink-200" title={c.fala}>
                 {c.pasta}
               </span>
-              <span className="ml-auto shrink-0 font-mono text-ui-2xs text-ink-400">{c.frames} f</span>
+              <span className="ml-auto shrink-0 font-mono text-ui-xs text-ink-400">{c.frames} f</span>
             </li>
           ))}
         </ul>
@@ -83,12 +83,12 @@ export function MotionStudioCard() {
           Importar do Motion Studio{novos ? ` (${novos})` : ''}
         </Button>
         {st && st.cenas.length > 0 && (
-          <span className="text-ui-2xs text-ink-400">
+          <span className="text-ui-xs text-ink-400">
             {comRender}/{st.cenas.length} com render
           </span>
         )}
       </div>
-      {st?.dir && <p className="mt-1.5 truncate font-mono text-ui-2xs text-ink-500" title={st.dir}>{st.dir}</p>}
+      {st?.dir && <p className="mt-1.5 truncate font-mono text-ui-xs text-ink-500" title={st.dir}>{st.dir}</p>}
       {msg && <p className="mt-1 text-ui-xs text-ink-200">{msg}</p>}
     </section>
   );

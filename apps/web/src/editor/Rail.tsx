@@ -25,7 +25,7 @@ export function Rail({ value, onChange }: { value: RailTab | null; onChange: (v:
             onClick={() => onChange(active ? null : t.id)}
             title={t.title}
             aria-pressed={active}
-            className={`mx-1 flex flex-col items-center gap-1 rounded-[var(--radius-ui-md)] px-1 py-2 text-ui-2xs font-medium transition ${active ? 'bg-ink-750 text-white' : 'text-ink-400 hover:bg-ink-800 hover:text-ink-100'}`}
+            className={`mx-1 flex flex-col items-center gap-1 rounded-ui-md px-1 py-2 text-ui-xs font-medium transition ${active ? 'bg-ink-750 text-white' : 'text-ink-400 hover:bg-ink-800 hover:text-ink-100'}`}
           >
             <span className={active ? 'text-nc-300' : ''}>{t.icon}</span>
             <span className="leading-none">{t.label}</span>

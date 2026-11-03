@@ -93,6 +93,10 @@ export interface Clip {
    * dela, no espaço de exibição Rec.709, sem conversão de entrada própria (`input` sempre 'rec709'). Ver `buildLut`.
    */
   grade?: import('./color.ts').ColorGrade;
+  /**
+   * A `grade` veio do padrão de cor do cliente (BL-0161): id do perfil. Some quando a grade do clipe é trocada à mão.
+   */
+  gradeHerdada?: string;
 }
 
 export interface FramingRamp {
@@ -144,7 +148,18 @@ export interface TrackState {
   hidden?: boolean;
   muted?: boolean;
   locked?: boolean;
+  /**
+   * Solo (BL-0160): com alguma trilha em solo, as trilhas de som sem solo ficam mudas — no preview e no export,
+   * porque o mudo efetivo passa por `trackFlag(..., 'muted')` / `overlayActive`. O `muted` guardado não muda.
+   */
+  solo?: boolean;
+  /** Altura da trilha na timeline, em px (BL-0160). Ausente = altura padrão da interface. Só visual. */
+  height?: number;
 }
+
+/** Limites da altura de trilha guardada no projeto (BL-0160). */
+export const TRACK_HEIGHT_MIN = 20;
+export const TRACK_HEIGHT_MAX = 200;
 
 export interface Track {
   id: string;
@@ -522,7 +537,7 @@ export type TimelineOp =
   | { type: 'set_overlay_speed'; id: string; speed?: number | null; freeze?: Seconds | null }
   | { type: 'set_grade'; assetId: string; grade: import('./color.ts').ColorGrade | null }
   /** Grade por clipe sobre a do arquivo (BL-0159 C3), em um ou vários clipes (colar, "todos desta câmera"); null tira. */
-  | { type: 'set_clip_grade'; clipIds: string[]; grade: import('./color.ts').ColorGrade | null }
+  | { type: 'set_clip_grade'; clipIds: string[]; grade: import('./color.ts').ColorGrade | null; herdadaDe?: string }
   | { type: 'set_overlay_text'; id: string; text: string }
   | { type: 'set_overlay_motion'; id: string; motion: import('./motion.ts').MotionSpec }
   | { type: 'set_motion_ref'; refId: string | null }

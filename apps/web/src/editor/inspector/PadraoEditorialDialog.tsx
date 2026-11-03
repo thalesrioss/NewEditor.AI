@@ -64,7 +64,7 @@ export function PadraoEditorialDialog({ project, perfis, onClose, onSaved }: { p
 
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 p-6" onMouseDown={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Tornar esta edição o padrão editorial" className="anim-pop w-full max-w-2xl rounded-[var(--radius-ui-lg)] border border-ink-600 bg-ink-850 shadow-[var(--shadow-ui-3)]" onMouseDown={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Tornar esta edição o padrão editorial" className="anim-pop w-full max-w-2xl rounded-ui-lg border border-ink-600 bg-ink-850 shadow-ui-3" onMouseDown={(e) => e.stopPropagation()}>
         <header className="flex items-center gap-2 border-b border-ink-750 px-5 py-3">
           <BookMarked size={16} className="text-nc-300" />
           <h2 className="text-ui-lg font-semibold text-white">Tornar esta edição o padrão editorial</h2>
@@ -102,11 +102,11 @@ export function PadraoEditorialDialog({ project, perfis, onClose, onSaved }: { p
               <input type="checkbox" checked={aplicar} onChange={(e) => setAplicar(e.target.checked)} className="h-4 w-4 accent-nc-500" />
               Usar este padrão neste projeto também
             </label>
-            {existente && <p className="rounded-[var(--radius-ui-md)] border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-ui-xs text-amber-200">Já existe "{existente.nome}" para {cliente.trim()} · {formatoLabel(formato)}. Gravar substitui as medições e mantém o que você marcou à mão em Perfis.</p>}
+            {existente && <p className="rounded-ui-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-ui-xs text-amber-200">Já existe "{existente.nome}" para {cliente.trim()} · {formatoLabel(formato)}. Gravar substitui as medições e mantém o que você marcou à mão em Perfis.</p>}
             {err && <p className="text-ui-xs text-rose-300">{err}</p>}
           </div>
-          <div className="rounded-[var(--radius-ui-md)] border border-ink-750 bg-ink-800/50 p-3">
-            <div className="mb-2 text-ui-2xs font-semibold tracking-wide text-ink-400 uppercase">O que foi medido nesta edição</div>
+          <div className="rounded-ui-md border border-ink-750 bg-ink-800/50 p-3">
+            <div className="mb-2 text-ui-xs font-semibold tracking-wide text-ink-400 uppercase">O que foi medido nesta edição</div>
             {pv ? (
               <dl className="space-y-1">
                 {rows.map(([k, v]) => (

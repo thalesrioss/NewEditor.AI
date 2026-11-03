@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Download, FolderOpen, X } from 'lucide-react';
-import { formatTime } from '@neweditor/core';
+import { formatTime, silencedAudioTracks } from '@neweditor/core';
 import { api } from '../lib/api.ts';
 import { useEditor } from '../lib/store.ts';
 import { Button, IconButton } from './ui.tsx';
@@ -23,6 +23,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     api.entregaPresets().then((r) => (setPresets(r.presets), setPasta(r.pasta))).catch(() => undefined);
   }, []);
+  const calado = silencedAudioTracks(project.timeline);
   const block = project.qc?.issues.filter((i) => i.severidade === 'bloqueia') ?? [];
   const go = async () => {
     setBusy(true);
@@ -37,7 +38,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   };
   return (
     <div className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-black/60 backdrop-blur-sm" onMouseDown={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Exportar" onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-md space-y-4 rounded-[var(--radius-ui-lg)] border border-ink-700 bg-ink-850 p-5 shadow-[var(--shadow-ui-3)]">
+      <div role="dialog" aria-modal="true" aria-label="Exportar" onMouseDown={(e) => e.stopPropagation()} className="anim-pop w-full max-w-md space-y-4 rounded-ui-lg border border-ink-700 bg-ink-850 p-5 shadow-ui-3">
         <div className="flex items-center justify-between">
           <h2 className="text-ui-lg font-semibold">Exportar e entregar</h2>
           <IconButton label="Fechar" onClick={onClose}>
@@ -53,7 +54,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
-          <span className="block text-ui-2xs text-ink-400">
+          <span className="block text-ui-xs text-ink-400">
             O preset dá o nome do arquivo; o formato é o da timeline ({project.timeline.width}×{project.timeline.height}).
           </span>
         </label>
@@ -72,14 +73,19 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={entregar} onChange={(e) => setEntregar(e.target.checked)} className="h-4 w-4 accent-nc-500" /> Marcar como <b>Entregue</b> no Kanban
           </label>
-          {entregar && block.length > 0 && <p className="ml-6 text-ui-2xs text-rose-300">O QC tem {block.length} bloqueio(s); a entrega vai ser recusada até resolver (aba Revisão).</p>}
+          {entregar && block.length > 0 && <p className="ml-6 text-ui-xs text-rose-300">O QC tem {block.length} bloqueio(s); a entrega vai ser recusada até resolver (aba Revisão).</p>}
         </div>
-        <div className="flex items-center gap-2 rounded-[var(--radius-ui-md)] bg-ink-800 px-3 py-2 text-ui-2xs text-ink-400">
+        <div className="flex items-center gap-2 rounded-ui-md bg-ink-800 px-3 py-2 text-ui-xs text-ink-400">
           <FolderOpen size={13} className="shrink-0" />
           <span className="min-w-0 truncate" title={pasta}>
             {pasta}/{(project.client ?? 'sem-cliente').toLowerCase()}/…
           </span>
         </div>
+        {calado.length > 0 && (
+          <p role="alert" className="rounded-ui-md bg-amber-400/10 px-3 py-2 text-ui-xs text-amber-200">
+            Sai sem som no export: {calado.map((c) => (c.why === 'solo' ? `${c.trackId} (${c.soloIds.join(', ')} em solo)` : `${c.trackId} (muda)`)).join(' · ')}. Tire o solo ou o mudo no cabeçalho da trilha se não for de propósito.
+          </p>
+        )}
         {err && <p className="text-ui-xs text-rose-400">{err}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>

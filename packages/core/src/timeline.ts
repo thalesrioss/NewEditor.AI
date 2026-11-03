@@ -1,4 +1,4 @@
-import { DEFAULT_TRACKS, TIMELINE_ANCHOR, type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp, type WordFix } from './types.ts';
+import { DEFAULT_TRACKS, TIMELINE_ANCHOR, TRACK_HEIGHT_MAX, TRACK_HEIGHT_MIN,type Actor, type CaptionEdit, type Clip, type FramingRamp, type OverlayItem, type Pin, type RegionFx, type RegionFxPatch, type Removal, type Seconds, type Timeline, type TimelineOp, type WordFix } from './types.ts';
 import { MOTION_TEMPLATES, type MotionTemplateId } from './motion.ts';
 import { clipGradeOf, isNeutral, normalizeGradeLut } from './color.ts';
 import { DEFAULT_CAPTIONS } from './text.ts';
@@ -237,7 +237,9 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
     case 'restore': {
       const r = t.removals.find((x) => x.id === op.removalId);
       if (!r) throw new OpError(`restore: trecho ${op.removalId} não existe`);
-      const restored: Clip = { id: uid('clip'), assetId: r.assetId, in: r.in, out: r.out, by, reason: `restaurado: ${r.reason}` };
+      // Trecho de volta ao lado de um clipe com o padrão de cor do cliente (BL-0161): volta com a mesma grade herdada.
+      const vizinho = t.main.find((c) => c.assetId === r.assetId && c.gradeHerdada && c.grade && (Math.abs(c.out - r.in) < 1e-3 || Math.abs(c.in - r.out) < 1e-3));
+      const restored: Clip = { id: uid('clip'), assetId: r.assetId, in: r.in, out: r.out, by, reason: `restaurado: ${r.reason}`, ...(vizinho ? { grade: vizinho.grade, gradeHerdada: vizinho.gradeHerdada } : {}) };
       // Insere na posição cronológica da fonte (antes do primeiro clipe do mesmo asset que começa depois dele).
       let idx = t.main.length;
       for (let i = 0; i < t.main.length; i++) {
@@ -475,6 +477,7 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
 
     case 'set_clip_grade': {
       // Grade do clipe sobre a do arquivo (BL-0159 C3): neutra ou null tira; vários clipes numa op = um passo no desfazer.
+      // `herdadaDe` (BL-0161) marca a grade como vinda do padrão de cor do perfil; sem ele, a marca sai.
       const ids = new Set(op.clipIds);
       if (!ids.size) throw new OpError('set_clip_grade: nenhum clipe');
       for (const id of ids) if (!t.main.some((c) => c.id === id)) throw new OpError(`set_clip_grade: clipe ${id} não existe`);
@@ -483,8 +486,8 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
         ...t,
         main: t.main.map((c) => {
           if (!ids.has(c.id)) return c;
-          const { grade: _drop, ...rest } = c;
-          return g && !isNeutral(g) ? { ...rest, grade: g } : rest;
+          const { grade: _drop, gradeHerdada: _h, ...rest } = c;
+          return g && !isNeutral(g) ? { ...rest, grade: g, ...(op.herdadaDe ? { gradeHerdada: op.herdadaDe } : {}) } : rest;
         }),
       };
     }
@@ -606,6 +609,8 @@ export function applyOp(tIn: Timeline, op: TimelineOp, by: Actor): Timeline {
       return { ...t, motionSfxDb: Math.max(-24, Math.min(12, op.gainDb)) };
     case 'set_track_state': {
       const cur = { ...(t.trackState?.[op.trackId] ?? {}), ...op.patch };
+      // Altura: px inteiros dentro dos limites; 0, null ou inválido volta à altura padrão.
+      if (cur.height !== undefined) cur.height = typeof cur.height === 'number' && Number.isFinite(cur.height) && cur.height > 0 ? Math.round(Math.max(TRACK_HEIGHT_MIN, Math.min(TRACK_HEIGHT_MAX, cur.height))) : undefined;
       for (const k of Object.keys(cur) as (keyof typeof cur)[]) if (!cur[k]) delete cur[k];
       const all = { ...(t.trackState ?? {}) };
       if (Object.keys(cur).length) all[op.trackId] = cur;
@@ -699,7 +704,7 @@ export function coalesce(main: Clip[]): Clip[] {
   const out: Clip[] = [];
   for (const c of main) {
     const prev = out[out.length - 1];
-    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y && !a.framingTo && !b.framingTo;
+    const same = (a: Clip, b: Clip) => (a.zoom ?? 1) === (b.zoom ?? 1) && a.zoomTo === b.zoomTo && !b.flash && clipSpeed(a) === clipSpeed(b) && !a.freeze && a.cam === b.cam && a.framing?.x === b.framing?.x && a.framing?.y === b.framing?.y && !a.framingTo && !b.framingTo && a.gradeHerdada === b.gradeHerdada && JSON.stringify(a.grade) === JSON.stringify(b.grade);
     if (prev && prev.assetId === c.assetId && Math.abs(prev.out - c.in) < 1e-3 && same(prev, c)) {
       out[out.length - 1] = { ...prev, out: c.out };
     } else out.push(c);
@@ -748,6 +753,29 @@ export function editorialWarnings(t: Timeline, assetName: (id: string) => string
     if (resolveOverlay(tl, o) === null) out.push({ level: 'aviso', message: 'Overlay órfão: o trecho de fala onde ele estava foi cortado', overlayIds: [o.id] });
     else if (o.role === 'broll' && o.duration < MIN_BROLL) out.push({ level: 'aviso', message: `B-roll de ${o.duration.toFixed(1)}s — abaixo de ${MIN_BROLL}s vira "pisca"`, overlayIds: [o.id] });
   }
+  for (const s of silencedAudioTracks(tl)) {
+    out.push({ level: 'aviso', message: `${s.trackId} sem som no export: ${s.why === 'solo' ? `${s.soloIds.join(', ')} em solo` : 'trilha muda'}`, overlayIds: [] });
+  }
+  return out;
+}
+
+/**
+ * Trilhas de som com conteúdo que o export vai calar, por mudo ou por solo de outra trilha (BL-0160): solo
+ * esquecido na A3 tira a voz da peça. A1 = fala (clipes); A2 = SFX (inclui os sintetizados dos motions); A3 = trilha.
+ */
+export function silencedAudioTracks(t: Timeline): { trackId: string; why: 'mudo' | 'solo'; soloIds: string[] }[] {
+  const soloIds = Object.entries(t.trackState ?? {}).filter(([id, s]) => isAudioTrack(id) && !!s?.solo).map(([id]) => id);
+  const ids = ['A1', ...(t.tracks ?? DEFAULT_TRACKS).filter((k) => k.kind === 'audio').map((k) => k.id)];
+  const out: { trackId: string; why: 'mudo' | 'solo'; soloIds: string[] }[] = [];
+  for (const id of [...new Set(ids)]) {
+    const has =
+      id === 'A1'
+        ? t.main.length > 0
+        : (t.overlays ?? []).some((o) => o.trackId === id || (id === MOTION_SFX_TRACK && (o.role === 'motion' || o.role === 'lettering')));
+    if (!has) continue;
+    if (t.trackState?.[id]?.muted) out.push({ trackId: id, why: 'mudo', soloIds });
+    else if (soloMuted(t, id)) out.push({ trackId: id, why: 'solo', soloIds });
+  }
   return out;
 }
 
@@ -766,10 +794,18 @@ export const MOTION_SFX_TRACK = 'A2';
 
 /** O overlay aparece/soa? (trilha oculta some da imagem; trilha muda some do som) */
 export function overlayActive(t: Timeline, o: OverlayItem): boolean {
-  const st = t.trackState?.[o.trackId];
-  if (!st) return true;
   const audio = o.role === 'music' || o.role === 'sfx';
-  return audio ? !st.muted : !st.hidden;
+  return audio ? !trackFlag(t, o.trackId, 'muted') : !t.trackState?.[o.trackId]?.hidden;
+}
+
+/** Trilha de som (A1 fala, A2 SFX, A3 trilha): só elas têm solo. */
+const isAudioTrack = (trackId: string): boolean => /^A\d+$/i.test(trackId);
+
+/** Alguma trilha de som está em solo e esta (de som) não: o som dela sai (BL-0160). */
+export function soloMuted(t: Timeline, trackId: string): boolean {
+  const all = t.trackState;
+  if (!all || !isAudioTrack(trackId) || all[trackId]?.solo) return false;
+  return Object.entries(all).some(([id, s]) => isAudioTrack(id) && !!s?.solo);
 }
 
 /**
@@ -798,8 +834,13 @@ export function overlaysInDrawOrder<T extends OverlayItem>(overlays: readonly T[
   return overlays.map((o, i) => ({ o, i, z: overlayLayer(o) })).sort((a, b) => a.z - b.z || a.i - b.i).map((x) => x.o);
 }
 
-export function trackFlag(t: Timeline, trackId: string, flag: 'hidden' | 'muted' | 'locked'): boolean {
-  return !!t.trackState?.[trackId]?.[flag];
+/**
+ * Estado efetivo da trilha. `muted` já conta o solo (outra trilha em solo emudece esta), e é o que preview e
+ * export consultam; o botão de mudo do cabeçalho lê o `muted` guardado em `trackState`.
+ */
+export function trackFlag(t: Timeline, trackId: string, flag: 'hidden' | 'muted' | 'locked' | 'solo'): boolean {
+  const own = !!t.trackState?.[trackId]?.[flag];
+  return flag === 'muted' ? own || soloMuted(t, trackId) : own;
 }
 
 /**

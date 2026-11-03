@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 const VARIANT: Record<Variant, string> = {
-  primary: 'nc-gradient text-white shadow-[var(--shadow-ui-1)] hover:brightness-110',
+  primary: 'nc-gradient text-white shadow-ui-1 hover:brightness-110',
   secondary: 'border border-ink-600 bg-ink-800 text-ink-100 hover:border-ink-500 hover:bg-ink-750',
   ghost: 'text-ink-300 hover:bg-ink-750 hover:text-white',
   danger: 'border border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20',
@@ -21,7 +21,7 @@ export function Button({ variant = 'secondary', size = 'md', loading, icon, chil
       {...rest}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex shrink-0 items-center justify-center rounded-[var(--radius-ui-md)] font-semibold transition duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-40 ${VARIANT[variant]} ${SIZE[size]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-ui-md font-semibold transition duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-40 ${VARIANT[variant]} ${SIZE[size]} ${className}`}
     >
       {loading ? <Loader2 size={size === 'sm' ? 12 : 14} className="animate-spin" /> : icon}
       {children}
@@ -38,7 +38,7 @@ export function IconButton({ label, shortcut, active, children, className = '', 
       aria-label={label}
       aria-pressed={active}
       title={tip}
-      className={`rounded-[var(--radius-ui-md)] p-1.5 transition duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-30 ${active ? 'bg-nc-500/20 text-nc-300' : 'text-ink-300 hover:bg-ink-750 hover:text-white'} ${className}`}
+      className={`rounded-ui-md p-1.5 transition duration-[var(--dur-fast)] disabled:pointer-events-none disabled:opacity-30 ${active ? 'bg-nc-500/20 text-nc-300' : 'text-ink-300 hover:bg-ink-750 hover:text-white'} ${className}`}
     >
       {children}
     </button>
@@ -97,9 +97,9 @@ export function RangeField({ label, value, min, max, step, unit = '', digits, hi
               const x = blurValue(text, v.toFixed(dec));
               if (x !== null) commit(x);
             }}
-            className="w-14 rounded-[var(--radius-ui-sm)] border border-ink-700 bg-ink-850 px-1.5 py-0.5 text-right font-mono text-ui-xs text-ink-100 focus:border-nc-500 focus:outline-none"
+            className="w-14 rounded-ui-sm border border-ink-700 bg-ink-850 px-1.5 py-0.5 text-right font-mono text-ui-xs text-ink-100 focus:border-nc-500 focus:outline-none"
           />
-          {unit && <span className="font-mono text-ui-2xs text-ink-400">{unit}</span>}
+          {unit && <span className="font-mono text-ui-xs text-ink-400">{unit}</span>}
         </span>
       </div>
       <input

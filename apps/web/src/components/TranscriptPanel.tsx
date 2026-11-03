@@ -89,7 +89,7 @@ export function TranscriptPanel() {
         </div>
       </div>
       <div ref={box} className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-3 pb-16 text-ui-md leading-[1.9]">
-        {!words && <p className="pt-6 text-center text-xs text-ink-400">{project?.assets.length ? 'Transcrevendo…' : 'Sem material ainda.'}</p>}
+        {!words && <p className="pt-6 text-center text-ui-sm text-ink-400">{project?.assets.length ? 'Transcrevendo…' : 'Sem material ainda.'}</p>}
         {words?.map((w, i) => {
           const r = removalOf[i];
           const isCur = i === current;
@@ -138,19 +138,19 @@ export function TranscriptPanel() {
       </div>
 
       {sel && project && asset && (
-        <div className="anim-pop absolute inset-x-3 bottom-3 flex items-center gap-1.5 rounded-xl border border-ink-600 bg-ink-800/95 p-1.5 shadow-2xl backdrop-blur">
+        <div className="anim-pop absolute inset-x-3 bottom-3 flex items-center gap-1.5 rounded-ui-lg border border-ink-600 bg-ink-800/95 p-1.5 shadow-ui-3 backdrop-blur">
           <span className="px-1.5 text-ui-xs text-ink-300">{hi - lo + 1} palavra(s)</span>
           {selKept > 0 && (
-            <button onClick={() => void cutSelection(project.id, asset.id, lo, hi)} className="flex items-center gap-1 rounded-lg bg-rose-500/90 px-2.5 py-1 text-ui-sm font-semibold text-white hover:bg-rose-500">
+            <button onClick={() => void cutSelection(project.id, asset.id, lo, hi)} className="flex items-center gap-1 rounded-ui-md bg-rose-500/90 px-2.5 py-1 text-ui-sm font-semibold text-white hover:bg-rose-500">
               <Scissors size={12} /> Apagar <kbd className="ml-0.5 rounded bg-black/20 px-1 text-ui-xs">⌫</kbd>
             </button>
           )}
           {selRemoved > 0 && (
-            <button onClick={() => void api.restoreWords(project.id, asset.id, lo, hi).then(() => selectWords(null))} className="flex items-center gap-1 rounded-lg bg-emerald-500/90 px-2.5 py-1 text-ui-sm font-semibold text-white hover:bg-emerald-500">
+            <button onClick={() => void api.restoreWords(project.id, asset.id, lo, hi).then(() => selectWords(null))} className="flex items-center gap-1 rounded-ui-md bg-emerald-500/90 px-2.5 py-1 text-ui-sm font-semibold text-white hover:bg-emerald-500">
               <RotateCcw size={12} /> Restaurar
             </button>
           )}
-          <button aria-label="Limpar seleção (Esc)" onClick={() => selectWords(null)} className="ml-auto rounded-md p-1 text-ink-400 hover:text-white" title="Limpar seleção (Esc)">
+          <button aria-label="Limpar seleção (Esc)" onClick={() => selectWords(null)} className="ml-auto rounded-ui-md p-1 text-ink-400 hover:text-white" title="Limpar seleção (Esc)">
             <X size={14} />
           </button>
         </div>

@@ -19,14 +19,14 @@ export function AvatarGallery() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-10 overflow-auto bg-ink-900 p-8">
       <div className="flex items-center gap-4">
-        <div className="h-12 w-12 overflow-hidden rounded-xl bg-gradient-to-b from-nc-600/30 to-ink-800 ring-1 ring-ink-700">
+        <div className="h-12 w-12 overflow-hidden rounded-ui-lg bg-gradient-to-b from-nc-600/30 to-ink-800 ring-1 ring-ink-700">
           <AvatarBust state="idle" />
         </div>
         <div>
-          <div className="text-lg font-semibold">
+          <div className="text-ui-lg font-semibold">
             O editor da NewEditor<span className="nc-text-gradient">.AI</span>
           </div>
-          <div className="text-sm text-ink-400">Estados do avatar dentro do Editor Brain</div>
+          <div className="text-ui-md text-ink-400">Estados do avatar dentro do Editor Brain</div>
         </div>
       </div>
       <div className="flex max-w-5xl flex-wrap items-end justify-center gap-x-12 gap-y-10">
@@ -35,7 +35,7 @@ export function AvatarGallery() {
             <div className="flex h-72 items-end border-b-4 border-nc-500/50 px-2">
               <Avatar state={s.state} scale={4} moving={s.moving} facing={s.facing} />
             </div>
-            <span className="text-xs text-ink-300">{s.label}</span>
+            <span className="text-ui-sm text-ink-300">{s.label}</span>
           </div>
         ))}
       </div>

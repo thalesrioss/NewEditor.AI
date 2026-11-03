@@ -85,7 +85,7 @@ export function CineproPanel({ modo }: { modo: 'som' | 'visual' }) {
     <div className="flex h-full min-h-0 flex-col">
       <audio ref={audio} onEnded={() => setPlaying(null)} />
       <div className="space-y-1.5 border-b border-ink-750 p-2">
-        <label className="flex items-center gap-1.5 rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-900 px-2">
+        <label className="flex items-center gap-1.5 rounded-ui-md border border-ink-700 bg-ink-900 px-2">
           <Search size={12} className="text-ink-400" />
           <input value={busca} onChange={(e) => setBusca(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder={`Buscar em ${resumo.total.toLocaleString('pt-BR')} ${modo === 'som' ? 'sons' : 'efeitos'}…`} aria-label="Buscar no CinePRO" className="w-full bg-transparent py-1 text-ui-xs text-ink-100 outline-none" />
           {busca && (
@@ -124,7 +124,7 @@ export function CineproPanel({ modo }: { modo: 'som' | 'visual' }) {
           ))}
         </aside>
         <div className="scroll-thin min-h-0 min-w-0 flex-1 overflow-y-auto p-2">
-          {msg && <p className="mb-2 rounded-[var(--radius-ui-md)] bg-ink-800 px-2 py-1 text-ui-xs text-emerald-300">{msg}</p>}
+          {msg && <p className="mb-2 rounded-ui-md bg-ink-800 px-2 py-1 text-ui-xs text-emerald-300">{msg}</p>}
           {!lista ? (
             <p className="text-ui-xs text-ink-400">Procurando…</p>
           ) : !lista.itens.length ? (
@@ -142,10 +142,10 @@ export function CineproPanel({ modo }: { modo: 'som' | 'visual' }) {
               ))}
             </div>
           )}
-          {lista && lista.total > lista.itens.length && <p className="mt-2 text-center text-ui-2xs text-ink-400">{lista.itens.length} de {lista.total}: refine a busca ou entre numa pasta.</p>}
+          {lista && lista.total > lista.itens.length && <p className="mt-2 text-center text-ui-xs text-ink-400">{lista.itens.length} de {lista.total}: refine a busca ou entre numa pasta.</p>}
         </div>
       </div>
-      <p className="border-t border-ink-750 px-3 py-1.5 text-ui-2xs leading-snug text-ink-400">
+      <p className="border-t border-ink-750 px-3 py-1.5 text-ui-xs leading-snug text-ink-400">
         {modo === 'som' ? '"+" põe no cursor: SFX em A2, trilha em A3 (substitui a atual). Arrastar para a trilha também vale. Os arquivos vêm da nuvem do CinePRO e ficam em cache.' : '"+" põe no cursor: vídeo com alfa em V3, o resto em V2 até o corte. Looks (LUTs) ficam na aba Cor; presets do Premiere só aparecem.'}
       </p>
     </div>
@@ -185,7 +185,7 @@ function TreeButton({ label, count, depth, active, open, onToggle, onClick }: { 
       ) : (
         <span className="w-[14px]" />
       )}
-      <button onClick={onClick} className="min-w-0 flex-1 truncate py-1 text-left text-ui-2xs" title={label}>
+      <button onClick={onClick} className="min-w-0 flex-1 truncate py-1 text-left text-ui-xs" title={label}>
         {label}
       </button>
       <span className="text-ui-2xs text-ink-500">{count}</span>
@@ -209,7 +209,7 @@ const tip = (it: CineproItem) => `${it.categoria}${it.pasta ? `/${it.pasta}` : '
 function Card({ it, playing, onPlay, onUse }: { it: CineproItem; playing: boolean; onPlay: () => void; onUse: () => void }) {
   const drag = useDrag(it);
   return (
-    <div {...drag} className={`group overflow-hidden rounded-[var(--radius-ui-md)] border border-ink-700 bg-ink-800 transition ${it.insere ? 'cursor-grab hover:border-nc-500' : 'opacity-70'}`} title={tip(it)}>
+    <div {...drag} className={`group overflow-hidden rounded-ui-md border border-ink-700 bg-ink-800 transition ${it.insere ? 'cursor-grab hover:border-nc-500' : 'opacity-70'}`} title={tip(it)}>
       <div className="relative aspect-video bg-ink-900">
         {it.thumb ? <img src={cineproThumbUrl(it.id)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} /> : null}
         {isAudio(it) && (
@@ -217,14 +217,14 @@ function Card({ it, playing, onPlay, onUse }: { it: CineproItem; playing: boolea
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-white">{playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" className="ml-0.5" />}</span>
           </button>
         )}
-        <span className="absolute top-1 left-1 rounded bg-black/70 px-1 text-ui-2xs font-semibold text-ink-200">{it.ext.toUpperCase()}</span>
+        <span className="absolute top-1 left-1 rounded bg-black/70 px-1 text-ui-xs font-semibold text-ink-200">{it.ext.toUpperCase()}</span>
         {it.insere && (
-          <button aria-label="Inserir no cursor" title="Inserir no cursor" onClick={onUse} className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-nc-500 text-white opacity-0 shadow transition group-hover:opacity-100 hover:brightness-110">
+          <button aria-label="Inserir no cursor" title="Inserir no cursor" onClick={onUse} className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-nc-500 text-white opacity-0 shadow transition group-hover:opacity-100 focus-visible:opacity-100 hover:brightness-110">
             <Plus size={14} />
           </button>
         )}
       </div>
-      <div className="truncate px-1.5 py-1 text-ui-2xs text-ink-300">{it.nome}</div>
+      <div className="truncate px-1.5 py-1 text-ui-xs text-ink-300">{it.nome}</div>
     </div>
   );
 }
@@ -243,9 +243,9 @@ function RowItem({ it, playing, onPlay, onUse }: { it: CineproItem; playing: boo
         <FolderOpen size={14} className="shrink-0 text-ink-500" />
       )}
       <span className="min-w-0 flex-1 truncate text-ui-xs text-ink-200">{it.nome}</span>
-      <span className="shrink-0 text-ui-2xs text-ink-500">{it.ext}</span>
+      <span className="shrink-0 text-ui-xs text-ink-500">{it.ext}</span>
       {it.insere && (
-        <Button size="sm" variant="ghost" className="!h-6 !px-1.5 opacity-0 group-hover:opacity-100" onClick={onUse} aria-label="Inserir no cursor">
+        <Button size="sm" variant="ghost" className="!h-6 !px-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={onUse} aria-label="Inserir no cursor">
           <Plus size={12} />
         </Button>
       )}
