@@ -116,3 +116,45 @@ bruto que parece LOG; `npm run typecheck` e `npm test` verdes.
 1. Ordem: entra depois do BL-0153 (03 v8 até 06/11) ou passa na frente? Sugiro P1 + P2 logo depois, porque o risco de
    repetir o erro da eq2210 existe a cada câmera nova.
 2. Quem grava as amostras de 5 s (iPhone HLG, iPhone Apple Log, Android) na NewStudios.
+
+## 6. Estado da F1 (BL-0175, branch `office/bl-0175-perfil-captura`, 03/11/2026)
+
+Feito (nomes reais do código; o rascunho acima chamava o módulo de `perfil-captura.ts`):
+
+- `apps/server/src/capture-profile.ts`: `detectCapture(file)` → `SourceColor` com `camera`, `curva`, `fonte` (origem),
+  `confianca`, `aviso`, `tabela`; `classifyCapture` é a decisão pura (testável sem disco). Ordem: XML Sony (inclui
+  Sony HLG) > `.sidecar` Blackmagic > chaves `com.blackmagic-design.camera.*` > tags do stream (Apple Log em chave de
+  cor, `arib-std-b67` = HLG, `smpte2084` = PQ com aviso, bt709/smpte170m = Rec.709 exceto Sony/XAVC) > Make/Model
+  (Apple + Rec.2020 sem curva = Apple Log provável) > codec (ProRes Blackmagic sem gamma = Film Gen5 provável; BRAW e
+  ProRes RAW = aviso) > `desconhecida`.
+- `packages/core/src/cameras.ts`: tabela versionada `CAPTURE_TABLE` (`CAPTURE_TABLE_VERSION` 2026-11-03.1), 1ª linha
+  Sony S-Log3 com a conversão embutida do BL-0159; `captureLine` = "Câmera X, curva Y, conversão Z (origem)".
+- `packages/core/src/color.ts`: `InputTransform` ganha `hlg` (OETF inversa BT.2100, cinza 0,38 → 0,18, Rec.2020 → 709 +
+  tone map da casa; mesma `buildLut` no WebGL e no FFmpeg); `SourceColor.fonte` aceita `sidecar`, `tag`, `container`,
+  `codec`, `desconhecida`; campos novos opcionais (projeto antigo sem `confianca` vale como decidido).
+- `color-source.ts`: `readSourceColor` passa pelo detector (devolve só curva decidida); `projectColors` grava
+  `desconhecida` e herda do bruto Sony quando o próprio arquivo só disse Rec.709 por tag/marca/codec; a nota do render
+  ganha "perfil de captura: …"; `captureReport` + rota `GET /api/projects/:id/perfil-captura`.
+- `ingest.ts`: linha "Perfil de captura de <arquivo>: …" no projeto; `.braw` recusado com "exporte em ProRes da câmera".
+  Aba Cor mostra a mesma linha (âmbar quando provável/desconhecida).
+- Teste `apps/server/src/capture-profile.test.ts` (fixtures sintéticas por ffmpeg em pasta temporária).
+
+Decisões:
+
+- `desconhecida` guarda `input: 'rec709'` só porque não há conversão a aplicar (identidade); o texto diz "curva
+  desconhecida, não presumida Rec.709" e o palpite pelo quadro (`guessInput` na correção automática) continua valendo.
+- Apple Log e Blackmagic Film Gen5 convertem pela curva publicada + gamut + tone map da casa (o mesmo caminho de
+  V-Log/C-Log3 hoje), sem LUT do fabricante; Apple Log sem chave explícita sai `provavel` com aviso. HLG sem OOTF
+  (conversão referida à cena, como as LOG).
+- Fora da F1, com aviso e sem curva inventada: PQ/Dolby Vision perfil 5, BRAW e ProRes RAW, Blackmagic Film Gen4 ou
+  anterior, curva Sony fora da tabela (ex.: s-log2).
+
+Falta / não conferido:
+
+- Amostras reais (iPhone HLG, iPhone Apple Log, Android, Blackmagic): a chave exata do Apple Log e o formato real do
+  `.sidecar` não foram vistos; as fixtures são sintéticas.
+- Paridade do HLG contra o `zscale` do FFmpeg: o FFmpeg desta máquina não tem `zscale` (sem libzimg); a medida ficou
+  só pela conta (cinza 0,38 → 0,44, branco de referência 0,75 → 0,85).
+- O 00_ANALISE_INICIAL não é gerado neste repositório (é da etapa de análise fora do app): ele precisa ler a rota
+  `perfil-captura` ou o log do projeto.
+- F2 (heurística, pergunta única ao gestor, gate no qc-tecnico) continua em item próprio.
