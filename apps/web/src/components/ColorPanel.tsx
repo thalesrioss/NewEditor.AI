@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClipboardCopy, ClipboardPaste, Eye, Palette, RotateCcw, Search, Users, Wand2, X } from 'lucide-react';
-import { HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
+import { captureLine, HSL_BANDS, HSL_BAND_HUES, INPUT_TRANSFORMS, NEUTRAL_CURVES, NEUTRAL_GRADE, NEUTRAL_HSL, NEUTRAL_WHEELS, type ColorGrade, type InputTransform } from '@neweditor/core';
 import { api, type CineproItem } from '../lib/api.ts';
 import { clipeDaCor, clipesDaCamera, colarGrade, type AlvoCor, type CopiaCor } from '../lib/cor-clipe.ts';
 import { useEditor } from '../lib/store.ts';
@@ -66,6 +66,8 @@ export function ColorPanel() {
   const daCamera = clip && project ? clipesDaCamera(project.timeline, clip) : [];
   const nomeDe = (id: string) => project?.assets.find((a) => a.id === id)?.name ?? id;
   const input = INPUT_TRANSFORMS.find((x) => x.id === g.input);
+  // Perfil de captura lido no ingest (BL-0175): câmera, curva, conversão e de onde veio.
+  const captura = project?.assets.find((a) => a.id === assetId)?.color;
 
   return (
     <div className="scroll-thin h-full space-y-4 overflow-y-auto p-4">
@@ -139,6 +141,7 @@ export function ColorPanel() {
           ))}
         </select>
         {input && <span className="block text-ui-xs text-ink-400">{input.camera}</span>}
+        {captura && <span className={`block text-ui-xs leading-snug ${captura.fonte === 'desconhecida' || (captura.confianca && captura.confianca !== 'certa') ? 'text-amber-300/90' : 'text-ink-400'}`}>Do arquivo: {captureLine(captura)}</span>}
       </label>
       </>)}
 
