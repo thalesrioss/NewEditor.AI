@@ -77,7 +77,7 @@ export function TrackHeader({ id, name, h, strong, kind, onHeight }: { id: strin
   const set = (patch: { hidden?: boolean; muted?: boolean; locked?: boolean; solo?: boolean }, note: string) => sendOp({ op: { type: 'set_track_state', trackId: id, patch }, note });
   const compact = h < 24; // trilha muito baixa: só o rótulo e os botões
   return (
-    <div className={`group relative flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5 ${state?.hidden || state?.muted || soloOff ? 'opacity-60' : ''}`} style={{ height: h }}>
+    <div className={`group relative flex items-center gap-1 border-b border-ink-750/60 pr-1 pl-1.5 ${state?.hidden || (state?.muted && id !== 'V1') || soloOff ? 'opacity-60' : ''}`} style={{ height: h }}>
       <span className={`w-6 shrink-0 rounded-ui-sm text-center font-mono text-ui-xs font-semibold leading-4 ${strong ? 'bg-nc-500/30 text-nc-300' : 'bg-ink-750 text-ink-300'}`}>{id}</span>
       {!compact && (
         <span className="min-w-0 flex-1 truncate text-ui-xs text-ink-400" title={name}>
@@ -311,7 +311,7 @@ export function ClipBlock({ clip, index, x, w, h, pps, selected, asset }: { clip
       style={{ left: x + dx, width: shownW - 1 }}
       title={label}
     >
-      {asset && <Filmstrip asset={asset} width={shownW} h={h - 6} pps={pps} srcAt={(local) => Math.min(shownOut, shownIn + local * speed)} />}
+      {asset && <Filmstrip asset={asset} width={shownW} h={h - 4} pps={pps} srcAt={(local) => Math.min(shownOut, shownIn + local * speed)} />}
       <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/75 to-transparent px-1.5 pt-0.5 pb-2">{shownW > 44 && <div className="truncate text-ui-xs font-medium text-white/90">{label || asset?.name}</div>}</div>
       <div className="absolute right-1 bottom-0.5 flex gap-0.5">
         {clip.speed && Math.abs(clip.speed - 1) > 0.01 && <span className="rounded bg-black/70 px-1 text-ui-xs font-semibold text-white">{clip.speed}×</span>}

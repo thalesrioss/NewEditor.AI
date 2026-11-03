@@ -108,7 +108,7 @@ function paint(cv: HTMLCanvasElement, img: { width: number; height: number; data
   if (kind !== 'vector') {
     ctx.strokeStyle = 'rgb(255 255 255 / 0.16)';
     ctx.fillStyle = 'rgb(255 255 255 / 0.45)';
-    ctx.font = '9px ui-sans-serif, system-ui';
+    ctx.font = '10px ui-sans-serif, system-ui';
     for (const p of [0, 25, 50, 75, 100]) {
       const y = Math.round((1 - p / 100) * (H - 1)) + 0.5;
       ctx.beginPath();
