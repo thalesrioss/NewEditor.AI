@@ -5,10 +5,11 @@
  * (`normalize…`), o valor ruim cai no padrão e o projeto carrega.
  *
  * Cor: só `#rgb`, `#rrggbb` ou `#rrggbbaa` (não há lista de nomes de cor no produto). Enum: só os da lista.
+ * Número da legenda: só número finito (`weight: '800"><img…'` virava HTML pelo mesmo `style`).
  */
 import { LETTERING_STYLES, type LetteringSpec } from './lettering.ts';
 import { DEFAULT_MOTION_STYLE, MOTION_TEMPLATES, NARRATIVE_FUNCTIONS, type MotionSpec, type MotionStyle } from './motion.ts';
-import { CAPTION_ANIMS, CAPTION_ANIMS_OUT, CAPTION_FONTS, CAPTION_WORD_ANIMS, type CaptionSettings } from './text.ts';
+import { CAPTION_ANIMS, CAPTION_ANIMS_OUT, CAPTION_FONTS, CAPTION_WORD_ANIMS, DEFAULT_CAPTIONS, type CaptionSettings } from './text.ts';
 import type { OverlayItem } from './types.ts';
 
 export const corValida = (v: unknown): v is string => typeof v === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v);
@@ -16,6 +17,9 @@ const naLista = (v: unknown, lista: Record<string, unknown> | readonly string[])
   typeof v === 'string' && (Array.isArray(lista) ? lista.includes(v) : Object.prototype.hasOwnProperty.call(lista, v));
 
 const CAPTION_CORES = ['color', 'accent', 'strokeColor', 'shadowColor', 'boxColor'] as const;
+// Todo campo numérico de CaptionSettings: vão crus para o `style="…"` (font-weight, font-size, calc(…)).
+const CAPTION_NUMEROS = ['position', 'x', 'width', 'weight', 'size', 'maxWords', 'maxChars', 'letterSpacing', 'lineHeight', 'stroke', 'shadow', 'shadowBlur', 'shadowDistance', 'shadowAngle', 'boxOpacity', 'boxRadius', 'boxPadding', 'opacity', 'rotation', 'scale', 'animDur'] as const;
+const numeroValido = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 // Função, não constante: text.ts e timeline.ts se importam em ciclo, e as listas ainda não existem no carregamento.
 const captionEnums = (): [keyof CaptionSettings, Record<string, unknown> | readonly string[]][] => [
   ['style', ['reels', 'frase']],
@@ -35,6 +39,8 @@ const TEMPLATE_CORES = ['color', 'shadowColor', 'strokeColor'] as const;
 /** O que está errado na legenda (campo ausente vale; o padrão preenche). */
 export function motivoCaptions(c: Partial<CaptionSettings>): string | undefined {
   for (const k of CAPTION_CORES) if (c[k] !== undefined && !corValida(c[k])) return `${k}: cor em #rgb, #rrggbb ou #rrggbbaa`;
+  // `position` fica de fora: na op, posição que não é número cai no padrão (contrato do BL-0100, set_captions).
+  for (const k of CAPTION_NUMEROS) if (k !== 'position' && c[k] !== undefined && !numeroValido(c[k])) return `${k}: número`;
   for (const [k, lista] of captionEnums()) if (c[k] !== undefined && !naLista(c[k], lista)) return `${k}: ${(Array.isArray(lista) ? lista : Object.keys(lista)).join(', ')}`;
   return undefined;
 }
@@ -65,8 +71,14 @@ const sem = <T extends object>(o: T, ks: string[]): T => (ks.length ? (Object.fr
 
 export function normalizeCaptions<T extends Partial<CaptionSettings>>(c: T): T {
   if (!c || typeof c !== 'object') return c;
-  const ruins = [...CAPTION_CORES.filter((k) => c[k] !== undefined && !corValida(c[k])), ...captionEnums().filter(([k, l]) => c[k] !== undefined && !naLista(c[k], l)).map(([k]) => k)];
-  return sem(c, ruins);
+  const ruins: string[] = [
+    ...CAPTION_CORES.filter((k) => c[k] !== undefined && !corValida(c[k])),
+    ...CAPTION_NUMEROS.filter((k) => c[k] !== undefined && !numeroValido(c[k])),
+    ...captionEnums().filter(([k, l]) => c[k] !== undefined && !naLista(c[k], l)).map(([k]) => k),
+  ];
+  const limpo = sem(c, ruins);
+  // `position` é obrigatório (captionDefaults não tem padrão para ele): ruim volta ao padrão em vez de sumir.
+  return ruins.includes('position') ? { ...limpo, position: DEFAULT_CAPTIONS.position } : limpo;
 }
 
 function normalizeMotion(m: MotionSpec): MotionSpec {

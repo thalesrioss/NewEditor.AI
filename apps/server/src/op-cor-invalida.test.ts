@@ -16,6 +16,7 @@ process.env.NEWEDITOR_LLM = 'off';
 process.env.NEWEDITOR_BRAIN = 'local';
 
 const RUIM = 'red"><script>alert(1)</script>';
+const NUM_RUIM = '800"><img src=x onerror=alert(1)>';
 // Projeto gravado antes da regra, com cor inválida na legenda e no motion.
 const antigo = path.join(tmp, 'data', 'projects', 'prj_antigo');
 fs.mkdirSync(antigo, { recursive: true });
@@ -25,7 +26,7 @@ fs.writeFileSync(
     id: 'prj_antigo', name: 'Antigo', brief: '', status: 'fila', createdAt: new Date().toISOString(), assets: [], version: 1,
     timeline: {
       fps: 30, width: 1080, height: 1920, main: [],
-      captions: { ...DEFAULT_CAPTIONS, accent: RUIM },
+      captions: { ...DEFAULT_CAPTIONS, accent: RUIM, weight: NUM_RUIM, size: NUM_RUIM, position: NUM_RUIM, scale: 1.2 },
       overlays: [{ id: 'm1', trackId: 'V3', role: 'motion', anchor: { assetId: '@timeline', at: 0 }, duration: 2, by: 'agent', source: { type: 'motion', motion: { template: 'palavra', funcao: 'explain', fala: '', ideia: '', texts: ['a', ''], beats: [0], seed: 1, style: { ...DEFAULT_MOTION_STYLE, bg: RUIM } } } }],
     },
   }),
@@ -58,6 +59,28 @@ describe('cor inválida pela API (BL-0177)', () => {
     assert.equal(JSON.stringify(store.get(id).timeline), antes);
     const ok = await app.inject({ method: 'POST', url: `/api/projects/${id}/op`, payload: { op: { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, accent: '#FF3B30' } } } });
     assert.equal(ok.statusCode, 200);
+  });
+
+  test('set_captions com weight ou size em string com aspas: 400 com o motivo, timeline intacta', async () => {
+    const antes = JSON.stringify(store.get(id).timeline);
+    for (const campo of ['weight', 'size'] as const) {
+      const r = await app.inject({ method: 'POST', url: `/api/projects/${id}/op`, payload: { op: { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, [campo]: NUM_RUIM } } } });
+      assert.equal(r.statusCode, 400, campo);
+      assert.match(r.json().message, new RegExp(`set_captions: ${campo}: número`));
+    }
+    const nan = await app.inject({ method: 'POST', url: `/api/projects/${id}/op`, payload: { op: { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, letterSpacing: '1;color:red' } } } });
+    assert.equal(nan.statusCode, 400);
+    assert.equal(JSON.stringify(store.get(id).timeline), antes);
+    const ok = await app.inject({ method: 'POST', url: `/api/projects/${id}/op`, payload: { op: { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, weight: 800, size: 5.2 } } } });
+    assert.equal(ok.statusCode, 200);
+  });
+
+  test('projeto antigo com número inválido na legenda carrega: campo cai no padrão, número bom fica', () => {
+    const c = store.get('prj_antigo').timeline.captions!;
+    assert.equal(c.weight, undefined);
+    assert.equal(c.size, undefined);
+    assert.equal(c.position, DEFAULT_CAPTIONS.position);
+    assert.equal(c.scale, 1.2);
   });
 
   test('projeto antigo com cor inválida carrega com a cor no padrão', () => {

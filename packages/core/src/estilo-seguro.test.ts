@@ -86,3 +86,16 @@ test('projeto antigo com cor/enum inválido carrega: normalize põe o padrão e 
   // Timeline normalizada aceita op nova normalmente.
   assert.ok(applyOp(t, { type: 'set_zoom', clipId: 'c1', zoom: 1.2 }, 'human'));
 });
+
+test('set_captions: campo numérico que não é número finito é OpError (vai cru para o style do export)', () => {
+  const t = base();
+  const numeros = ['x', 'width', 'weight', 'size', 'maxWords', 'maxChars', 'letterSpacing', 'lineHeight', 'stroke', 'shadow', 'shadowBlur', 'shadowDistance', 'shadowAngle', 'boxOpacity', 'boxRadius', 'boxPadding', 'opacity', 'rotation', 'scale', 'animDur'] as const;
+  for (const k of numeros) for (const v of ['800"><img src=x onerror=alert(1)>', '5', NaN, Infinity, null, {}]) {
+    recusa(() => applyOp(t, { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, [k]: v } as unknown as CaptionSettings }, 'agent'), new RegExp(`set_captions: ${k}: número`));
+  }
+  assert.equal(t.captions, undefined);
+  const ok = applyOp(base(), { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, weight: 800, size: 5.2, letterSpacing: -0.01 } }, 'agent').captions!;
+  assert.deepEqual([ok.weight, ok.size, ok.letterSpacing], [800, 5.2, -0.01]);
+  // position ruim não recusa: cai no padrão (BL-0100), nunca vai crua para o top:%.
+  assert.equal(applyOp(base(), { type: 'set_captions', captions: { ...DEFAULT_CAPTIONS, position: '50%;x' as unknown as number } }, 'agent').captions?.position, DEFAULT_CAPTIONS.position);
+});
