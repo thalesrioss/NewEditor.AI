@@ -219,7 +219,7 @@ function Card({ it, playing, onPlay, onUse }: { it: CineproItem; playing: boolea
         )}
         <span className="absolute top-1 left-1 rounded bg-black/70 px-1 text-ui-xs font-semibold text-ink-200">{it.ext.toUpperCase()}</span>
         {it.insere && (
-          <button aria-label="Inserir no cursor" title="Inserir no cursor" onClick={onUse} className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-nc-500 text-white opacity-0 shadow transition group-hover:opacity-100 hover:brightness-110">
+          <button aria-label="Inserir no cursor" title="Inserir no cursor" onClick={onUse} className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-nc-500 text-white opacity-0 shadow transition group-hover:opacity-100 focus-visible:opacity-100 hover:brightness-110">
             <Plus size={14} />
           </button>
         )}
@@ -245,7 +245,7 @@ function RowItem({ it, playing, onPlay, onUse }: { it: CineproItem; playing: boo
       <span className="min-w-0 flex-1 truncate text-ui-xs text-ink-200">{it.nome}</span>
       <span className="shrink-0 text-ui-xs text-ink-500">{it.ext}</span>
       {it.insere && (
-        <Button size="sm" variant="ghost" className="!h-6 !px-1.5 opacity-0 group-hover:opacity-100" onClick={onUse} aria-label="Inserir no cursor">
+        <Button size="sm" variant="ghost" className="!h-6 !px-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={onUse} aria-label="Inserir no cursor">
           <Plus size={12} />
         </Button>
       )}

@@ -145,7 +145,7 @@ export function VideosPage() {
                 <button key={v.id} onClick={() => setTocando(v)} className="group w-[150px] shrink-0 text-left" title={v.arquivo}>
                   <div className="relative aspect-[9/16] overflow-hidden rounded-ui-md bg-black ring-1 ring-ink-750 transition group-hover:ring-nc-400">
                     <video src={`${v.url}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100">
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
                       <Play size={28} className="rounded-full bg-black/60 p-1.5 text-white" />
                     </div>
                     <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 text-ui-xs font-semibold text-white">{v.versao ? `v${v.versao}` : 'versão'}</span>

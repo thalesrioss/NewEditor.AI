@@ -167,7 +167,7 @@ export function CaptionLane({ pps, pad, h, selectedKey }: { pps: number; pad: nu
                 aria-label={c.forced ? 'Voltar a esconder sob a camada' : 'Mostrar mesmo sob a camada'}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => (e.stopPropagation(), captionActions.toggleForce(c))}
-                className={`absolute top-0.5 right-0.5 z-10 rounded p-px ${c.forced ? 'text-teal-200' : 'text-ink-400 opacity-0 group-hover/cue:opacity-100'} hover:text-white`}
+                className={`absolute top-0.5 right-0.5 z-10 rounded p-px ${c.forced ? 'text-teal-200' : 'text-ink-400 opacity-0 group-hover/cue:opacity-100 focus-visible:opacity-100'} hover:text-white`}
               >
                 {c.forced ? <Eye size={11} /> : <EyeOff size={11} />}
               </button>

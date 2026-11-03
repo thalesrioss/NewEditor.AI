@@ -200,7 +200,7 @@ function PresetCard({ preset: p, active, onApply, onDelete }: { preset: CaptionP
         <div className="truncate px-1.5 py-1 text-ui-xs text-ink-300">{p.nome}</div>
       </button>
       {onDelete && (
-        <button aria-label={`Apagar preset ${p.nome}`} onClick={onDelete} className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-ink-300 opacity-0 group-hover:opacity-100 hover:text-rose-300">
+        <button aria-label={`Apagar preset ${p.nome}`} onClick={onDelete} className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-ink-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-rose-300">
           <Trash2 size={11} />
         </button>
       )}

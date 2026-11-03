@@ -77,7 +77,7 @@ export function CommentsSection() {
                   </button>
                   <span className={`rounded px-1 text-ui-xs ${c.by === 'cliente' ? 'bg-violet-400/15 text-violet-300' : 'bg-ink-700 text-ink-300'}`}>{c.by}</span>
                   <span className={`min-w-0 flex-1 text-ink-200 ${c.status === 'feito' ? 'line-through decoration-ink-600' : ''}`}>{c.text}</span>
-                  <span className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+                  <span className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
                     {c.status !== 'feito' && (
                       <IconButton label="Marcar como feito" className="!p-0.5" onClick={() => void api.patchComment(project.id, c.id, { status: 'feito' })}>
                         <Check size={11} />

@@ -112,12 +112,12 @@ export function CaptionList() {
                   seek(c.start + 0.01);
                   setTimeout(() => useEditor.getState().setPlaying(true), 60);
                 }}
-                className="text-ink-400 opacity-0 group-hover:opacity-100 hover:text-white"
+                className="text-ink-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-white"
                 title="Tocar daqui"
               >
                 <Play size={11} />
               </button>
-              <button onClick={() => captionActions.toggleHidden(c)} className={`text-ink-400 hover:text-white ${c.hidden ? '' : 'opacity-0 group-hover:opacity-100'}`} title={c.hidden ? 'Restaurar' : 'Apagar'}>
+              <button onClick={() => captionActions.toggleHidden(c)} className={`text-ink-400 hover:text-white ${c.hidden ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`} title={c.hidden ? 'Restaurar' : 'Apagar'}>
                 {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
               </button>
             </div>

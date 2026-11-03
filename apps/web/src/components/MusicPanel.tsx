@@ -126,7 +126,7 @@ export function MusicPanel() {
                     setPlaying(null);
                     api.useMusic(project.id, t.path).catch((e: Error) => setErr(e.message));
                   }}
-                  className="rounded-ui-md bg-ink-700 px-2 py-1 text-ui-xs font-semibold text-ink-100 opacity-0 transition group-hover:opacity-100 hover:bg-nc-500"
+                  className="rounded-ui-md bg-ink-700 px-2 py-1 text-ui-xs font-semibold text-ink-100 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-nc-500"
                 >
                   Usar
                 </button>

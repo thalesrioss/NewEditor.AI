@@ -178,7 +178,7 @@ function AssetCard({ asset, projectId }: { asset: MediaAsset; projectId: string 
             aria-label="Inserir no cursor"
             title="Inserir no cursor (vai até o fim do corte)"
             onClick={insertAtCursor}
-            className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-nc-500 text-white opacity-0 shadow transition group-hover:opacity-100 hover:brightness-110"
+            className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-nc-500 text-white opacity-0 shadow transition group-hover:opacity-100 focus-visible:opacity-100 hover:brightness-110"
           >
             <Plus size={14} />
           </button>
@@ -191,7 +191,7 @@ function AssetCard({ asset, projectId }: { asset: MediaAsset; projectId: string 
               await api.syncCam(projectId, asset.id).catch(() => undefined);
               setSyncing(false);
             }}
-            className="absolute right-1 bottom-6 rounded-full bg-black/70 px-1.5 py-px text-ui-xs text-white opacity-0 transition group-hover:opacity-100 hover:bg-nc-500 disabled:opacity-50"
+            className="absolute right-1 bottom-6 rounded-full bg-black/70 px-1.5 py-px text-ui-xs text-white opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-nc-500 disabled:opacity-50"
             title="Alinha pelo áudio com a fala e vira a 2ª câmera dos clipes"
           >
             {syncing ? 'alinhando…' : asset.role === 'cam' ? 'realinhar' : '2ª câmera'}
@@ -203,7 +203,7 @@ function AssetCard({ asset, projectId }: { asset: MediaAsset; projectId: string 
         {ready && asset.kind === 'video' && asset.hasAudio && asset.role !== 'cam' && asset.role !== 'motion' && (
           <button
             onClick={() => void api.setAssetRole(projectId, asset.id, asset.role === 'fala' ? 'broll' : 'fala').catch(() => undefined)}
-            className="shrink-0 rounded px-1 text-ui-xs text-ink-400 opacity-0 transition group-hover:opacity-100 hover:bg-ink-700 hover:text-white"
+            className="shrink-0 rounded px-1 text-ui-xs text-ink-400 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-ink-700 hover:text-white"
             title={asset.role === 'fala' ? 'Tirar da decupagem: vira B-roll' : 'É uma bruta de fala: transcrever e entrar na decupagem'}
           >
             {asset.role === 'fala' ? 'virar B-roll' : 'virar fala'}

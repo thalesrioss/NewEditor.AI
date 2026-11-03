@@ -246,7 +246,7 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
             setArmed(false);
             onDelete();
           }}
-          className={`flex items-center gap-1 rounded-full p-1 text-ui-xs font-semibold transition ${armed ? 'bg-rose-500 px-2 text-white opacity-100' : 'bg-black/60 text-ink-200 opacity-0 group-hover:opacity-100 hover:bg-rose-500 hover:text-white'}`}
+          className={`flex items-center gap-1 rounded-full p-1 text-ui-xs font-semibold transition ${armed ? 'bg-rose-500 px-2 text-white opacity-100' : 'bg-black/60 text-ink-200 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-rose-500 hover:text-white'}`}
         >
           <Trash2 size={12} /> {armed && 'Apagar?'}
         </button>
@@ -254,7 +254,7 @@ function ProjectCard({ p, onInfo, onDelete }: { p: Project & { pendentes?: numbe
           aria-label="Detalhes do projeto"
           title="Detalhes: briefing, prazo, tempos, versões"
           onClick={(e) => (e.preventDefault(), e.stopPropagation(), onInfo())}
-          className="rounded-full bg-black/60 p-1 text-ink-200 opacity-0 transition group-hover:opacity-100 hover:bg-nc-500 hover:text-white"
+          className="rounded-full bg-black/60 p-1 text-ink-200 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:bg-nc-500 hover:text-white"
         >
           <Info size={12} />
         </button>
