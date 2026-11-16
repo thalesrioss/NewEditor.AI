@@ -16,6 +16,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CENTRAL_DADOS_PADRAO, escolherOrigem } from './central';
+import { escolherFerramentas } from './ferramentas';
 import { destinoNavegacao } from './navegacao';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -78,25 +79,33 @@ function onPath(name: string): string | null {
 }
 
 /**
- * FFmpeg e ffprobe: o do sistema (Homebrew), se existir, porque é mais novo; senão os que o app leva consigo
- * (ffmpeg-static / ffprobe-static, desempacotados fora do asar). O servidor lê NEWEDITOR_FFMPEG / NEWEDITOR_FFPROBE.
+ * FFmpeg e ffprobe do servidor (regras em ferramentas.ts): no Mac, o 9.0.2 que vai dentro do app; senão o do PATH;
+ * no Windows, por último, o ffmpeg-static. O servidor lê NEWEDITOR_FFMPEG / NEWEDITOR_FFPROBE.
  */
 function resolveTools(): void {
-  const exe = process.platform === 'win32' ? '.exe' : '';
   const unasar = (f: string) => f.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
-  const bundled = (load: () => string): string | null => {
+  const npm = (load: () => string): string | null => {
     try {
-      const f = unasar(load());
-      return fs.existsSync(f) ? f : null;
+      return unasar(load());
     } catch {
       return null;
     }
   };
-  const ffmpeg = bundled(() => require('ffmpeg-static') as string);
-  const ffprobe = bundled(() => (require('ffprobe-static') as { path: string }).path);
-  process.env.NEWEDITOR_FFMPEG ??= onPath(`ffmpeg${exe}`) ?? ffmpeg ?? 'ffmpeg';
-  process.env.NEWEDITOR_FFPROBE ??= onPath(`ffprobe${exe}`) ?? ffprobe ?? 'ffprobe';
-  log('ferramentas', { ffmpeg: process.env.NEWEDITOR_FFMPEG, ffprobe: process.env.NEWEDITOR_FFPROBE, empacotados: { ffmpeg, ffprobe } });
+  const r = escolherFerramentas({
+    platform: process.platform,
+    arch: process.arch,
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    desktopDir: path.resolve(here, '..'),
+    env: process.env,
+    existe: (f) => fs.existsSync(f),
+    noPath: onPath,
+    estaticoNpm: () => ({ ffmpeg: npm(() => require('ffmpeg-static') as string), ffprobe: npm(() => (require('ffprobe-static') as { path: string }).path) }),
+    join: path.join,
+  });
+  process.env.NEWEDITOR_FFMPEG = r.ffmpeg;
+  process.env.NEWEDITOR_FFPROBE = r.ffprobe;
+  log('ferramentas', r);
 }
 
 function freePort(): Promise<number> {

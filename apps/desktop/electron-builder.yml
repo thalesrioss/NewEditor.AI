@@ -23,12 +23,17 @@ extraResources:
 asar: true
 asarUnpack:
   - node_modules/playwright-core/**
-  # FFmpeg e ffprobe empacotados (usados quando a máquina não tem o do Homebrew): binários têm que ficar fora do asar.
+  # ffmpeg-static / ffprobe-static (só no Windows, ainda 6.0): binários têm que ficar fora do asar.
   - node_modules/ffmpeg-static/**
   - node_modules/ffprobe-static/**
 mac:
+  # O Mac leva o FFmpeg 9.0.2 estático (scripts/fetch-ffmpeg.mjs, versão e checksum fixos), não o ffmpeg-static 6.0.
   files:
-    - '!node_modules/ffprobe-static/bin/{linux,win32}/**'
+    - '!node_modules/ffmpeg-static/**'
+    - '!node_modules/ffprobe-static/**'
+  extraResources:
+    - from: vendor/ffmpeg/darwin-${arch}
+      to: ffmpeg
   category: public.app-category.video
   target: [dmg, zip]
   icon: build/icon.png

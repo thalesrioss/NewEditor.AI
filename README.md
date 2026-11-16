@@ -36,8 +36,12 @@ subiu no auxiliar ou, de reserva, no processo principal, e qual FFmpeg foi escol
 Para automação (agente testador, CI) o app tem um modo oculto: `--hidden`, `NEWEDITOR_HIDDEN=1` ou, por padrão, qualquer abertura
 com `--remote-debugging-port` (`--show` desfaz). Ele sobe inteiro, mas sem janela na tela nem ícone no Dock.
 
-FFmpeg e ffprobe vão dentro do app (`ffmpeg-static` 6.0 e `ffprobe-static`, fora do asar); se a máquina tem o do Homebrew, ele é
-preferido por ser mais novo. O servidor lê `NEWEDITOR_FFMPEG` / `NEWEDITOR_FFPROBE` e escolhe a sintaxe certa por versão. Whisper, Qwen
+FFmpeg e ffprobe: no Mac, o app leva o FFmpeg 9.0.2 estático (builds assinados e notarizados de ffmpeg.martin-riedl.de) em
+`Resources/ffmpeg/` e usa esse, mesmo com Homebrew instalado, porque é a versão contra a qual a suíte roda. `npm run dist:mac` baixa
+os binários com versão e checksum fixos (`apps/desktop/scripts/fetch-ffmpeg.mjs`, para `apps/desktop/vendor/`, fora do git); para
+trocar de versão, mude a versão, as pastas e os checksums ali e rode a suíte com o binário novo. O Windows ainda leva `ffmpeg-static`
+6.0 (o QC de níveis reprova esse render) até a build de Windows. A escolha fica em `apps/desktop/src/ferramentas.ts`; o servidor lê
+`NEWEDITOR_FFMPEG` / `NEWEDITOR_FFPROBE` e escolhe a sintaxe certa por versão. Whisper, Qwen
 (uv/Python) e Chrome ainda vêm do sistema (ADR-009, ADR-013). Instalar a build: `npm run dist:mac` e depois `ditto` (nunca `cp -R`)
 de `apps/desktop/release/mac-arm64/Editor Brain.app` para `/Applications`.
 
@@ -142,7 +146,7 @@ npm run typecheck
 ```
 
 Os testes do servidor rodam numa pasta de dados temporária (`NEWEDITOR_DATA`) e respeitam `NEWEDITOR_FFMPEG` / `NEWEDITOR_FFPROBE`:
-apontar para `node_modules/ffmpeg-static/ffmpeg` e `node_modules/ffprobe-static/bin/<os>/<arch>/ffprobe` confere o render com os
+apontar para `apps/desktop/vendor/ffmpeg/darwin-<arch>/ffmpeg` e `.../ffprobe` (depois de `npm run ffmpeg -w @neweditor/desktop`) confere o render com os
 binários que o app leva.
 
 ## Próximas etapas

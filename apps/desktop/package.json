@@ -10,9 +10,10 @@
     "build": "node esbuild.mjs",
     "dev": "node esbuild.mjs && cross-env NEWEDITOR_DEV_URL=http://localhost:5173 electron .",
     "start": "node esbuild.mjs && electron .",
-    "dist": "npm run build -w @neweditor/web && node esbuild.mjs && electron-builder --config electron-builder.yml",
-    "dist:mac": "npm run build -w @neweditor/web && node esbuild.mjs && electron-builder --config electron-builder.yml --mac",
-    "dist:win": "npm run build -w @neweditor/web && node esbuild.mjs && electron-builder --config electron-builder.yml --win"
+    "dist": "npm run build -w @neweditor/web && node esbuild.mjs && node scripts/fetch-ffmpeg.mjs && electron-builder --config electron-builder.yml",
+    "dist:mac": "npm run build -w @neweditor/web && node esbuild.mjs && node scripts/fetch-ffmpeg.mjs && electron-builder --config electron-builder.yml --mac",
+    "dist:win": "npm run build -w @neweditor/web && node esbuild.mjs && electron-builder --config electron-builder.yml --win",
+    "ffmpeg": "node scripts/fetch-ffmpeg.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

@@ -21,3 +21,4 @@ data/notifications.json
 
 # app de desktop
 apps/desktop/release
+apps/desktop/vendor
